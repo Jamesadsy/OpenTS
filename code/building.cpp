@@ -5516,9 +5516,7 @@ int BuildingClass::Do_MISSION_REPAIR(void)
 					**	distance check.  Fixed-wing aircraft are very inaccurate with
 					**	their landings.
 					*/
-					IPersistPtr persist(tech->Locomotion);
-					CLSID clsid;
-					persist->GetClassID(&clsid);
+					CLSID const clsid = Locomotion_Class_ID(tech->Locomotion);
 					bool hover = (clsid == CLSID_HoverLocomotion) != 0;
 					if (hover) {
 						distance = 0x96;
@@ -6236,9 +6234,7 @@ int BuildingClass::Do_MISSION_UNLOAD(void)
 					if (unit) {
 						unit->Assign_Mission(MISSION_MOVE);
 
-						IPersistPtr persist(unit->Locomotion);
-						CLSID clsid;
-						persist->GetClassID(&clsid);
+						CLSID const clsid = Locomotion_Class_ID(unit->Locomotion);
 
 						if (clsid == CLSID_TunnelLocomotion) {
 							IPiggybackPtr piggy(unit->Locomotion);
@@ -8747,7 +8743,7 @@ void BuildingClass::Clear_Occupy_Bit(Coord const & coord)
 /// </summary>
 /// <returns>Returns with S_OK if the building was read, or the failure code from the
 /// underlying stream.</returns>
-HRESULT STDMETHODCALLTYPE BuildingClass::Load(IStream *stream)
+HRESULT BuildingClass::Load(SaveStreamClass & stream)
 {
 	TargetTracker.Remove_Index(Fetch_ID());
 	return(BASECLASS::Load(stream));

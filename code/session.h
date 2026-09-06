@@ -461,8 +461,8 @@ struct GameOptionsType {
 	bool		AttackNeutralUnits;	// A target scan considers a neutral house's objects.
 	char		ScenarioDescription [DESCRIP_MAX];	//Used on client machines only
 
-	bool Save(IStream * stream);
-	bool Load(IStream * stream);
+	bool Save(SaveStreamClass & stream);
+	bool Load(SaveStreamClass & stream);
 
 	void Serialize(SaveStreamClass & stream);
 };

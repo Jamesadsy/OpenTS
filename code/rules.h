@@ -137,8 +137,8 @@ class RulesClass
 		bool Do_Movies(CCINIClass const & ini);
 		bool Objects(CCINIClass const & ini);
 
-		void Save(IStream * stream);
-		void Load(IStream * stream);
+		void Save(SaveStreamClass & stream);
+		void Load(SaveStreamClass & stream);
 
 		void Serialize(SaveStreamClass & stream);
 
