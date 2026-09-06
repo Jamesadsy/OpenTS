@@ -1057,11 +1057,7 @@ void Clear_Scenario(void)
 
 	LightSourceClass::Recalc = false;
 	while (Objects.Count()) {
-		if (Objects[0]->RTTI == RTTI_BULLET) {
-			Objects[0]->Release();
-		} else {
-			delete Objects[0];
-		}
+		delete Objects[0];
 	}
 
 	LightSourceClass::Recalc = true;
