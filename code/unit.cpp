@@ -2106,7 +2106,7 @@ void UnitClass::Per_Cell_Process(PCPType why)
 			Cell center = Center_Coord();
 			Cell whom_center = whom->Center_Coord();
 			if (Center_Coord().As_Cell() == whom->Center_Coord().As_Cell() && whom->RTTI == RTTI_BUILDING) {
-				CLSID const clsid = Locomotion_Class_ID(Locomotion);
+				CLSID const clsid = Locomotion_Class_ID(Locomotion.get());
 				if (clsid == CLSID_HoverLocomotion && static_cast<BuildingClass *>(whom)->Class->IsCanUnitRepair && NavCom == NULL) {
 					NavCom = whom;
 				}
@@ -5220,7 +5220,7 @@ void UnitClass::Assign_Destination(AbstractClass * target, bool immediate)
 	 * re-target the nearest reachable cell when driving rather than burrowing.
 	 */
 	if (target != NULL && Class->IsSubterranean && Locomotion->Is_Moving()) {
-		CLSID const clsid = Locomotion_Class_ID(Locomotion);
+		CLSID const clsid = Locomotion_Class_ID(Locomotion.get());
 		if (clsid == CLSID_DriveLocomotion) {
 			NavQueue.Add_Head(target);
 			RouteQueue.Clear();
@@ -5312,7 +5312,7 @@ void UnitClass::Assign_Destination(AbstractClass * target, bool immediate)
 		 * (Mirrors BuildingClass weapons-factory exit, building.cpp:6236-6251.)
 		 */
 		if (target != NULL && !Locomotion->Is_Moving()) {
-			CLSID const clsid = Locomotion_Class_ID(Locomotion);
+			CLSID const clsid = Locomotion_Class_ID(Locomotion.get());
 			if (clsid == CLSID_TunnelLocomotion && Get_Height_AGL() == 0) {
 				Coord tc = target->Center_Coord();
 				int gl = Map.Get_Height_GL(tc);
@@ -5334,16 +5334,16 @@ void UnitClass::Assign_Destination(AbstractClass * target, bool immediate)
 				}
 
 				if (doswap) {
-					IPiggybackPtr piggy(Locomotion);
+					IPiggyback * piggy = Piggyback_Of(Locomotion.get());
 					if (piggy != NULL && piggy->Is_Piggybacking()) {
-						piggy->End_Piggyback(&Locomotion);
+						Locomotion = piggy->End_Piggyback();
 					}
-					ILocomotionPtr walk(Create_Locomotor(CLSID_DriveLocomotion));
+					std::unique_ptr<ILocomotion> walk = Create_Locomotor(CLSID_DriveLocomotion);
 					walk->Link_To_Object(this);
-					piggy = IPiggybackPtr(walk);
+					piggy = Piggyback_Of(walk.get());
 					if (piggy != NULL) {
-						piggy->Begin_Piggyback(Locomotion);
-						Locomotion = walk;
+						piggy->Begin_Piggyback(std::move(Locomotion));
+						Locomotion = std::move(walk);
 						Locomotion->Force_New_Slope(Map[Get_Coord()].Ramp);
 					}
 				}
