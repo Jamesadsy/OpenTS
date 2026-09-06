@@ -6241,7 +6241,7 @@ int BuildingClass::Do_MISSION_UNLOAD(void)
 							if (piggy != NULL && piggy->Is_Piggybacking()) {
 								piggy->End_Piggyback(&unit->Locomotion);
 							}
-							ILocomotionPtr walk(CLSID_DriveLocomotion);
+							ILocomotionPtr walk(Create_Locomotor(CLSID_DriveLocomotion));
 							walk->Link_To_Object(unit);
 							piggy = IPiggybackPtr(walk);
 							if (piggy != NULL) {

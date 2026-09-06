@@ -28,9 +28,10 @@ int Load_Misc_Values(SaveStreamClass & stream);
 int Save_Misc_Values(SaveStreamClass & stream);
 
 // An object travels as its class identifier, the length of its record, and the record.
+// A locomotor loaded this way is handed back unowned; the caller takes it.
 HRESULT Save_Object(SaveStreamClass & stream, IPersistent * object);
 HRESULT Save_Object(SaveStreamClass & stream, ILocomotion * locomotion);
-HRESULT Load_Object(SaveStreamClass & stream, REFIID riid, void ** object);
+IPersistent * Load_Object(SaveStreamClass & stream);
 bool Get_Savefile_Info(char const * name, SaveVersionInfo * info);
 bool Save_Game(const char *file_name, char const * descr);
 bool Load_Game(const char *file_name);
