@@ -64,11 +64,9 @@ LocomotionClass::~LocomotionClass(void)
 /// offers depends on it having been called first.
 /// </summary>
 /// <param name="pointer">Pointer to the foot class object this locomotor will carry about.</param>
-/// <returns>Returns with S_OK, since the attachment cannot fail.</returns>
-HRESULT LocomotionClass::Link_To_Object(void *pointer)
+void LocomotionClass::Link_To_Object(void *pointer)
 {
 	LinkedTo = (FootClass *)pointer;
-	return(S_OK);
 }
 
 
@@ -225,36 +223,36 @@ ClassID Locomotion_Class_ID(ILocomotion * locomotion)
 /// </summary>
 /// <param name="cleardirty">Should the locomotor be marked as no longer needing a save?</param>
 /// <returns>Returns with the result of the write.</returns>
-HRESULT LocomotionClass::Save(SaveStreamClass & stream, BOOL cleardirty)
+bool LocomotionClass::Save(SaveStreamClass & stream, bool cleardirty)
 {
 	return(Save_Members(stream, cleardirty));
 }
 
 
-HRESULT LocomotionClass::Load(SaveStreamClass & stream)
+bool LocomotionClass::Load(SaveStreamClass & stream)
 {
 	return(Load_Members(stream));
 }
 
 
-HRESULT LocomotionClass::Save_Members(SaveStreamClass & stream, BOOL cleardirty)
+bool LocomotionClass::Save_Members(SaveStreamClass & stream, bool cleardirty)
 {
 	uintptr_t id = (uintptr_t)this;
 	stream.Serialize(id);
 	Serialize(stream);
-	if (SUCCEEDED(stream.Result()) && cleardirty) {
+	if (!stream.Was_Error() && cleardirty) {
 		Dirty = false;
 	}
-	return(stream.Result());
+	return(!stream.Was_Error());
 }
 
 
-HRESULT LocomotionClass::Load_Members(SaveStreamClass & stream)
+bool LocomotionClass::Load_Members(SaveStreamClass & stream)
 {
 	uintptr_t id = 0;
 	stream.Serialize(id);
 	if (stream.Was_Error()) {
-		return(stream.Result());
+		return(false);
 	}
 	assert(id != 0);
 	Swizzle_Here_I_Am(id, this);
@@ -265,7 +263,7 @@ HRESULT LocomotionClass::Load_Members(SaveStreamClass & stream)
 	Serialize(stream);
 	stream.Set_Context(outertype, outerid);
 
-	return(stream.Result());
+	return(!stream.Was_Error());
 }
 
 

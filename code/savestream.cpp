@@ -29,7 +29,7 @@ SaveStreamClass::SaveStreamClass(std::vector<unsigned char> & buffer, ModeType m
 	Buffer(&buffer),
 	Cursor(mode == MODE_SAVE ? (unsigned int)buffer.size() : 0),
 	Mode(mode),
-	ErrorCode(S_OK),
+	Failed(false),
 	FormatVersion(mode == MODE_LOAD ? LoadedSaveVersion : ExpectedGameVersion),
 	OwnerType(NULL),
 	OwnerID(0)
@@ -39,8 +39,8 @@ SaveStreamClass::SaveStreamClass(std::vector<unsigned char> & buffer, ModeType m
 
 void SaveStreamClass::Fail(void)
 {
-	if (SUCCEEDED(ErrorCode)) {
-		ErrorCode = E_FAIL;
+	if (!Failed) {
+		Failed = true;
 	}
 }
 
@@ -53,11 +53,11 @@ void SaveStreamClass::Fail(void)
 /// </summary>
 void SaveStreamClass::Serialize_Bytes(void * data, int length)
 {
-	if (FAILED(ErrorCode)) {
+	if (Failed) {
 		return;
 	}
 	if (length < 0) {
-		ErrorCode = E_FAIL;
+		Failed = true;
 		return;
 	}
 	if (length == 0) {
@@ -71,7 +71,7 @@ void SaveStreamClass::Serialize_Bytes(void * data, int length)
 		Cursor = (unsigned int)Buffer->size();
 	} else {
 		if ((unsigned int)length > Buffer->size() - Cursor) {
-			ErrorCode = E_FAIL;
+			Failed = true;
 			return;
 		}
 		memcpy(bytes, Buffer->data() + Cursor, (std::size_t)length);
@@ -83,11 +83,11 @@ void SaveStreamClass::Serialize_Bytes(void * data, int length)
 // A saver patches a length it could not know until the record was written.
 void SaveStreamClass::Overwrite_Bytes(unsigned int offset, void const * data, int length)
 {
-	if (FAILED(ErrorCode) || Mode != MODE_SAVE || length <= 0) {
+	if (Failed || Mode != MODE_SAVE || length <= 0) {
 		return;
 	}
 	if (offset > Buffer->size() || (unsigned int)length > Buffer->size() - offset) {
-		ErrorCode = E_FAIL;
+		Failed = true;
 		return;
 	}
 	memcpy(Buffer->data() + offset, data, (std::size_t)length);

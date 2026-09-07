@@ -20,7 +20,6 @@
 #include "visual.hh"
 #include "zgrad.hh"
 
-#include <wtypes.h>
 #include <memory>
 
 
@@ -35,7 +34,7 @@ struct ILocomotion
 	/*
 	 * Links object to locomotor.
 	 */
-	virtual HRESULT Link_To_Object(void *pointer) = 0;
+	virtual void Link_To_Object(void *pointer) = 0;
 
 	/*
 	 * Sees if object is moving.

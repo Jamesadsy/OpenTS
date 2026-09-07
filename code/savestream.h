@@ -83,8 +83,7 @@ class SaveStreamClass
 		 * does nothing, so a class lists its members without checking each one and the
 		 * caller asks once whether the whole pass worked.
 		 */
-		HRESULT Result(void) const {return(ErrorCode);}
-		bool Was_Error(void) const {return(FAILED(ErrorCode));}
+		bool Was_Error(void) const {return(Failed);}
 
 		/*
 		 * Stops the pass here. A container that reads back a length no honest save could
@@ -357,7 +356,7 @@ class SaveStreamClass
 		std::vector<unsigned char> * Buffer;
 		unsigned int Cursor;
 		ModeType Mode;
-		HRESULT ErrorCode;
+		bool Failed;
 		unsigned int FormatVersion;
 
 		/*
