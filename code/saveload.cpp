@@ -789,7 +789,15 @@ static bool Get_All(SaveStreamClass & stream, bool save_net)
 		delete TacticalMap;
 		TacticalMap = NULL;
 	}
-	Tactical * old_tactical = dynamic_cast<Tactical *>(Load_Object(stream));
+	SwizzleManagerClass::MarkType const mark = Swizzler.Mark();
+	IPersistent * const object = Load_Object(stream);
+	Tactical * const old_tactical = dynamic_cast<Tactical *>(object);
+	if (object != NULL && old_tactical == NULL) {
+		DebugString("Save record of %s at %u is not the tactical map\n", typeid(*object).name(), stream.Offset());
+		Swizzler.Abandon(mark);
+		delete object;
+		stream.Fail();
+	}
 	if (old_tactical == NULL) {
 		return(false);
 	}
