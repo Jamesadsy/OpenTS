@@ -15,12 +15,12 @@
 // registers each one; nothing is created for an identifier nobody registered.
 typedef IPersistent * (* ClassCreatorType)(void);
 
-void Register_Class(CLSID const & classid, ClassCreatorType creator);
+void Register_Class(ClassID const & classid, ClassCreatorType creator);
 void Unregister_Classes(void);
-IPersistent * Create_Object(CLSID const & classid);
+IPersistent * Create_Object(ClassID const & classid);
 
 template<class T>
-void Register_Class(CLSID const & classid)
+void Register_Class(ClassID const & classid)
 {
 	Register_Class(classid, []() -> IPersistent * { return(new T); });
 }

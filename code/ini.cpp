@@ -959,7 +959,7 @@ int INIClass::Get_Int(char const * section, char const * entry, int defvalue) co
 
 // A class identifier as the registry writes it, braces optional: eight, four, four, four
 // and twelve hexadecimal digits separated by hyphens.
-static bool Parse_CLSID(char const * text, CLSID & clsid)
+static bool Parse_ClassID(char const * text, ClassID & clsid)
 {
 	char digits[40];
 	unsigned int length = 0;
@@ -998,7 +998,7 @@ static bool Parse_CLSID(char const * text, CLSID & clsid)
 
 
 // The buffer holds the 38 characters of the braced form and its terminator.
-static void Format_CLSID(CLSID const & clsid, char * text)
+static void Format_ClassID(ClassID const & clsid, char * text)
 {
 	sprintf(text, "{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
 		(unsigned long)clsid.Data1, (unsigned int)clsid.Data2, (unsigned int)clsid.Data3,
@@ -1027,13 +1027,13 @@ static void Format_CLSID(CLSID const & clsid, char * text)
 /// <param name="defvalue">The default identifier to use if the entry could not be found.</param>
 /// <returns>Returns with the class identifier specified in the INI database or else returns
 /// the default value.</returns>
-CLSID const INIClass::Get_CLSID(char const * section, char const * entry, CLSID defvalue) const
+ClassID const INIClass::Get_ClassID(char const * section, char const * entry, ClassID defvalue) const
 {
 	char buffer[128];
 
 	if (Get_String(section, entry, "", buffer, sizeof(buffer))) {
-		CLSID clsid;
-		if (Parse_CLSID(buffer, clsid)) {
+		ClassID clsid;
+		if (Parse_ClassID(buffer, clsid)) {
 			return(clsid);
 		}
 	}
@@ -1041,10 +1041,10 @@ CLSID const INIClass::Get_CLSID(char const * section, char const * entry, CLSID 
 }
 
 
-bool INIClass::Put_CLSID(char const * section, char const * entry, CLSID const & value)
+bool INIClass::Put_ClassID(char const * section, char const * entry, ClassID const & value)
 {
 	char buffer[40];
-	Format_CLSID(value, buffer);
+	Format_ClassID(value, buffer);
 	return(Put_String(section, entry, buffer));
 }
 
