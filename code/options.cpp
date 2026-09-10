@@ -83,6 +83,7 @@
 #include "vector.h"
 #include "video.h"
 #include "vox.h"
+#include "winstub.h"
 #include "ui/uikeyboard.h"
 
 #include "diff.hh"
@@ -135,6 +136,7 @@ OptionsClass::OptionsClass(void) :
 	WindowHeight(-1),
 	ScaleMode(VIDEO_SCALE_PIXELART),
 	IntegerScaling(false),
+	MaxFrameRate(0),
 	VSync(false),
 	Renderer(0),
 	CursorScale(0),
@@ -370,6 +372,12 @@ void OptionsClass::Load_Settings(void)
 	DebugString("Difficulty = %d\n", Difficulty);
 
 	ScrollMethod = ConfigINI.Get_Int("Options", "ScrollMethod", ScrollMethod);
+	// Methods 1 and 2 drag the pointer along with the map, so a host that cannot move a
+	// pointer scrolls nowhere. A file carried over from a machine that could would
+	// otherwise arrive setting one of them.
+	if (!Win_Pointer_Can_Warp()) {
+		ScrollMethod = 0;
+	}
 	DebugString("ScrollMethod = %d\n", ScrollMethod);
 
 	ScrollRate = ConfigINI.Get_Int("Options", "ScrollRate", ScrollRate);
@@ -412,6 +420,7 @@ void OptionsClass::Load_Settings(void)
 	DebugString("StretchMovies is %s\n", StretchMovies == true ? "ON" : "OFF");
 
 	IntegerScaling = ConfigINI.Get_Bool("Video", "IntegerScaling", IntegerScaling);
+	MaxFrameRate = ConfigINI.Get_Int("Video", "MaxFrameRate", MaxFrameRate);
 
 	char scalename[32];
 	ConfigINI.Get_String("Video", "ScaleMode", (char *)Scale_Mode_Name(ScaleMode), scalename, sizeof(scalename));
@@ -483,6 +492,7 @@ void OptionsClass::Save_Settings (void)
 	ConfigINI.Put_Int("Video", "WindowHeight", WindowHeight);
 	ConfigINI.Put_String("Video", "ScaleMode", (char *)Scale_Mode_Name(ScaleMode));
 	ConfigINI.Put_Bool("Video", "IntegerScaling", IntegerScaling);
+	ConfigINI.Put_Int("Video", "MaxFrameRate", MaxFrameRate);
 	ConfigINI.Put_Bool("Video", "VSync", VSync);
 	ConfigINI.Put_Int("Video", "Renderer", Renderer);
 	ConfigINI.Put_Int("Video", "CursorScale", CursorScale);

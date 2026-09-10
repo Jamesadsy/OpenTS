@@ -334,6 +334,24 @@ static void Mark_Overlay_Dirty(void)
 }
 
 
+Rml::Context * UI_Overlay_Context(void)
+{
+	return(_Context);
+}
+
+
+bool UI_Modal_Is_Shown(void)
+{
+	return(_ModalDepth > 0);
+}
+
+
+void UI_Mark_Overlay_Dirty(void)
+{
+	Mark_Overlay_Dirty();
+}
+
+
 /// <summary>
 /// Points the context at where the frame lands and at the scale it is drawn.
 /// One authored density-independent pixel is one game logical unit, so a document authored
@@ -428,6 +446,7 @@ void UI_Shutdown(void)
 #endif
 
 	UI_Dev_Shutdown();
+	UI_Mode_Icon_Shutdown();
 	UI_Surface_Element_Shutdown();
 
 	_Context = nullptr;
@@ -465,11 +484,20 @@ void UI_Tick(void)
 	// what keeps a pump reached from inside an update out of it.
 	static bool ticking = false;
 
-	if (!_Initialized || _Context == nullptr || _Changing || ticking || _RunningModal > 0) {
+	if (!_Initialized || _Context == nullptr || _Changing || ticking) {
 		return;
 	}
 
 	ticking = true;
+
+	// The icon reports the game's own state rather than a screen's, so it is serviced even
+	// while a modal runner owns the context. It takes itself off screen while one is up.
+	UI_Mode_Icon_Service();
+
+	if (_RunningModal > 0) {
+		ticking = false;
+		return;
+	}
 
 	unsigned int const now = Host_Milliseconds();
 	double const elapsed = (double)(now - _LastTickTime) / 1000.0;
@@ -996,6 +1024,10 @@ UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view)
 
 		Mark_Overlay_Dirty();
 		Video_Present_If_Dirty();
+
+		// The screen is finished until the display will take another frame, and spinning
+		// through it again in the meantime costs a whole processor for nothing.
+		Host_Sleep(Video_Milliseconds_Until_Present());
 	}
 
 	_RunningModal--;

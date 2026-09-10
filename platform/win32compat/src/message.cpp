@@ -45,21 +45,33 @@ void Win32_Post_Message(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 }
 
 
-// The host reports mouse positions in its own logical coordinates; the engine measures its
-// client area in physical pixels, so a position crosses the density before it is packed
-// into the message the way Windows packs it.
-static LPARAM Point_To_LParam(float x, float y)
+// The pointer is kept in the host's own logical coordinates and the engine measures its
+// client area in physical pixels, so a position crosses the density on its way into a
+// message.
+static POINT Pointer_Client_Point(void)
 {
+	float x = 0.0f;
+	float y = 0.0f;
+	Win32_Pointer_Position(&x, &y);
+
 	float const density = Win32_Pixel_Density();
-	int const px = (int)(x * density);
-	int const py = (int)(y * density);
-	return(MAKELPARAM((short)px, (short)py));
+	POINT point;
+	point.x = (LONG)(x * density);
+	point.y = (LONG)(y * density);
+	return(point);
+}
+
+
+static LPARAM Pointer_To_LParam(void)
+{
+	POINT const point = Pointer_Client_Point();
+	return(MAKELPARAM((short)point.x, (short)point.y));
 }
 
 
 static WPARAM Mouse_Key_State(void)
 {
-	SDL_MouseButtonFlags const buttons = SDL_GetMouseState(NULL, NULL);
+	SDL_MouseButtonFlags const buttons = Win32_Pointer_Buttons();
 	SDL_Keymod const modifiers = SDL_GetModState();
 
 	WPARAM state = 0;
@@ -69,6 +81,45 @@ static WPARAM Mouse_Key_State(void)
 	if ((modifiers & SDL_KMOD_SHIFT) != 0) state |= MK_SHIFT;
 	if ((modifiers & SDL_KMOD_CTRL) != 0) state |= MK_CONTROL;
 	return(state);
+}
+
+
+// The repeat count, the scan code and the transition bit occupy the same places in the
+// parameter that Windows puts them in.
+static LPARAM Key_LParam(SDL_Scancode scancode, bool down)
+{
+	LPARAM lparam = 1;
+	lparam |= (LPARAM)(scancode & 0xFF) << 16;
+	if (!down) lparam |= (LPARAM)3 << 30;
+	return(lparam);
+}
+
+
+void Win32_Post_Pointer_Message(UINT message)
+{
+	HWND const main = Win32_Main_Window();
+
+	if (main == NULL) {
+		return;
+	}
+
+	Win32_Post_Message(main, message, Mouse_Key_State(), Pointer_To_LParam());
+}
+
+
+extern SDL_Scancode Scancode_For_Virtual_Key(int key);
+
+
+void Win32_Post_Key_Message(int virtualkey, bool down)
+{
+	HWND const main = Win32_Main_Window();
+
+	if (main == NULL) {
+		return;
+	}
+
+	Win32_Post_Message(main, down ? WM_KEYDOWN : WM_KEYUP, (WPARAM)virtualkey,
+		Key_LParam(Scancode_For_Virtual_Key(virtualkey), down));
 }
 
 
@@ -132,12 +183,26 @@ static void Translate_Event(SDL_Event const & event)
 			break;
 
 		case SDL_EVENT_MOUSE_MOTION:
-			Win32_Post_Message(main, WM_MOUSEMOVE, Mouse_Key_State(),
-				Point_To_LParam(event.motion.x, event.motion.y));
+#ifdef OPENTS_IOS
+			// A host that turns touches into mouse events would fight the recognizer for
+			// the pointer, and the recognizer is the one that knows what the gesture was.
+			// The hint that asks for them is already off; this is the second lock.
+			if (event.motion.which == SDL_TOUCH_MOUSEID) {
+				return;
+			}
+#endif
+			Win32_Pointer_Move(event.motion.x, event.motion.y);
+			Win32_Post_Message(main, WM_MOUSEMOVE, Mouse_Key_State(), Pointer_To_LParam());
 			break;
 
 		case SDL_EVENT_MOUSE_BUTTON_DOWN:
 		case SDL_EVENT_MOUSE_BUTTON_UP: {
+#ifdef OPENTS_IOS
+			if (event.button.which == SDL_TOUCH_MOUSEID) {
+				return;
+			}
+#endif
+
 			bool const down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
 			bool const doubled = down && event.button.clicks >= 2;
 			UINT message = 0;
@@ -156,7 +221,9 @@ static void Translate_Event(SDL_Event const & event)
 					return;
 			}
 
-			Win32_Post_Message(main, message, Mouse_Key_State(), Point_To_LParam(event.button.x, event.button.y));
+			Win32_Pointer_Move(event.button.x, event.button.y);
+			Win32_Pointer_Button(event.button.button, down);
+			Win32_Post_Message(main, message, Mouse_Key_State(), Pointer_To_LParam());
 			break;
 		}
 
@@ -164,11 +231,11 @@ static void Translate_Event(SDL_Event const & event)
 			// Windows reports the wheel in notch multiples in the high word, and the
 			// position in screen rather than client coordinates.
 			int const notches = (int)(event.wheel.y * 120.0f);
-			float mx = 0.0f;
-			float my = 0.0f;
-			SDL_GetGlobalMouseState(&mx, &my);
+			POINT point = Pointer_Client_Point();
+			ClientToScreen(main, &point);
 			Win32_Post_Message(main, WM_MOUSEWHEEL,
-				MAKEWPARAM((WORD)Mouse_Key_State(), (WORD)(short)notches), Point_To_LParam(mx, my));
+				MAKEWPARAM((WORD)Mouse_Key_State(), (WORD)(short)notches),
+				MAKELPARAM((short)point.x, (short)point.y));
 			break;
 		}
 
@@ -185,15 +252,20 @@ static void Translate_Event(SDL_Event const & event)
 				? (system ? WM_SYSKEYDOWN : WM_KEYDOWN)
 				: (system ? WM_SYSKEYUP : WM_KEYUP);
 
-			// The repeat count, the scan code and the transition bit occupy the same
-			// places in the parameter that Windows puts them in.
-			LPARAM lparam = 1;
-			lparam |= (LPARAM)(event.key.scancode & 0xFF) << 16;
-			if (!down) lparam |= (LPARAM)3 << 30;
-
-			Win32_Post_Message(main, message, (WPARAM)key, lparam);
+			Win32_Post_Message(main, message, (WPARAM)key, Key_LParam(event.key.scancode, down));
 			break;
 		}
+
+#ifdef OPENTS_IOS
+		// Only a host whose pointer is a finger routes them. A trackpad reports fingers
+		// too, and its own pointer is already the right answer there.
+		case SDL_EVENT_FINGER_DOWN:
+		case SDL_EVENT_FINGER_MOTION:
+		case SDL_EVENT_FINGER_UP:
+		case SDL_EVENT_FINGER_CANCELED:
+			Win32_Touch_Handle_Event(event);
+			break;
+#endif
 
 		case SDL_EVENT_TEXT_INPUT: {
 			for (char const * cursor = event.text.text; cursor != NULL && *cursor != '\0'; cursor++) {
@@ -227,11 +299,14 @@ void Win32_Pump_Host_Events(void)
 		return;
 	}
 
+	Win32_Pointer_Follow_Host_Mouse();
+
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
 		Translate_Event(event);
 	}
 
+	Win32_Touch_Service();
 	Service_Timers();
 }
 

@@ -18,7 +18,9 @@ add_library(win32compat STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/input.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/kernel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/message.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/pointer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/strings.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/touch.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/window.cpp"
 )
 
@@ -31,4 +33,10 @@ target_link_libraries(win32compat PUBLIC SDL3::SDL3-static)
 
 if(APPLE)
     target_link_libraries(win32compat PUBLIC "-framework QuartzCore")
+endif()
+
+# iOS differs from the desktop hosts in its entry point and in what an application bundle may
+# hold. The guard is defined here, and everything that links the layer inherits it.
+if(IOS)
+    target_compile_definitions(win32compat PUBLIC OPENTS_IOS)
 endif()

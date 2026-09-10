@@ -36,7 +36,16 @@ elseif(MSVC)
             "the version stamp distinguishes them.")
     endif()
 elseif(OPENTS_EXPERIMENTAL_NATIVE)
-    message(STATUS "OpenTS: configuring an unsupported native build for the host platform.")
+    if(IOS)
+        message(STATUS "OpenTS: configuring an unsupported iOS cross build.")
+
+        # miniaudio's device layer is Objective-C on this target; thirdparty/CMakeLists.txt
+        # says why. Objective-C++ is bgfx's Metal backend, named in the same file.
+        enable_language(OBJC)
+        enable_language(OBJCXX)
+    else()
+        message(STATUS "OpenTS: configuring an unsupported native build for the host platform.")
+    endif()
 
     # The tree declares imports and exports with __declspec throughout, which clang only
     # accepts with the Microsoft extensions enabled.

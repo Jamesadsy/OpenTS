@@ -60,8 +60,10 @@
 #include "suprtype.h"
 #include "surface.h"
 #include "tactical.h"
+#include "video.h"
 #include "vidscale.h"
 #include "waypoint.h"
+#include "winstub.h"
 
 #include "special.hh"
 
@@ -88,6 +90,9 @@ static double _ScrollFraction = 0.0;
 static double _EdgeScrollRemainder = 0.0;
 static double _CoastRemainderX = 0.0;
 static double _CoastRemainderY = 0.0;
+
+static double _PointerScrollRemainderX = 0.0;
+static double _PointerScrollRemainderY = 0.0;
 
 
 /***********************************************************************************************
@@ -534,6 +539,61 @@ void ScrollClass::Scroll_Edge(Point2D const & point)
 }
 
 
+// A pointing device that scrolls the view itself, rather than by pulling a pointer toward
+// an edge, hands over an offset in the window's own pixels. The frame may be drawn scaled,
+// so the offset is measured across the same conversion a position goes through, and the
+// part of a pixel that does not survive the conversion is carried rather than dropped.
+static void Pointer_Scroll_AI(bool apply)
+{
+	int windowx = 0;
+	int windowy = 0;
+
+	// The offset is taken whether it can be used or not, so that one held back through a
+	// dialog does not arrive afterward as a jump.
+	if (!Win_Pointer_Take_Scroll(windowx, windowy)) {
+		return;
+	}
+
+	if (!apply || !GameActive || !TacticalActive || TacticalMap == NULL) {
+		return;
+	}
+
+	/*
+	 * The offset is a distance rather than a position, so it is scaled directly. Converting
+	 * its two ends with Window_Point_To_Game instead would floor each of them, and the
+	 * fraction the remainder below exists to carry would be gone before it arrived: a device
+	 * polled thousands of times a second hands over a pixel or two at a time, every one of
+	 * which floors to no movement at all.
+	 */
+	VideoScaleInfo const & scale = Video_Get_Scale_Info();
+
+	if (scale.DestWidth <= 0 || scale.DestHeight <= 0) {
+		return;
+	}
+
+	double const scaledx = (double)windowx * (double)scale.GameWidth / (double)scale.DestWidth + _PointerScrollRemainderX;
+	double const scaledy = (double)windowy * (double)scale.GameHeight / (double)scale.DestHeight + _PointerScrollRemainderY;
+	int distx = (int)scaledx;
+	int disty = (int)scaledy;
+	_PointerScrollRemainderX = scaledx - distx;
+	_PointerScrollRemainderY = scaledy - disty;
+
+	if (distx > 0) {
+		Map.Scroll_Map(FACING_E, distx, true);
+	} else if (distx < 0) {
+		int distance = -distx;
+		Map.Scroll_Map(FACING_W, distance, true);
+	}
+
+	if (disty > 0) {
+		Map.Scroll_Map(FACING_S, disty, true);
+	} else if (disty < 0) {
+		int distance = -disty;
+		Map.Scroll_Map(FACING_N, distance, true);
+	}
+}
+
+
 /// <summary>Handles the mouse tracking for the tactical map.
 /// This routine is called on every input poll. It feeds the current mouse position to the map as
 /// a held drag, a coast scroll, or a plain hover that keeps the action cursor up to date, and
@@ -546,6 +606,8 @@ void ScrollClass::Scroll_AI(void)
 		_ScrollFraction = std::min((now - _LastScrollPollTime) * (SCROLL_STEPS_PER_SECOND / 1000.0), MAX_SCROLL_STEPS_PER_POLL);
 	}
 	_LastScrollPollTime = now;
+
+	Pointer_Scroll_AI(!IgnoreInput);
 
 	if (!IgnoreInput) {
 		Point2D tacti = TacticalRect.Top_Left();

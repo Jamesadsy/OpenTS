@@ -377,6 +377,14 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 extern "C" void * Win32Compat_Native_Window_Handle(HWND window);
 extern "C" int Win32Compat_Window_Refresh_Rate(HWND window);
 extern "C" BOOL Win32Compat_Set_Window_Fullscreen(HWND window, BOOL fullscreen);
+extern "C" BOOL Win32Compat_Preferred_Frame_Size(int * width, int * height);
+extern "C" BOOL Win32Compat_Log_Directory(char * buffer, int size);
+extern "C" BOOL Win32Compat_Shipped_Data_Directory(char * buffer, int size);
+extern "C" BOOL Win32Compat_Window_Safe_Area(HWND window, LPRECT rect);
+bool Win32_Pointer_Can_Warp(void);
+bool Win32_Pointer_Is_Drawn(void);
+bool Win32_Touch_Take_Scroll(int * x, int * y);
+void Win32_Touch_Set_Movie_Mode(bool playing);
 #endif
 
 
@@ -404,6 +412,75 @@ bool Win_Window_Drawable_Size(HWND window, int & width, int & height)
 }
 
 
+/// <summary>
+/// Asks the host what size it wants the game's frame laid out in.
+/// The frame's size is what every button, cameo and menu entry on screen is measured in, so
+/// a host whose display the player can neither resize nor move the game off has an answer
+/// better than any default. A host whose window the player owns has none.
+/// </summary>
+/// <param name="width">Receives the frame width in pixels, untouched on a false return.</param>
+/// <param name="height">Receives the frame height in pixels, untouched on a false return.</param>
+/// <returns>bool; Did the host name a size?</returns>
+bool Win_Preferred_Frame_Size(int & width, int & height)
+{
+#ifdef _WIN32
+	(void)width;
+	(void)height;
+	return(false);
+#else
+	int hostwidth = 0;
+	int hostheight = 0;
+
+	if (Win32Compat_Preferred_Frame_Size(&hostwidth, &hostheight) == FALSE) {
+		return(false);
+	}
+
+	width = hostwidth;
+	height = hostheight;
+	return(true);
+#endif
+}
+
+
+/// <summary>
+/// Asks the host where the files the game writes about itself belong.
+/// A host whose program directory cannot be written to has somewhere else for them, and a
+/// log written where it cannot be read is the same as no log at all.
+/// </summary>
+/// <param name="path">Receives the directory, untouched on a false return.</param>
+/// <param name="size">The size of the buffer.</param>
+/// <returns>bool; Did the host name a directory?</returns>
+bool Win_Log_Directory(char * path, int size)
+{
+#ifdef _WIN32
+	(void)path;
+	(void)size;
+	return(false);
+#else
+	return(Win32Compat_Log_Directory(path, size) != FALSE);
+#endif
+}
+
+
+/// <summary>
+/// Names the directory the read-only files shipped with the program are kept in.
+/// A host that keeps them beside the executable, as Windows and the desktop hosts do,
+/// answers false and leaves the path alone: the game's own directory already reaches them.
+/// One that keeps the program apart from the player's files names the shipped half here so
+/// that it is searched too.
+/// </summary>
+bool Win_Shipped_Data_Directory(char * path, int size)
+{
+#ifdef _WIN32
+	(void)path;
+	(void)size;
+	return(false);
+#else
+	return(Win32Compat_Shipped_Data_Directory(path, size) != FALSE);
+#endif
+}
+
+
 // A borderless window covering the desktop is all a full screen presentation is on
 // Windows, so there is nothing further to ask for there. A host that keeps its own
 // furniture above an ordinary window has to be told, or it draws over the game.
@@ -415,6 +492,88 @@ bool Win_Set_Window_Fullscreen(HWND window, bool fullscreen)
 	return(true);
 #else
 	return(Win32Compat_Set_Window_Fullscreen(window, fullscreen ? TRUE : FALSE) != FALSE);
+#endif
+}
+
+
+/// <summary>
+/// Answers whether the pointer can be moved to a position the game chooses.
+/// The dragging scroll methods pull the pointer back to the press point every frame, so
+/// they need a pointer that something can move. A host driven by touch has none, and the
+/// game has to offer the player something else.
+/// </summary>
+bool Win_Pointer_Can_Warp(void)
+{
+#ifdef _WIN32
+	return(true);
+#else
+	return(Win32_Pointer_Can_Warp());
+#endif
+}
+
+
+/// <summary>
+/// Answers whether the host draws a pointer on the display.
+/// The shape of the pointer is where the game says what a click would do, so a display that
+/// draws none has to be given that somewhere else. Windows and the desktop hosts draw one.
+/// </summary>
+bool Win_Pointer_Is_Drawn(void)
+{
+#ifdef _WIN32
+	return(true);
+#else
+	return(Win32_Pointer_Is_Drawn());
+#endif
+}
+
+
+/// <summary>
+/// Answers the part of the client area that nothing of the host's own covers.
+/// The rectangle is in the same physical client pixels GetClientRect reports, so it is
+/// compared with the frame's destination rectangle directly. A host that covers nothing
+/// answers false and leaves the rectangle alone.
+/// </summary>
+bool Win_Window_Safe_Area(HWND window, RECT & area)
+{
+#ifdef _WIN32
+	(void)window;
+	(void)area;
+	return(false);
+#else
+	return(Win32Compat_Window_Safe_Area(window, &area) != FALSE);
+#endif
+}
+
+
+/// <summary>
+/// Takes the offset a pointing device has asked the tactical view to travel.
+/// The offset is in the window's own pixels and is handed over whole, so a caller that
+/// polls at any rate loses none of it. A device that scrolls nothing answers false and
+/// leaves the values alone.
+/// </summary>
+bool Win_Pointer_Take_Scroll(int & x, int & y)
+{
+#ifdef _WIN32
+	(void)x;
+	(void)y;
+	return(false);
+#else
+	return(Win32_Touch_Take_Scroll(&x, &y));
+#endif
+}
+
+
+/// <summary>
+/// Tells the host's input layer that a fullscreen movie is playing.
+/// A movie is escaped with a key, and a host with no keyboard has to raise that key from
+/// whatever it does have. Nothing else about the movie is its business.
+/// </summary>
+void Win_Set_Movie_Playing(bool playing)
+{
+#ifdef _WIN32
+	(void)playing;
+#else
+	Win32_Touch_Set_Movie_Mode(playing);
 #endif
 }
 
@@ -617,6 +776,11 @@ void Set_Window_Fullscreen(bool fullscreen)
 /// <param name="name">The name of the picture file to load.</param>
 /// <param name="surface">The surface to draw the title screen upon.</param>
 /// <param name="palette">The palette to load the picture's colors into.</param>
+// Where the last title page landed after being centred on its surface. Text printed over
+// the page is authored in the page's own coordinates and has to be moved by the same amount.
+Point2D TitleScreenOffset(0, 0);
+
+
 void Load_Title_Screen(char const * name, Surface * surface, PaletteClass * palette)
 {
 	Surface *load_buffer;
@@ -627,6 +791,10 @@ void Load_Title_Screen(char const * name, Surface * surface, PaletteClass * pale
 		Point2D point;
 		int x = (surface->Get_Width() - load_buffer->Get_Width()) / 2;
 		int y = (surface->Get_Height() - load_buffer->Get_Height()) / 2;
+
+		// Whatever is printed over this page is placed in the page's own coordinates, so the
+		// offset that centred it has to reach that caller as well.
+		TitleScreenOffset = Point2D(x, y);
 		if (palette && load_buffer->Bytes_Per_Pixel() == 1) {
 			ConvertClass *drawer = new ConvertClass(*palette, *palette, *surface);
 			Blit_Block(*surface, *drawer, *load_buffer, load_buffer->Get_Rect(), Point2D(x, y), surface->Get_Rect());

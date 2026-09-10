@@ -121,6 +121,12 @@ extern "C" HMODULE LoadLibrary(LPCSTR name)
 		return(NULL);
 	}
 
+#ifdef OPENTS_IOS
+	// An application bundle carries no loose libraries beside its executable, and the only
+	// module the game loads is the language library, which holds no code on this host. The
+	// caller gets the handle that stands for the running program, as GetModuleHandle returns.
+	return((HMODULE)(ULONG_PTR)1);
+#else
 	std::string const library = Host_Library_Name(name);
 
 	char executable[MAX_PATH];
@@ -134,6 +140,7 @@ extern "C" HMODULE LoadLibrary(LPCSTR name)
 	}
 
 	return((HMODULE)dlopen(library.c_str(), RTLD_LAZY));
+#endif
 }
 
 
@@ -182,6 +189,111 @@ extern "C" DWORD GetModuleFileName(HMODULE module, LPSTR name, DWORD size)
 static std::vector<std::wstring> _Arguments;
 static std::wstring _CommandLine;
 
+#ifdef OPENTS_IOS
+/*
+ * The folder the game reads its data from and writes the player's own files into. A host
+ * that starts a process from an icon hands it no arguments, so the two directories the game
+ * would otherwise be told about are named here in the form the command line carries them
+ * and everything downstream of the parser stays identical.
+ *
+ * Documents/OpenTS is chosen because Documents is the one folder in the container the
+ * player can reach, so a Tiberian Sun installation can be dropped in and a saved game
+ * copied out without a cable. The container path holds an identifier that changes on every
+ * reinstall, which is why it is read at run time rather than built in.
+ */
+static char const * const _ContainerFolder = "/Documents/OpenTS";
+
+
+static void Append_Container_Directories(std::vector<std::wstring> & arguments)
+{
+	char const * const home = getenv("HOME");
+
+	if (home == NULL || home[0] == '\0') {
+		return;
+	}
+
+	std::string const folder = std::string(home) + _ContainerFolder;
+
+	// Made here rather than left to the game, which treats a missing data directory as
+	// fatal. An empty folder lets the game start and say which files it could not find,
+	// and gives the player somewhere to put them.
+	std::error_code error;
+	std::filesystem::create_directories(folder, error);
+
+	for (char const * option : { "-DATADIR=", "-USERDIR=" }) {
+		std::string const argument = std::string(option) + folder;
+		arguments.push_back(std::wstring(argument.begin(), argument.end()));
+	}
+}
+#endif
+
+
+/// <summary>
+/// Reports where this host keeps the files the program writes about itself.
+/// </summary>
+/// <returns>BOOL; Did the host name a directory? A host that keeps them beside the
+/// executable answers FALSE and leaves the buffer alone.</returns>
+extern "C" BOOL Win32Compat_Log_Directory(char * buffer, int size)
+{
+#ifdef OPENTS_IOS
+	char const * const home = getenv("HOME");
+
+	if (buffer == NULL || size <= 0 || home == NULL || home[0] == '\0') {
+		return(FALSE);
+	}
+
+	std::string const folder = std::string(home) + _ContainerFolder;
+
+	if ((int)folder.length() >= size) {
+		return(FALSE);
+	}
+
+	std::error_code error;
+	std::filesystem::create_directories(folder, error);
+
+	strcpy(buffer, folder.c_str());
+	return(TRUE);
+#else
+	(void)buffer;
+	(void)size;
+	return(FALSE);
+#endif
+}
+
+
+extern "C" BOOL Win32Compat_Shipped_Data_Directory(char * buffer, int size)
+{
+#ifdef OPENTS_IOS
+	// An application bundle is read-only and is not the directory the game reads its data
+	// from, so the files shipped with the executable have to be named separately or nothing
+	// ever looks at them.
+	if (buffer == NULL || size <= 0) {
+		return(FALSE);
+	}
+
+	char path[PATH_MAX];
+	uint32_t length = sizeof(path);
+
+	if (_NSGetExecutablePath(path, &length) != 0) {
+		return(FALSE);
+	}
+
+	std::string const folder = std::filesystem::path(path).parent_path().string();
+
+	if (folder.empty() || (int)folder.length() >= size) {
+		return(FALSE);
+	}
+
+	strcpy(buffer, folder.c_str());
+	return(TRUE);
+#else
+	(void)buffer;
+	(void)size;
+	return(FALSE);
+#endif
+}
+
+
 void Win32_Record_Arguments(int argc, char ** argv)
 {
 	_Arguments.clear();
@@ -190,11 +302,17 @@ void Win32_Record_Arguments(int argc, char ** argv)
 	for (int index = 0; index < argc; index++) {
 		std::string const argument(argv[index] != NULL ? argv[index] : "");
 		_Arguments.push_back(std::wstring(argument.begin(), argument.end()));
+	}
 
+#ifdef OPENTS_IOS
+	Append_Container_Directories(_Arguments);
+#endif
+
+	for (std::size_t index = 0; index < _Arguments.size(); index++) {
 		if (index > 0) {
 			_CommandLine += L' ';
 		}
-		_CommandLine += _Arguments.back();
+		_CommandLine += _Arguments[index];
 	}
 }
 
