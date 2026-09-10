@@ -39,6 +39,7 @@
 
 #include <memory>
 #include <cstdint>
+#include <memory>
 
 class UnitClass;
 class BuildingClass;

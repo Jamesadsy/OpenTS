@@ -295,5 +295,3 @@ int HouseTypeClass::Fetch_Heap_ID(void) const
 {
 	return(HeapID);
 }
-
-

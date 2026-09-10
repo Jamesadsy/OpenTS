@@ -57,10 +57,14 @@ The content is the game state: the bytes `Put_All` in `code/saveload.cpp`
 writes through `SaveStreamClass`, compressed as one block with LZO1X-1 when
 that makes it smaller, and stored as it is otherwise. The reader checks the
 stored length and checksum before decompressing, and refuses a block that does
-not expand to exactly the recorded length. The decompressor checks every read
-and write against its buffers, so a block forged to overrun either is refused
-like a damaged one. An uncompressed length above 256 MiB is refused before
-anything is allocated for it.
+not expand to exactly the recorded length. An uncompressed length above 256 MiB
+is refused before anything is allocated for it.
+
+The block is decompressed through `lzo1x_decompress_safe`, which stops at the
+end of the output buffer, so a block forged to expand past the recorded length
+is refused rather than written past it. The records after the header are still
+read into live objects, so treat a save file from an untrusted source as
+untrusted input.
 
 ### Object records
 
@@ -73,34 +77,46 @@ names them. An object record is:
 | 4 | Length of the record body |
 | | The body: the swizzle identity, then the members the class's `Serialize` names |
 
-The swizzle identity is the object's own address, written at the width a
-pointer has in the build that wrote it. Every record therefore grows by four
-bytes in a 64-bit build, and a save does not cross between builds of different
-pointer widths.
-
 The class identifier is the `ClassID` the object's `Class_ID` reports, the
 same one registered in `code/startup.cpp` and, for a locomotor, named by the
-`Locomotor=` key. Its sixteen bytes are those of the COM class identifier the
-class once registered, so a save written before COM left the engine still
-names the same classes. The reader creates the object through that registration,
-hands it the stream, checks that it consumed exactly the recorded length, and
-only then lets it finish restoring itself, so a refused record never reaches
-the map or a side table. A record that comes up short or long fails the load with the object's
-type and offset in the debug log, which is what a member added to one build
-and not the other looks like. A record read where a locomotor belongs fails
-the load the same way when its class is not one. A vector of objects is a
-4-byte count followed by that many records, and a locomotor nested inside a
-unit's record is a record of its own. A count that the bytes remaining in the
-content could not hold fails the load before anything is allocated for it.
+`Locomotor=` key. Its sixteen bytes are those of the COM class identifier
+the class once registered, kept because the `Locomotor=` values in rules
+files carry them. The reader creates the object through that
+registration, hands it the stream, checks that it consumed exactly the
+recorded length, and only then lets it finish restoring itself, so a refused
+record never reaches the map or a side table. A record that comes up short
+or long fails the load with the object's type and offset in the debug log,
+which is what a member added to one build and not the other looks like. A
+record read where a locomotor belongs fails the load the same way when its
+class is not one. A vector of objects is a 4-byte count followed by that
+many records, all of the heap's own class; a record naming any other class
+fails the load, since nothing else belongs in that heap. A locomotor nested
+inside a unit's record is a record of its own. A count that the bytes
+remaining in the content could not hold fails the load before anything is
+allocated for it.
 
 An object whose record fails is destroyed before the load fails. The pointer
 slots it had registered are cleared first, since they still hold identities
-rather than addresses. The objects loaded before it keep their places in the
-heaps and have their slots cleared the same way, so a failed load leaves
-nothing that a later teardown cannot delete.
+rather than addresses, and the slots the records before it registered are
+cleared the same way. Those earlier objects stay in their heaps, and the ones
+that had finished loading have already taken their place in the map or a side
+table. A failed load therefore leaves a partly built game that the caller has
+to clear, not one it can carry on from.
+
+A character buffer travels as its text: a length and that many characters, and
+a load clears the rest of the buffer. How much room a build keeps for a string
+is its own business, so the file carries neither the capacity nor whatever the
+memory held past the terminator. The text is at most one character shorter than
+the buffer, so a loaded buffer is always terminated; a length that would fill it
+outright fails the load, since the engine reads these buffers as C strings.
 
 The body is what each class's `Serialize` produces, member by member, in host
 byte order. It is not described here; the classes are the description.
+
+The swizzle identity and every pointer member travel as four bytes. The save
+numbers the objects it meets rather than writing the address one sat at, so
+the body depends neither on the pointer width of the build that wrote it nor
+on where the objects were in memory.
 
 ## Versions
 
@@ -152,10 +168,11 @@ file on disk is left as it was.
 
 ## Checks
 
-`tests/save` builds `code/savefile.cpp` against the LZO library on every target
+`tests/save` builds `code/savefile.cpp` against the vendored LZO library and
 covers the round trip, the fields-only read, replacement of an existing file
 and of a stale `.tmp`, and each refusal above, including a later version, an
 unknown flag, a file cut at every boundary, a byte flipped in the header, the
 table and the content, a field table above its limit, a gap before the
-content, compressed blocks forged to overrun the reader, and a write above
-each limit that leaves the earlier save in place. It reads no game data.
+content, a block that ends before or expands past its declared length, and a
+write above each limit that leaves the earlier save in place. It reads no game
+data.

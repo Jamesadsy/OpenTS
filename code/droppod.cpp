@@ -38,8 +38,7 @@
 DropPodLocomotionClass::DropPodLocomotionClass(void) :
 	BASECLASS(),
 	Direction(DPOD_DIR_NE),
-	DestinationCoord(COORD_NONE),
-	Piggybacker()
+	DestinationCoord(COORD_NONE)
 {
 }
 
@@ -82,6 +81,11 @@ Coord DropPodLocomotionClass::Destination(void)
 /// </summary>
 bool DropPodLocomotionClass::Process(void)
 {
+	// Handing the carried locomotor back leaves this pod unowned, so it holds itself for
+	// the rest of the routine. The slot is declared here rather than beside the hand-back
+	// so that the pod outlives every member this routine still reads.
+	std::unique_ptr<ILocomotion> self;
+
 	Coord coord = LinkedTo->PositionCoord;
 	Coord smoke_coord = coord;
 
@@ -118,10 +122,12 @@ bool DropPodLocomotionClass::Process(void)
 		coord = linked->PositionCoord;
 		linked->Limbo();
 
-		// Handing the carried locomotor back makes this pod unowned, so it holds itself
-		// until the landing is finished and is deleted on return.
-		std::unique_ptr<ILocomotion> const self = std::move(LinkedTo->Locomotion);
-		LinkedTo->Locomotion = End_Piggyback();
+		// A pod that carries nothing stays the object's locomotor.
+		std::unique_ptr<ILocomotion> carried = End_Piggyback();
+		if (carried != nullptr) {
+			self = std::move(LinkedTo->Locomotion);
+			LinkedTo->Locomotion = std::move(carried);
+		}
 
 		if (!linked->Unlimbo(coord, DIR_N)) {
 			Explosion_Damage(coord, 100, LinkedTo, Rule->C4Warhead);
@@ -265,9 +271,9 @@ void DropPodLocomotionClass::Stop_Moving(void)
 /// </summary>
 /// <param name="carried">The locomotor that is to take over the unit.</param>
 /// <returns>bool; Was the locomotor taken on? One already carrying a locomotor refuses.</returns>
-bool DropPodLocomotionClass::Begin_Piggyback(std::unique_ptr<ILocomotion> carried)
+bool DropPodLocomotionClass::Begin_Piggyback(std::unique_ptr<ILocomotion> & carried)
 {
-	if (carried == NULL || Piggybacker != NULL) {
+	if (carried == nullptr || Piggybacker != nullptr) {
 		return(false);
 	}
 	Piggybacker = std::move(carried);

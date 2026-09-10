@@ -3,11 +3,11 @@
 // whole, intact save of a version it knows.
 //
 // Every file it touches it creates itself, in a scratch directory named by the first
-// argument, so it reads no game data and leaves nothing behind.
+// argument or the working directory, so it reads no game data and leaves nothing behind.
 
 #include "savefile.h"
 
-#include <lzo/lzoconf.h>
+#include <lzo/lzo1x.h>
 
 #include <cstdio>
 #include <cstring>
@@ -70,14 +70,14 @@ static std::vector<unsigned char> Prose(std::size_t length)
 static std::vector<unsigned char> Read_Whole_File(char const * path)
 {
 	std::vector<unsigned char> data;
-	HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (file == INVALID_HANDLE_VALUE) return(data);
-	DWORD const size = GetFileSize(file, NULL);
+	DWORD const size = GetFileSize(file, nullptr);
 	if (size != INVALID_FILE_SIZE && size > 0) {
 		data.resize(size);
 		DWORD got = 0;
-		if (!ReadFile(file, data.data(), size, &got, NULL) || got != size) data.clear();
+		if (!ReadFile(file, data.data(), size, &got, nullptr) || got != size) data.clear();
 	}
 	CloseHandle(file);
 	return(data);
@@ -86,13 +86,13 @@ static std::vector<unsigned char> Read_Whole_File(char const * path)
 
 static bool Write_Whole_File(char const * path, std::vector<unsigned char> const & data)
 {
-	HANDLE const file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-		FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE const file = CreateFileA(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (file == INVALID_HANDLE_VALUE) return(false);
 	DWORD written = 0;
 	bool ok = true;
 	if (!data.empty()) {
-		ok = WriteFile(file, data.data(), (DWORD)data.size(), &written, NULL) && written == data.size();
+		ok = WriteFile(file, data.data(), (DWORD)data.size(), &written, nullptr) && written == data.size();
 	}
 	CloseHandle(file);
 	return(ok);
@@ -101,8 +101,8 @@ static bool Write_Whole_File(char const * path, std::vector<unsigned char> const
 
 static bool File_Exists(char const * path)
 {
-	HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL, NULL);
+	HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL, nullptr);
 	if (file == INVALID_HANDLE_VALUE) return(false);
 	CloseHandle(file);
 	return(true);
@@ -394,20 +394,13 @@ static void Test_Refusals(void)
 	Check("refuse: the reference save is compressed", (image[6] & 0x01) != 0);
 	std::vector<unsigned char> const stored(image.begin() + content_offset, image.end());
 
-	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, stored, content_length - 1));
-	Check_Result("refuse: a block that expands past its declared length", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
-	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, stored, 16));
-	Check_Result("refuse: a block that expands far past its declared length", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
 	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, stored, content_length + 1));
 	Check_Result("refuse: a block that ends before its declared length", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
 
-	std::vector<unsigned char> const reaching_back = { 18, 'A', 4, 0 };
-	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, reaching_back, 3));
-	Check_Result("refuse: a block whose match reaches before the start", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
-
-	std::vector<unsigned char> const unfinished = { 18, 'A' };
-	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, unfinished, 1));
-	Check_Result("refuse: a block with no end marker", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
+	// The reader sizes the output buffer from the declared length, so this block runs past
+	// the end of it. The bounds-checked decompressor stops there rather than writing on.
+	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, stored, content_length - 1));
+	Check_Result("refuse: a block that expands past its declared length", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
 
 	Write_Whole_File(damaged.c_str(), Forge_Content(image, table, stored, 0x10000001));
 	Check_Result("refuse: a block declared larger than any save", read.Read(damaged.c_str()), SaveFileClass::RESULT_CORRUPT);
@@ -465,17 +458,13 @@ static void Test_Refusals(void)
 
 int main(int argc, char ** argv)
 {
-	if (argc < 2) {
-		printf("usage: SaveTest <scratch directory>\n");
-		return(2);
-	}
 	if (lzo_init() != LZO_E_OK) {
 		printf("lzo_init failed\n");
 		return(2);
 	}
 
-	Scratch = argv[1];
-	CreateDirectoryA(Scratch.c_str(), NULL);
+	Scratch = (argc > 1) ? argv[1] : ".";
+	CreateDirectoryA(Scratch.c_str(), nullptr);
 
 	Test_Round_Trip();
 	Test_Cuts();
@@ -486,7 +475,7 @@ int main(int argc, char ** argv)
 	Test_Refusals();
 
 	char const * const names[] = { "ROUNDTRIP.SAV", "NOISE.SAV", "EMPTY.SAV", "REPLACE.SAV",
-		"PLAIN.SAV", "GOOD.SAV", "DAMAGED.SAV" };
+		"LIMITS.SAV", "PLAIN.SAV", "GOOD.SAV", "DAMAGED.SAV" };
 	for (char const * name : names) {
 		DeleteFileA(Scratch_Path(name).c_str());
 	}

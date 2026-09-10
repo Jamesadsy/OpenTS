@@ -16,7 +16,6 @@
 #include "cell.h"
 #include "classfactory.h"
 #include "coord.h"
-#include "dbgprint.h"
 #include "foot.h"
 #include "globals.h"
 #include "map.h"
@@ -185,10 +184,10 @@ bool LocomotionClass::Is_Ion_Sensitive(void)
 
 std::unique_ptr<ILocomotion> Create_Locomotor(ClassID const & classid)
 {
-	IPersistent * const object = Create_Object(classid);
-	ILocomotion * const locomotion = dynamic_cast<ILocomotion *>(object);
-	if (locomotion == NULL) {
-		delete object;
+	std::unique_ptr<IPersistent> object = Create_Object(classid);
+	ILocomotion * const locomotion = dynamic_cast<ILocomotion *>(object.get());
+	if (locomotion != nullptr) {
+		object.release();
 	}
 	return(std::unique_ptr<ILocomotion>(locomotion));
 }
@@ -196,23 +195,14 @@ std::unique_ptr<ILocomotion> Create_Locomotor(ClassID const & classid)
 
 std::unique_ptr<ILocomotion> Load_Locomotor(SaveStreamClass & stream)
 {
-	SwizzleManagerClass::MarkType const mark = Swizzler.Mark();
-	IPersistent * const object = Load_Object(stream);
-	ILocomotion * const locomotion = dynamic_cast<ILocomotion *>(object);
-	if (object != NULL && locomotion == NULL) {
-		DebugString("Save record of %s at %u is not a locomotor\n", typeid(*object).name(), stream.Offset());
-		Swizzler.Abandon(mark);
-		delete object;
-		stream.Fail();
-	}
-	return(std::unique_ptr<ILocomotion>(locomotion));
+	return(Load_Object_As<ILocomotion>(stream));
 }
 
 
 ClassID Locomotion_Class_ID(ILocomotion * locomotion)
 {
 	IPersistent const * const persist = dynamic_cast<IPersistent const *>(locomotion);
-	return(persist != NULL ? persist->Class_ID() : ClassID());
+	return(persist != nullptr ? persist->Class_ID() : ClassID());
 }
 
 
@@ -255,13 +245,6 @@ bool LocomotionClass::Save_Members(SaveStreamClass & stream, bool cleardirty)
 }
 
 
-/// <summary>
-/// Reads the members this locomotor describes back from the save stream.
-/// The saved identity is handed to the swizzle system so that pointers elsewhere in the
-/// save game can be remapped onto this locomotor, and the members follow.
-/// </summary>
-/// <param name="stream">The stream to read from.</param>
-/// <returns>bool; Was the record read whole?</returns>
 bool LocomotionClass::Load_Members(SaveStreamClass & stream)
 {
 	SwizzleIDType id = 0;
@@ -287,7 +270,6 @@ void LocomotionClass::Serialize(SaveStreamClass & stream)
 	stream.Serialize(LinkedTo);
 	stream.Serialize(IsPowered);
 	stream.Serialize(Dirty);
-
 }
 
 
@@ -571,4 +553,3 @@ int LocomotionClass::Apparent_Speed(void)
 {
 	return(LinkedTo->Current_Speed());
 }
-

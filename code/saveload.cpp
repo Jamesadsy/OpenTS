@@ -46,6 +46,7 @@
 
 #include "saveload.h"
 
+#include "_deploymentconfig.h"
 #include "_logic.h"
 #include "_map.h"
 #include "_rect.h"
@@ -69,6 +70,7 @@
 #include "classfactory.h"
 #include "data.h"
 #include "dbgprint.h"
+#include "deploymentconfig.h"
 #include "empulse.h"
 #include "enviro.h"
 #include "factory.h"
@@ -143,27 +145,9 @@
 #include "objheaps.hh"
 
 #include <memory>
+#include <new>
+#include <stdexcept>
 #include <string>
-
-#include <chrono>
-#include <ratio>
-
-/// The save record stamps its times in the Windows epoch: hundred nanosecond ticks since the
-/// start of 1601. The host clock counts from 1970, so the difference between the two is added.
-static void Fetch_System_File_Time(FILETIME* result)
-{
-#ifdef _WIN32
-	GetSystemTimeAsFileTime(result);
-#else
-	unsigned long long const epoch_difference = 116444736000000000ULL;
-	unsigned long long const now = (unsigned long long)std::chrono::duration_cast<std::chrono::duration<long long, std::ratio<1, 10000000>>>(
-				std::chrono::system_clock::now().time_since_epoch()).count();
-	unsigned long long const ticks = now + epoch_difference;
-	result->dwLowDateTime = (DWORD)(ticks & 0xFFFFFFFFULL);
-	result->dwHighDateTime = (DWORD)(ticks >> 32);
-#endif
-}
-
 
 //#define	SAVE_BLOCK_SIZE	512
 #define	SAVE_BLOCK_SIZE	4096
@@ -176,15 +160,16 @@ unsigned int ExpectedGameVersion = LoadOptionsClass::GAMEVER_OPENTS;
 
 
 /// <summary>
-/// Writes one object to the save stream as a record of its own.
-/// The record is the class identifier, the length of what follows, and whatever the
-/// object's Save writes; a reader that does not consume exactly that length has read a
-/// record of a different shape than was written.
+/// Writes one object to the save stream as a record of its own. A reader that does not
+/// consume exactly the record's length has read a record of another shape than was
+/// written, and a missing object fails the stream rather than leaving a gap where the
+/// reader expects one.
 /// </summary>
 /// <returns>bool; Was the record written whole?</returns>
 bool Save_Object(SaveStreamClass & stream, IPersistent * persist)
 {
-	if (persist == NULL) {
+	if (persist == nullptr) {
+		stream.Fail();
 		return(false);
 	}
 
@@ -209,7 +194,8 @@ bool Save_Object(SaveStreamClass & stream, IPersistent * persist)
 bool Save_Object(SaveStreamClass & stream, ILocomotion * locomotion)
 {
 	IPersistent * const persist = dynamic_cast<IPersistent *>(locomotion);
-	if (persist == NULL) {
+	if (persist == nullptr) {
+		stream.Fail();
 		return(false);
 	}
 	return(Save_Object(stream, persist));
@@ -217,61 +203,75 @@ bool Save_Object(SaveStreamClass & stream, ILocomotion * locomotion)
 
 
 /// <summary>
-/// Recreates one object from the save stream.
-/// The object is created through the class registered for the identifier the record
-/// carries, and reattaches itself to its own heap as it is constructed.
+/// Recreates one object from the save stream. It reattaches itself to its own heap as it
+/// is constructed, so the caller is handed it only to keep or to refuse.
 /// </summary>
-/// <returns>The object, or NULL with the stream failed when the identifier names no
-/// registered class, the object could not read its record, or the record's length does
-/// not match what the object consumed.</returns>
-IPersistent * Load_Object(SaveStreamClass & stream)
+/// <param name="accepts">Asked whether the object is of the class the caller expects, once
+/// the record has been read and before the object takes its place. May be null when any
+/// class will do.</param>
+/// <returns>The object, owned by the caller, or nothing with the stream failed when the
+/// identifier names no registered class, the object could not read its record, the record's
+/// length does not match what the object consumed, or the class is not the one asked
+/// for.</returns>
+std::unique_ptr<IPersistent> Load_Object(SaveStreamClass & stream, bool (*accepts)(IPersistent const * object))
 {
 	ClassID classid;
 	unsigned int length = 0;
 	stream.Serialize_Bytes(&classid, sizeof(classid));
 	stream.Serialize(length);
 	if (stream.Was_Error()) {
-		return(NULL);
+		return(nullptr);
 	}
 
 	unsigned int const start = stream.Offset();
 	if (length > stream.Size() - start) {
 		DebugString("Save record at %u claims %u bytes, past the end of the save\n", start, length);
 		stream.Fail();
-		return(NULL);
+		return(nullptr);
 	}
 
 	SwizzleManagerClass::MarkType const mark = Swizzler.Mark();
-	std::unique_ptr<IPersistent> persist(Create_Object(classid));
-	if (persist == NULL) {
+	std::unique_ptr<IPersistent> persist = Create_Object(classid);
+	if (persist == nullptr) {
 		DebugString("Save record at %u names a class this build does not register\n", start);
 		stream.Fail();
-		return(NULL);
+		return(nullptr);
 	}
 
-	bool ok = persist->Load(stream);
+	bool ok;
+	{
+		SaveStreamClass::BoundScope const bound(stream, start + length);
+		ok = persist->Load(stream);
+	}
 	if (ok && stream.Offset() != start + length) {
 		DebugString("Save record of %s at %u is %u bytes but %u were read\n",
 			typeid(*persist).name(), start, length, stream.Offset() - start);
 		ok = false;
 	}
+	if (ok && accepts != nullptr && !accepts(persist.get())) {
+		DebugString("Save record of %s at %u is not the class expected there\n",
+			typeid(*persist).name(), start);
+		ok = false;
+	}
 	if (!ok) {
 		Swizzler.Abandon(mark);
 		stream.Fail();
-		return(NULL);
+		return(nullptr);
 	}
 
 	persist->Post_Load();
-	return(persist.release());
+	return(persist);
 }
 
 
 /// <summary>
 /// Loads a vector of persistent objects from the save game stream.
 /// The objects are not handed back -- each one reattaches itself to its own heap as it is
-/// constructed, which is what refills the game's vectors.
+/// constructed, which is what refills the game's vectors. A record naming any class other
+/// than the heap's fails the load, since nothing else belongs in that heap.
 /// </summary>
 /// <returns>bool; Was the record read whole?</returns>
+template<class T>
 static bool Load_Vector(SaveStreamClass & stream)
 {
 	int count = 0;
@@ -280,13 +280,18 @@ static bool Load_Vector(SaveStreamClass & stream)
 		return(false);
 	}
 	if (count < 0) {
+		stream.Fail();
 		return(false);
 	}
 
 	for (int index = 0; index < count; index++) {
-		if (Load_Object(stream) == NULL) {
+		std::unique_ptr<T> object = Load_Object_As<T>(stream);
+		if (object == nullptr) {
 			return(false);
 		}
+		// The object attached itself to its own heap as it was constructed, and the heap
+		// is what deletes it from here on.
+		object.release();
 	}
 	return(true);
 }
@@ -768,7 +773,7 @@ static bool Get_All(SaveStreamClass & stream, bool save_net)
 	RulesClass::Load_Art_INI();
 
 	if (Addon_Enabled(ADDON_FIRESTORM) == true) {
-		CCFileClass artfs("ARTFS.INI");
+		CCFileClass artfs(DeploymentConfig.ArtExpansionFile.c_str());
 		if (artfs.Is_Available() == true) {
 			ArtINI.Load(artfs, false);
 		}
@@ -781,13 +786,15 @@ static bool Get_All(SaveStreamClass & stream, bool save_net)
 		return(false);
 	}
 
-	if (!Load_Vector(stream)) {	/// AnimTypes
+	if (!Load_Vector<AnimTypeClass>(stream)) {	/// AnimTypes
 		return(false);
 	}
 
-	Map.Load(stream);
+	if (!Map.Load(stream)) {
+		return(false);
+	}
 
-	if (!Load_Vector(stream)) {	/// Tubes
+	if (!Load_Vector<TubeClass>(stream)) {	/// Tubes
 		return(false);
 	}
 
@@ -796,170 +803,167 @@ static bool Get_All(SaveStreamClass & stream, bool save_net)
 	}
 
 	Map.Reset_All_Subzones();
-	Logic.Load(stream);
+	if (!Logic.Load(stream)) {
+		return(false);
+	}
 
 	if (TacticalMap != NULL) {
 		delete TacticalMap;
 		TacticalMap = NULL;
 	}
-	SwizzleManagerClass::MarkType const mark = Swizzler.Mark();
-	IPersistent * const object = Load_Object(stream);
-	Tactical * const old_tactical = dynamic_cast<Tactical *>(object);
-	if (object != NULL && old_tactical == NULL) {
-		DebugString("Save record of %s at %u is not the tactical map\n", typeid(*object).name(), stream.Offset());
-		Swizzler.Abandon(mark);
-		delete object;
-		stream.Fail();
-	}
-	if (old_tactical == NULL) {
+	std::unique_ptr<Tactical> tactical = Load_Object_As<Tactical>(stream);
+	if (tactical == nullptr) {
 		return(false);
 	}
+	// The map installed itself in TacticalMap as it was constructed, and that global is
+	// what deletes it from here on.
+	tactical.release();
 
-	if (!Load_Vector(stream)) {	/// HouseTypes
+	if (!Load_Vector<HouseTypeClass>(stream)) {	/// HouseTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Houses
+	if (!Load_Vector<HouseClass>(stream)) {	/// Houses
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Units
+	if (!Load_Vector<UnitClass>(stream)) {	/// Units
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// UnitTypes
+	if (!Load_Vector<UnitTypeClass>(stream)) {	/// UnitTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// InfantryTypes
+	if (!Load_Vector<InfantryTypeClass>(stream)) {	/// InfantryTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Infantry
+	if (!Load_Vector<InfantryClass>(stream)) {	/// Infantry
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// BuildingTypes
+	if (!Load_Vector<BuildingTypeClass>(stream)) {	/// BuildingTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Buildings
+	if (!Load_Vector<BuildingClass>(stream)) {	/// Buildings
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// AircraftTypes
+	if (!Load_Vector<AircraftTypeClass>(stream)) {	/// AircraftTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Aircraft
+	if (!Load_Vector<AircraftClass>(stream)) {	/// Aircraft
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Anims
+	if (!Load_Vector<AnimClass>(stream)) {	/// Anims
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// TaskForces
+	if (!Load_Vector<TaskForceClass>(stream)) {	/// TaskForces
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// TeamTypes
+	if (!Load_Vector<TeamTypeClass>(stream)) {	/// TeamTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Teams
+	if (!Load_Vector<TeamClass>(stream)) {	/// Teams
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// ScriptTypes
+	if (!Load_Vector<ScriptTypeClass>(stream)) {	/// ScriptTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Scripts
+	if (!Load_Vector<ScriptClass>(stream)) {	/// Scripts
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// TagTypes
+	if (!Load_Vector<TagTypeClass>(stream)) {	/// TagTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Tags
+	if (!Load_Vector<TagClass>(stream)) {	/// Tags
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// TriggerTypes
+	if (!Load_Vector<TriggerTypeClass>(stream)) {	/// TriggerTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Triggers
+	if (!Load_Vector<TriggerClass>(stream)) {	/// Triggers
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// AITriggerTypes
+	if (!Load_Vector<AITriggerTypeClass>(stream)) {	/// AITriggerTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Actions
+	if (!Load_Vector<TActionClass>(stream)) {	/// Actions
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Events
+	if (!Load_Vector<TEventClass>(stream)) {	/// Events
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Factories
+	if (!Load_Vector<FactoryClass>(stream)) {	/// Factories
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// VoxelAnimTypes
+	if (!Load_Vector<VoxelAnimTypeClass>(stream)) {	/// VoxelAnimTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// VoxelAnims
+	if (!Load_Vector<VoxelAnimClass>(stream)) {	/// VoxelAnims
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Warheads
+	if (!Load_Vector<WarheadTypeClass>(stream)) {	/// Warheads
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Weapons
+	if (!Load_Vector<WeaponTypeClass>(stream)) {	/// Weapons
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// ParticleTypes
+	if (!Load_Vector<ParticleTypeClass>(stream)) {	/// ParticleTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Particles
+	if (!Load_Vector<ParticleClass>(stream)) {	/// Particles
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// ParticleSystemTypes
+	if (!Load_Vector<ParticleSystemTypeClass>(stream)) {	/// ParticleSystemTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// ParticleSystems
+	if (!Load_Vector<ParticleSystemClass>(stream)) {	/// ParticleSystems
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// BulletTypes
+	if (!Load_Vector<BulletTypeClass>(stream)) {	/// BulletTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Bullets
+	if (!Load_Vector<BulletClass>(stream)) {	/// Bullets
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// WaypointPaths
+	if (!Load_Vector<WaypointPathClass>(stream)) {	/// WaypointPaths
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// SmudgeTypes
+	if (!Load_Vector<SmudgeTypeClass>(stream)) {	/// SmudgeTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// OverlayTypes
+	if (!Load_Vector<OverlayTypeClass>(stream)) {	/// OverlayTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// LightSources
+	if (!Load_Vector<LightSourceClass>(stream)) {	/// LightSources
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// BuildingLights
+	if (!Load_Vector<BuildingLightClass>(stream)) {	/// BuildingLights
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Sides
+	if (!Load_Vector<SideClass>(stream)) {	/// Sides
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Tiberiums
+	if (!Load_Vector<TiberiumClass>(stream)) {	/// Tiberiums
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// EMPulseClass::EMPulses
+	if (!Load_Vector<EMPulseClass>(stream)) {	/// EMPulseClass::EMPulses
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// SuperWeaponTypes
+	if (!Load_Vector<SuperWeaponTypeClass>(stream)) {	/// SuperWeaponTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// SuperWeapons
+	if (!Load_Vector<SuperClass>(stream)) {	/// SuperWeapons
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// TerrainTypes
+	if (!Load_Vector<TerrainTypeClass>(stream)) {	/// TerrainTypes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Terrains
+	if (!Load_Vector<TerrainClass>(stream)) {	/// Terrains
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// FoggedObjectClass::FoggyObjects
+	if (!Load_Vector<FoggedObjectClass>(stream)) {	/// FoggedObjectClass::FoggyObjects
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// AlphaShapes
+	if (!Load_Vector<AlphaShapeClass>(stream)) {	/// AlphaShapes
 		return(false);
 	}
-	if (!Load_Vector(stream)) {	/// Waves
+	if (!Load_Vector<WaveClass>(stream)) {	/// Waves
 		return(false);
 	}
 	if (!VeinholeMonsterClass::Load_All(stream)) {
@@ -1038,7 +1042,7 @@ bool Save_Game(const char *file_name, char const * descr)
 	info.Set_Game_Type(Session.Type);
 
 	FILETIME FileTime;
-	Fetch_System_File_Time(&FileTime);
+	GetSystemTimeAsFileTime(&FileTime);
 	info.Set_Last_Time(FileTime);
 	info.Set_Start_Time(FileTime);
 	info.Set_Play_Time(FileTime);
@@ -1115,20 +1119,21 @@ bool Load_Game(const char *file_name)
 {
 	DebugString("\nLOADING GAME [%s]\n", file_name);
 
-	SaveVersionInfo info;
-	if (!Get_Savefile_Info(file_name, &info)) {
-		return(false);
-	}
-	if (info.Get_Internal_Version() != ExpectedGameVersion) {
-		return(false);
-	}
-
 	// The whole file is checked before the running game is torn down, so a damaged
-	// save costs nothing.
+	// save costs nothing. The listing fields come back with it, so the version this
+	// build will not read is judged on the same read rather than on a second one.
 	SaveFileClass file;
 	SaveFileClass::ResultType const result = file.Read(Saved_Game_Name(file_name).c_str());
 	if (result != SaveFileClass::RESULT_OK) {
 		DebugString("\t***** FAILED! (%s)\n", SaveFileClass::Result_Text(result));
+		return(false);
+	}
+
+	SaveVersionInfo info;
+	if (!info.Load(file)) {
+		return(false);
+	}
+	if (info.Get_Internal_Version() != ExpectedGameVersion) {
 		return(false);
 	}
 
@@ -1138,12 +1143,23 @@ bool Load_Game(const char *file_name)
 	Swizzler.Discard();
 
 	SaveStreamClass stream(file.Content, SaveStreamClass::MODE_LOAD);
-	bool res = Get_All(stream, false);
+	bool res = false;
+	// The catch sits here rather than around the whole routine because what was already
+	// loaded still has to be abandoned below. Both of the ways a count read from the file
+	// can end an allocation are refused here; anything else still raises.
+	try {
+		res = Get_All(stream, false);
+	} catch (std::bad_alloc const &) {
+		DebugString("\t***** FAILED! (out of memory at %u of %u bytes)\n", stream.Offset(), stream.Size());
+	} catch (std::length_error const &) {
+		DebugString("\t***** FAILED! (a count no container can hold at %u of %u bytes)\n",
+			stream.Offset(), stream.Size());
+	}
 	if (!res) {
 		DebugString("\t***** FAILED! (at %u of %u bytes)\n", stream.Offset(), stream.Size());
-		// What was loaded stays in the heaps until the next teardown, which must not
-		// follow the identities still sitting in its pointer slots.
-		Swizzler.Abandon();
+		// What was loaded stays in the heaps until the next teardown, so the requests it
+		// registered must not be answered into it once the game that follows has moved on.
+		Swizzler.Discard();
 		return(false);
 	}
 	if (stream.Offset() != stream.Size()) {
@@ -1290,7 +1306,7 @@ int Load_Misc_Values(SaveStreamClass & stream)
  *=========================================================================*/
 bool Get_Savefile_Info(char const * name, SaveVersionInfo * info)
 {
-	if (name == NULL || info == NULL) {
+	if (name == nullptr || info == nullptr) {
 		return(false);
 	}
 

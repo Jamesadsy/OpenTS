@@ -693,7 +693,7 @@ HouseClass::~HouseClass (void)
 	// removed here, or the list would never drain.
 	while (HouseTags.Count() > 0) {
 		TagClass * const tag = HouseTags[0];
-		if (tag == NULL) {
+		if (tag == nullptr) {
 			HouseTags.Delete_Index(0);
 		} else {
 			delete tag;

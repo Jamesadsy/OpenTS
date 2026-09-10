@@ -40,4 +40,3 @@ struct IFlyControl
 	 */
 	virtual LONG Is_Locked(void) = 0;
 };
-

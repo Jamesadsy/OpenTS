@@ -169,6 +169,7 @@ class ShapeSet
 				void Flag_RLE_Compressed(void) {Flags |= SFLAG_RLE;}
 				void Set_Size(short size) {Size = size;}
 		};
+		static_assert(sizeof(ShapeRecord) == 24, "a SHP frame record is 24 bytes on disk");
 
 		// A shape file is cast straight onto this class, so the frame records that follow the
 		// header keep their file widths and offsets.
@@ -194,6 +195,7 @@ class ShapeSet
 		ShapeSet(ShapeSet const & rvalue);
 		ShapeSet const & operator = (ShapeSet const & rvalue);
 };
+static_assert(sizeof(ShapeSet) == 8, "the SHP header is 8 bytes on disk");
 #pragma pack(pop)
 
 // A shape file is cast straight onto this header, so its four fields keep their file widths.

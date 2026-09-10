@@ -661,9 +661,9 @@ LayerType WalkLocomotionClass::In_Which_Layer(void)
 /// </summary>
 /// <param name="carried">The locomotor that is to take over the unit.</param>
 /// <returns>bool; Was the locomotor taken on? One already carrying a locomotor refuses.</returns>
-bool WalkLocomotionClass::Begin_Piggyback(std::unique_ptr<ILocomotion> carried)
+bool WalkLocomotionClass::Begin_Piggyback(std::unique_ptr<ILocomotion> & carried)
 {
-	if (carried == NULL || Piggybacker != NULL) {
+	if (carried == nullptr || Piggybacker != nullptr) {
 		return(false);
 	}
 	Piggybacker = std::move(carried);

@@ -120,13 +120,13 @@
 #include "bullettype.h"
 #include "ccrand.h"
 #include "cell.h"
+#include "classids.h"
 #include "combat.h"
 #include "conquer.h"
 #include "draw.h"
 #include "fog.h"
 #include "house.h"
 #include "houstype.h"
-#include "classids.h"
 #include "incdec.h"
 #include "infantry.h"
 #include "infatype.h"
@@ -2107,7 +2107,7 @@ void UnitClass::Per_Cell_Process(PCPType why)
 			Cell whom_center = whom->Center_Coord();
 			if (Center_Coord().As_Cell() == whom->Center_Coord().As_Cell() && whom->RTTI == RTTI_BUILDING) {
 				ClassID const clsid = Locomotion_Class_ID(Locomotion.get());
-				if (clsid == ClassID_HoverLocomotion && static_cast<BuildingClass *>(whom)->Class->IsCanUnitRepair && NavCom == NULL) {
+				if (clsid == ClassID_HoverLocomotion && static_cast<BuildingClass *>(whom)->Class->IsCanUnitRepair && NavCom == nullptr) {
 					NavCom = whom;
 				}
 				if (whom == NavCom) {
@@ -4492,8 +4492,7 @@ FacingType UnitClass::Desired_Load_Dir(ObjectClass * passenger, Cell & moveto) c
 	FacingType face = FACING_N;
 	FacingType faceto;
 	if (passenger != NULL) {
-		DirType direction = direction.Direction(Center_Coord(), passenger->Center_Coord());
-		faceto = (FacingType)direction.As_Dir256();
+		faceto = (FacingType)Direction(passenger).As_Dir256();
 	} else {
 		faceto = (FacingType)(PrimaryFacing.Current().Right_180()).As_Dir256();
 	}
@@ -5371,7 +5370,7 @@ void UnitClass::Assign_Destination(AbstractClass * target, bool immediate)
 					walk->Link_To_Object(this);
 					piggy = Piggyback_Of(walk.get());
 					if (piggy != NULL) {
-						piggy->Begin_Piggyback(std::move(Locomotion));
+						piggy->Begin_Piggyback(Locomotion);
 						Locomotion = std::move(walk);
 						Locomotion->Force_New_Slope(Map[Get_Coord()].Ramp);
 					}

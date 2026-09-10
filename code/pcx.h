@@ -44,6 +44,7 @@ struct RGB {
 	unsigned char	green;
 	unsigned char	blue;
 };
+static_assert(sizeof(RGB) == 3, "a PCX palette entry is 3 bytes on disk");
 
 struct PCX_HEADER
 {
@@ -66,6 +67,7 @@ struct PCX_HEADER
 	short	vert_screen_size;
 	char	filler[54];
 };
+static_assert(sizeof(PCX_HEADER) == 128, "the PCX header is 128 bytes on disk");
 #pragma pack(pop)
 
 static_assert(sizeof(RGB) == 3, "PCX palette entry layout changed");

@@ -82,6 +82,7 @@ struct CompHeaderType {
 	std::int32_t	Size;   // Size of the uncompressed data.
 	std::int16_t	Skip;   // Number of bytes to skip before data.
 };
+static_assert(sizeof(CompHeaderType) == 8, "the compressed file header is 8 bytes on disk");
 #pragma pack(pop)
 
 static_assert(sizeof(CompHeaderType) == 8, "Compressed block header layout changed");

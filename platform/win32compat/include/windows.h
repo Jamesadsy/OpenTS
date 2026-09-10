@@ -20,6 +20,9 @@ typedef unsigned char BYTE;
 typedef unsigned short WORD;
 typedef unsigned int DWORD;
 typedef long LONG;
+// Windows makes LONG 32 bits wide. It is the host's long here, so a structure whose
+// on-disk layout is fixed names LONG32 for the fields that must stay four bytes.
+typedef std::int32_t LONG32;
 typedef unsigned long ULONG;
 typedef unsigned int UINT;
 typedef int INT;
@@ -151,10 +154,11 @@ typedef struct tagMEASUREITEMSTRUCT { UINT CtlType, CtlID, itemID, itemWidth, it
 typedef struct tagBITMAPFILEHEADER { WORD bfType; DWORD bfSize; WORD bfReserved1, bfReserved2; DWORD bfOffBits; } BITMAPFILEHEADER, *LPBITMAPFILEHEADER;
 #pragma pack(pop)
 typedef struct tagBITMAPINFOHEADER {
-    DWORD biSize; LONG biWidth, biHeight; WORD biPlanes, biBitCount;
-    DWORD biCompression, biSizeImage; LONG biXPelsPerMeter, biYPelsPerMeter;
+    DWORD biSize; LONG32 biWidth, biHeight; WORD biPlanes, biBitCount;
+    DWORD biCompression, biSizeImage; LONG32 biXPelsPerMeter, biYPelsPerMeter;
     DWORD biClrUsed, biClrImportant;
 } BITMAPINFOHEADER, *LPBITMAPINFOHEADER;
+static_assert(sizeof(BITMAPINFOHEADER) == 40, "the BMP info header is 40 bytes on disk");
 typedef struct tagRGBQUAD { BYTE rgbBlue, rgbGreen, rgbRed, rgbReserved; } RGBQUAD;
 typedef struct tagBITMAPINFO { BITMAPINFOHEADER bmiHeader; RGBQUAD bmiColors[1]; } BITMAPINFO, *LPBITMAPINFO;
 typedef struct tagBITMAP { LONG bmType, bmWidth, bmHeight, bmWidthBytes; WORD bmPlanes, bmBitsPixel; LPVOID bmBits; } BITMAP;
@@ -797,6 +801,8 @@ BOOL EnumDisplaySettings(LPCSTR device, DWORD mode, DEVMODE * settings);
 #define FILE_CURRENT 1
 #define FILE_END 2
 #define INVALID_SET_FILE_POINTER 0xFFFFFFFFL
+#define INVALID_FILE_SIZE 0xFFFFFFFFL
+#define MOVEFILE_REPLACE_EXISTING 0x00000001L
 #define INVALID_FILE_ATTRIBUTES 0xFFFFFFFFL
 #define FILE_ATTRIBUTE_READONLY 0x00000001L
 #define FILE_ATTRIBUTE_HIDDEN 0x00000002L
@@ -858,7 +864,10 @@ HANDLE CreateFileA(LPCSTR name, DWORD access, DWORD share, LPSECURITY_ATTRIBUTES
 BOOL ReadFile(HANDLE file, LPVOID buffer, DWORD size, LPDWORD read, LPOVERLAPPED overlapped);
 BOOL WriteFile(HANDLE file, LPCVOID buffer, DWORD size, LPDWORD written, LPOVERLAPPED overlapped);
 DWORD SetFilePointer(HANDLE file, LONG distance, LONG * distancehigh, DWORD method);
+DWORD GetFileSize(HANDLE file, LPDWORD sizehigh);
+BOOL FlushFileBuffers(HANDLE file);
 BOOL DeleteFileA(LPCSTR name);
+BOOL MoveFileExA(LPCSTR from, LPCSTR to, DWORD flags);
 BOOL CopyFile(LPCSTR from, LPCSTR to, BOOL failifexists);
 BOOL CreateDirectory(LPCSTR path, LPSECURITY_ATTRIBUTES attributes);
 BOOL SetCurrentDirectory(LPCSTR path);
@@ -871,6 +880,7 @@ BOOL FileTimeToLocalFileTime(FILETIME const * file, LPFILETIME local);
 BOOL FileTimeToSystemTime(FILETIME const * file, LPSYSTEMTIME system);
 BOOL SystemTimeToFileTime(SYSTEMTIME const * system, LPFILETIME file);
 void GetSystemTime(LPSYSTEMTIME system);
+void GetSystemTimeAsFileTime(LPFILETIME file);
 
 BOOL AllocConsole(void);
 HWND GetConsoleWindow(void);

@@ -28,6 +28,7 @@ unsigned int LoadedSaveVersion = 0;
 SaveStreamClass::SaveStreamClass(std::vector<unsigned char> & buffer, ModeType mode) :
 	Buffer(&buffer),
 	Cursor(mode == MODE_SAVE ? (unsigned int)buffer.size() : 0),
+	Limit((unsigned int)buffer.size()),
 	Mode(mode),
 	Failed(false),
 	FormatVersion(mode == MODE_LOAD ? LoadedSaveVersion : ExpectedGameVersion),
@@ -39,9 +40,7 @@ SaveStreamClass::SaveStreamClass(std::vector<unsigned char> & buffer, ModeType m
 
 void SaveStreamClass::Fail(void)
 {
-	if (!Failed) {
-		Failed = true;
-	}
+	Failed = true;
 }
 
 
@@ -70,7 +69,10 @@ void SaveStreamClass::Serialize_Bytes(void * data, int length)
 		Buffer->insert(Buffer->end(), bytes, bytes + length);
 		Cursor = (unsigned int)Buffer->size();
 	} else {
-		if ((unsigned int)length > Buffer->size() - Cursor) {
+		// The bound is the record being read rather than the whole stream, so a member that
+		// reads more than its own is refused instead of quietly spending the bytes of the
+		// record after it.
+		if ((unsigned int)length > Limit - Cursor) {
 			Failed = true;
 			return;
 		}
