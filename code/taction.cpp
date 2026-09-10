@@ -40,7 +40,6 @@
  *   ActionChoiceClass::Draw_It -- Display the action choice as part of a list box.            *
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-#include "hostclock.h"
 #include "always.h"
 
 #include "taction.h"
@@ -62,6 +61,7 @@
 #include "empulse.h"
 #include "foot.h"
 #include "globals.h"
+#include "hostclock.h"
 #include "house.h"
 #include "houstype.h"
 #include "incdec.h"

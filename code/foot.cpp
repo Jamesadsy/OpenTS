@@ -502,7 +502,7 @@ bool FootClass::Basic_Path(Cell cell, int path_offset, int avoidance)
 		*/
 		bool found = false;		// Found a best path yet?
 		PathStruct path1;
-		FacingType workpath[200*10];	// Staging area for path list.
+		FacingType workpath[PATH_LENGTH_MAX + 1];	// Staging area for path list.
 		MoveType maxtype = MOVE_OK;
 
 		path = Find_Path(cell, &workpath[0], ARRAY_SIZE(workpath), maxtype, path_offset, avoidance);
@@ -3408,7 +3408,7 @@ ZGradientType FootClass::Get_Z_Gradient(void) const
 /// </summary>
 void FootClass::Draw_Voxel_Shadow(VoxelDataStruct const & voxeldata, int layer_index, int key, VoxelIndexClass * cache, Rect const & cliprect, Point2D const & point, Matrix3D const & matrix, bool force_cache) const
 {
-	if (Locomotion != NULL && Locomotion->Is_To_Have_Shadow() == (bool)true) {
+	if (Locomotion != nullptr && Locomotion->Is_To_Have_Shadow() == (bool)true) {
 		Point2D drawpoint = point;
 		if (Locomotion != NULL) {
 			drawpoint = Point2D(Locomotion->Shadow_Point()) + point;
@@ -3589,7 +3589,7 @@ void FootClass::Link_DropPod(void)
 	std::unique_ptr<ILocomotion> ballistic = Create_Locomotor(ClassID_BallisticLocomotion);
 	ballistic->Link_To_Object(this);
 	IPiggyback * piggy = Piggyback_Of(ballistic.get());
-	piggy->Begin_Piggyback(std::move(locomotion));
+	piggy->Begin_Piggyback(locomotion);
 	Locomotion = std::move(ballistic);
 
 }

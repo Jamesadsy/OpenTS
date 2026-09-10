@@ -49,9 +49,9 @@ void Unregister_Classes(void)
 /// <summary>
 /// Creates a new object of the registered class named by the identifier.
 /// </summary>
-/// <returns>The object, owned by the caller, or NULL with a debug line naming the
+/// <returns>The object, owned by the caller, or nothing with a debug line naming the
 /// identifier when no class was registered for it.</returns>
-IPersistent * Create_Object(ClassID const & classid)
+std::unique_ptr<IPersistent> Create_Object(ClassID const & classid)
 {
 	for (ClassEntryType const & entry : Classes) {
 		if (entry.Class == classid) {
@@ -63,5 +63,5 @@ IPersistent * Create_Object(ClassID const & classid)
 		(unsigned long)classid.Data1, (unsigned int)classid.Data2, (unsigned int)classid.Data3,
 		classid.Data4[0], classid.Data4[1], classid.Data4[2], classid.Data4[3],
 		classid.Data4[4], classid.Data4[5], classid.Data4[6], classid.Data4[7]);
-	return(NULL);
+	return(nullptr);
 }

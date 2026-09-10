@@ -99,6 +99,7 @@
 #include "builtype.h"
 #include "ccrand.h"
 #include "cell.h"
+#include "classids.h"
 #include "combat.h"
 #include "data.h"
 #include "draw.h"
@@ -107,7 +108,6 @@
 #include "goptions.h"
 #include "house.h"
 #include "houstype.h"
-#include "classids.h"
 #include "incdec.h"
 #include "infatype.h"
 #include "inline.h"
@@ -1195,7 +1195,7 @@ void InfantryClass::Assign_Destination(AbstractClass * target, bool immediate)
 				walk->Link_To_Object(this);
 				piggy = Piggyback_Of(walk.get());
 				if (piggy != NULL) {
-					piggy->Begin_Piggyback(std::move(Locomotion));
+					piggy->Begin_Piggyback(Locomotion);
 					Locomotion = std::move(walk);
 				}
 			}
@@ -4156,7 +4156,7 @@ bool InfantryClass::JumpJet_To_Walk(void)
 			piggy = Piggyback_Of(walk.get());
 			if (piggy != NULL) {
 				Path[0] = FACING_NONE;
-				piggy->Begin_Piggyback(std::move(Locomotion));
+				piggy->Begin_Piggyback(Locomotion);
 				Locomotion = std::move(walk);
 				Locomotion->Move_To(NavCom->Center_Coord());
 				return(true);

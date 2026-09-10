@@ -117,8 +117,7 @@ DriveLocomotionClass::DriveLocomotionClass(void) :
 	SpeedAccum(0),
 	TargetSpeed(0),
 	TrackNumber(-1),
-	TrackIndex(-1),
-	Piggybacker()
+	TrackIndex(-1)
 {
 }
 
@@ -181,9 +180,9 @@ void DriveLocomotionClass::Serialize(SaveStreamClass & stream)
 /// </summary>
 /// <param name="carried">The locomotor that is to take over the unit.</param>
 /// <returns>bool; Was the locomotor taken on? One already carrying a locomotor refuses.</returns>
-bool DriveLocomotionClass::Begin_Piggyback(std::unique_ptr<ILocomotion> carried)
+bool DriveLocomotionClass::Begin_Piggyback(std::unique_ptr<ILocomotion> & carried)
 {
-	if (carried == NULL || Piggybacker != NULL) {
+	if (carried == nullptr || Piggybacker != nullptr) {
 		return(false);
 	}
 	Piggybacker = std::move(carried);

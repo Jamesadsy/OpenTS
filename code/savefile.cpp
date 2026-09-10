@@ -9,12 +9,12 @@
 
 #include "savefile.h"
 
+#include "crc.h"
+
 #include <lzo/lzo1x.h>
 
-#include <cstdio>
+#include <cstdint>
 #include <cstring>
-#include <filesystem>
-#include <system_error>
 #include <new>
 #include <string>
 
@@ -22,36 +22,36 @@ namespace {
 
 unsigned char const Signature[4] = { 'O', 'T', 'S', 'V' };
 
-constexpr unsigned int FLAG_LZO = 0x0001;
-constexpr unsigned int FIELD_HEADER_SIZE = 8;
-constexpr unsigned int MAX_FIELD_LENGTH = 0x10000;
+constexpr std::uint32_t FLAG_LZO = 0x0001;
+constexpr std::uint32_t FIELD_HEADER_SIZE = 8;
+constexpr std::uint32_t MAX_FIELD_LENGTH = 0x10000;
 // No game state comes near this, and a header asking for more is asking for memory.
-constexpr unsigned int MAX_CONTENT_LENGTH = 0x10000000;
+constexpr std::uint32_t MAX_CONTENT_LENGTH = 0x10000000;
 // A listing is a dozen short fields; a table beyond this is not one.
-constexpr unsigned int MAX_TABLE_LENGTH = 0x100000;
+constexpr std::uint32_t MAX_TABLE_LENGTH = 0x100000;
 
 
-unsigned int Get_U16(unsigned char const * from)
+std::uint32_t Get_U16(unsigned char const * from)
 {
-	return((unsigned int)from[0] | ((unsigned int)from[1] << 8));
+	return((std::uint32_t)from[0] | ((std::uint32_t)from[1] << 8));
 }
 
 
-unsigned int Get_U32(unsigned char const * from)
+std::uint32_t Get_U32(unsigned char const * from)
 {
-	return((unsigned int)from[0] | ((unsigned int)from[1] << 8)
-		| ((unsigned int)from[2] << 16) | ((unsigned int)from[3] << 24));
+	return((std::uint32_t)from[0] | ((std::uint32_t)from[1] << 8)
+		| ((std::uint32_t)from[2] << 16) | ((std::uint32_t)from[3] << 24));
 }
 
 
-void Put_U16(unsigned char * into, unsigned int value)
+void Put_U16(unsigned char * into, std::uint32_t value)
 {
 	into[0] = (unsigned char)(value & 0xFF);
 	into[1] = (unsigned char)((value >> 8) & 0xFF);
 }
 
 
-void Put_U32(unsigned char * into, unsigned int value)
+void Put_U32(unsigned char * into, std::uint32_t value)
 {
 	into[0] = (unsigned char)(value & 0xFF);
 	into[1] = (unsigned char)((value >> 8) & 0xFF);
@@ -60,7 +60,7 @@ void Put_U32(unsigned char * into, unsigned int value)
 }
 
 
-void Append(std::vector<unsigned char> & into, void const * data, unsigned int length)
+void Append(std::vector<unsigned char> & into, void const * data, std::size_t length)
 {
 	unsigned char const * bytes = (unsigned char const *)data;
 	into.insert(into.end(), bytes, bytes + length);
@@ -81,66 +81,52 @@ bool Reserve(std::vector<unsigned char> & buffer, std::size_t length)
 }
 
 
-bool Read_Range(std::FILE * file, void * into, unsigned int length)
+bool Read_Range(HANDLE file, void * into, std::uint32_t length)
 {
 	unsigned char * cursor = (unsigned char *)into;
 
 	while (length > 0) {
-		std::size_t const got = std::fread(cursor, 1, length, file);
-		if (got == 0) return(false);
+		DWORD got = 0;
+		if (!ReadFile(file, cursor, length, &got, nullptr) || got == 0) return(false);
 		cursor += got;
-		length -= (unsigned int)got;
+		length -= got;
 	}
 
 	return(true);
 }
 
 
-bool Write_Range(std::FILE * file, void const * data, unsigned int length)
+bool Write_Range(HANDLE file, void const * data, std::uint32_t length)
 {
 	unsigned char const * cursor = (unsigned char const *)data;
 
 	while (length > 0) {
-		unsigned int const block = (length > 0x100000) ? 0x100000 : length;
-		std::size_t const written = std::fwrite(cursor, 1, block, file);
-		if (written != block) return(false);
+		DWORD const block = (length > 0x100000) ? 0x100000 : length;
+		DWORD written = 0;
+		if (!WriteFile(file, cursor, block, &written, nullptr) || written != block) return(false);
 		cursor += written;
-		length -= block;
+		length -= written;
 	}
 
 	return(true);
 }
 
 
-/// <summary>
-/// Reports the length of an open file without moving the caller's read position.
-/// </summary>
-/// <returns>The length in bytes, or -1.</returns>
-long File_Length(std::FILE * file)
-{
-	long const here = std::ftell(file);
-	if (here < 0 || std::fseek(file, 0, SEEK_END) != 0) return(-1);
-	long const end = std::ftell(file);
-	std::fseek(file, here, SEEK_SET);
-	return(end);
-}
-
-
 struct HeaderType {
-	unsigned int Version;
-	unsigned int Flags;
-	unsigned int TableLength;
-	unsigned int ContentOffset;
-	unsigned int StoredLength;
-	unsigned int ContentLength;
-	unsigned int ContentCRC;
-	unsigned int HeaderCRC;
+	std::uint32_t Version;
+	std::uint32_t Flags;
+	std::uint32_t TableLength;
+	std::uint32_t ContentOffset;
+	std::uint32_t StoredLength;
+	std::uint32_t ContentLength;
+	std::uint32_t ContentCRC;
+	std::uint32_t HeaderCRC;
 };
 
 
 // The header checksum continues over the field table, so a listing can verify what it
 // reads without touching the content.
-unsigned int Header_CRC(unsigned char const * header, unsigned char const * table, unsigned int length)
+std::uint32_t Header_CRC(unsigned char const * header, unsigned char const * table, std::uint32_t length)
 {
 	return(SaveFileClass::Checksum(table, length, SaveFileClass::Checksum(header, SaveFileClass::HEADER_SIZE - 4)));
 }
@@ -148,7 +134,7 @@ unsigned int Header_CRC(unsigned char const * header, unsigned char const * tabl
 
 // Decides everything the first 32 bytes can decide, in the order a caller wants to
 // hear about it: not ours, a version we do not read, or damage.
-SaveFileClass::ResultType Parse_Header(unsigned char const * bytes, unsigned int available, HeaderType & header)
+SaveFileClass::ResultType Parse_Header(unsigned char const * bytes, std::uint32_t available, HeaderType & header)
 {
 	if (available < sizeof(Signature) || memcmp(bytes, Signature, sizeof(Signature)) != 0) {
 		return(SaveFileClass::RESULT_NOT_A_SAVE);
@@ -193,28 +179,9 @@ SaveFileClass::SaveFileClass(void)
 }
 
 
-unsigned int SaveFileClass::Checksum(unsigned char const * data, unsigned int length, unsigned int seed)
+std::uint32_t SaveFileClass::Checksum(unsigned char const * data, std::uint32_t length, std::uint32_t seed)
 {
-	static unsigned int table[256];
-	static bool ready = false;
-
-	if (!ready) {
-		for (unsigned int index = 0; index < 256; index++) {
-			unsigned int value = index;
-			for (int bit = 0; bit < 8; bit++) {
-				value = (value & 1) ? (0xEDB88320u ^ (value >> 1)) : (value >> 1);
-			}
-			table[index] = value;
-		}
-		ready = true;
-	}
-
-	unsigned int crc = ~seed;
-	for (unsigned int index = 0; index < length; index++) {
-		crc = table[(crc ^ data[index]) & 0xFF] ^ (crc >> 8);
-	}
-
-	return(~crc);
+	return(CRC::Memory(data, length, seed));
 }
 
 
@@ -239,11 +206,11 @@ SaveFileClass::FieldType const * SaveFileClass::Find(int id, int kind) const
 	for (FieldType const & field : Fields) {
 		if (field.ID == id && field.Kind == kind) return(&field);
 	}
-	return(NULL);
+	return(nullptr);
 }
 
 
-void SaveFileClass::Set(int id, int kind, void const * data, unsigned int length)
+void SaveFileClass::Set(int id, int kind, void const * data, std::size_t length)
 {
 	for (FieldType & field : Fields) {
 		if (field.ID == id && field.Kind == kind) {
@@ -262,15 +229,15 @@ void SaveFileClass::Set(int id, int kind, void const * data, unsigned int length
 
 void SaveFileClass::Set_String(int id, char const * text)
 {
-	if (text == NULL) text = "";
-	Set(id, FIELD_STRING, text, (unsigned int)strlen(text));
+	if (text == nullptr) text = "";
+	Set(id, FIELD_STRING, text, strlen(text));
 }
 
 
 void SaveFileClass::Set_Int(int id, int value)
 {
 	unsigned char bytes[4];
-	Put_U32(bytes, (unsigned int)value);
+	Put_U32(bytes, (std::uint32_t)value);
 	Set(id, FIELD_INT, bytes, sizeof(bytes));
 }
 
@@ -287,18 +254,18 @@ void SaveFileClass::Set_Time(int id, FILETIME const & time)
 // A string that does not fit is truncated to what does; the result is always terminated.
 bool SaveFileClass::Get_String(int id, char * text, int size) const
 {
-	if (text == NULL || size <= 0) return(false);
+	if (text == nullptr || size <= 0) return(false);
 
 	FieldType const * const field = Find(id, FIELD_STRING);
-	if (field == NULL) {
+	if (field == nullptr) {
 		text[0] = '\0';
 		return(false);
 	}
 
-	unsigned int length = (unsigned int)field->Bytes.size();
-	if (length > (unsigned int)(size - 1)) {
+	std::size_t length = field->Bytes.size();
+	if (length > (std::size_t)(size - 1)) {
 		// A cut never splits a UTF-8 sequence, so a shortened description stays text.
-		length = (unsigned int)(size - 1);
+		length = (std::size_t)(size - 1);
 		while (length > 0 && (field->Bytes[length] & 0xC0) == 0x80) length--;
 	}
 	memcpy(text, field->Bytes.data(), length);
@@ -311,9 +278,9 @@ bool SaveFileClass::Get_String(int id, char * text, int size) const
 bool SaveFileClass::Get_Int(int id, int * value) const
 {
 	FieldType const * const field = Find(id, FIELD_INT);
-	if (field == NULL || field->Bytes.size() != 4) return(false);
+	if (field == nullptr || field->Bytes.size() != 4) return(false);
 
-	if (value != NULL) *value = (int)Get_U32(field->Bytes.data());
+	if (value != nullptr) *value = (int)Get_U32(field->Bytes.data());
 	return(true);
 }
 
@@ -321,9 +288,9 @@ bool SaveFileClass::Get_Int(int id, int * value) const
 bool SaveFileClass::Get_Time(int id, FILETIME * time) const
 {
 	FieldType const * const field = Find(id, FIELD_TIME);
-	if (field == NULL || field->Bytes.size() != 8) return(false);
+	if (field == nullptr || field->Bytes.size() != 8) return(false);
 
-	if (time != NULL) {
+	if (time != nullptr) {
 		time->dwLowDateTime = Get_U32(field->Bytes.data());
 		time->dwHighDateTime = Get_U32(field->Bytes.data() + 4);
 	}
@@ -343,27 +310,27 @@ void SaveFileClass::Serialize_Fields(std::vector<unsigned char> & table) const
 
 	for (FieldType const & field : Fields) {
 		unsigned char head[FIELD_HEADER_SIZE];
-		Put_U16(head, (unsigned int)field.ID);
-		Put_U16(head + 2, (unsigned int)field.Kind);
-		Put_U32(head + 4, (unsigned int)field.Bytes.size());
+		Put_U16(head, (std::uint32_t)field.ID);
+		Put_U16(head + 2, (std::uint32_t)field.Kind);
+		Put_U32(head + 4, (std::uint32_t)field.Bytes.size());
 		Append(table, head, sizeof(head));
-		Append(table, field.Bytes.data(), (unsigned int)field.Bytes.size());
+		Append(table, field.Bytes.data(), field.Bytes.size());
 	}
 }
 
 
-SaveFileClass::ResultType SaveFileClass::Parse_Fields(unsigned char const * table, unsigned int length)
+SaveFileClass::ResultType SaveFileClass::Parse_Fields(unsigned char const * table, std::uint32_t length)
 {
 	Fields.clear();
 
-	unsigned int offset = 0;
+	std::uint32_t offset = 0;
 	while (offset < length) {
 		if (length - offset < FIELD_HEADER_SIZE) return(RESULT_CORRUPT);
 
 		FieldType field;
 		field.ID = (int)Get_U16(table + offset);
 		field.Kind = (int)Get_U16(table + offset + 2);
-		unsigned int const bytes = Get_U32(table + offset + 4);
+		std::uint32_t const bytes = Get_U32(table + offset + 4);
 		offset += FIELD_HEADER_SIZE;
 
 		if (bytes > MAX_FIELD_LENGTH || bytes > length - offset) return(RESULT_CORRUPT);
@@ -381,7 +348,7 @@ SaveFileClass::ResultType SaveFileClass::Parse_Fields(unsigned char const * tabl
 // interrupted at any point leaves the previous file untouched.
 SaveFileClass::ResultType SaveFileClass::Write(char const * path) const
 {
-	if (path == NULL) return(RESULT_WRITE_FAILED);
+	if (path == nullptr) return(RESULT_WRITE_FAILED);
 
 	// The reader's limits bind the writer too, so a save this build writes is one it reads,
 	// and one it cannot write leaves the file on disk alone.
@@ -394,58 +361,59 @@ SaveFileClass::ResultType SaveFileClass::Write(char const * path) const
 	Serialize_Fields(table);
 	if (table.size() > MAX_TABLE_LENGTH) return(RESULT_TOO_LARGE);
 
-	std::vector<unsigned char> stored;
-	unsigned int flags = 0;
+	// The compressed block is kept only when it is smaller than the content; otherwise
+	// the content is written where it already sits, rather than copied to be written.
+	std::vector<unsigned char> compressed;
+	unsigned char const * payload = Content.data();
+	std::uint32_t payload_length = (std::uint32_t)Content.size();
+	std::uint32_t flags = 0;
 
 	if (!Content.empty()) {
-		std::vector<unsigned char> work(LZO1X_MEM_COMPRESS);
-		stored.resize(Content.size() + Content.size() / 16 + 64 + 3);
+		std::vector<unsigned char> work;
+		if (!Reserve(work, LZO1X_MEM_COMPRESS)
+		 || !Reserve(compressed, Content.size() + Content.size() / 16 + 64 + 3)) {
+			return(RESULT_NO_MEMORY);
+		}
 
 		lzo_uint packed = 0;
 		int const status = lzo1x_1_compress(Content.data(), (lzo_uint)Content.size(),
-			stored.data(), &packed, work.data());
+			compressed.data(), &packed, work.data());
 
 		if (status == LZO_E_OK && packed < Content.size()) {
-			stored.resize((std::size_t)packed);
+			payload = compressed.data();
+			payload_length = (std::uint32_t)packed;
 			flags |= FLAG_LZO;
-		} else {
-			stored = Content;
 		}
 	}
 
-	std::vector<unsigned char> image(HEADER_SIZE);
-	unsigned char * const header = image.data();
+	unsigned char header[HEADER_SIZE];
 	memcpy(header, Signature, sizeof(Signature));
 	Put_U16(header + 4, FORMAT_VERSION);
 	Put_U16(header + 6, flags);
-	Put_U32(header + 8, (unsigned int)table.size());
-	Put_U32(header + 12, HEADER_SIZE + (unsigned int)table.size());
-	Put_U32(header + 16, (unsigned int)stored.size());
-	Put_U32(header + 20, (unsigned int)Content.size());
-	Put_U32(header + 24, Checksum(stored.data(), (unsigned int)stored.size()));
-	Put_U32(header + 28, Header_CRC(header, table.data(), (unsigned int)table.size()));
-
-	image.insert(image.end(), table.begin(), table.end());
-	image.insert(image.end(), stored.begin(), stored.end());
+	Put_U32(header + 8, (std::uint32_t)table.size());
+	Put_U32(header + 12, HEADER_SIZE + (std::uint32_t)table.size());
+	Put_U32(header + 16, payload_length);
+	Put_U32(header + 20, (std::uint32_t)Content.size());
+	Put_U32(header + 24, Checksum(payload, payload_length));
+	// The header checksum covers everything before itself, so it is filled in last.
+	Put_U32(header + 28, Header_CRC(header, table.data(), (std::uint32_t)table.size()));
 
 	std::string const temporary = std::string(path) + ".tmp";
 
-	std::FILE * const file = std::fopen(temporary.c_str(), "wb");
-	if (file == NULL) return(RESULT_WRITE_FAILED);
+	HANDLE const file = CreateFileA(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (file == INVALID_HANDLE_VALUE) return(RESULT_WRITE_FAILED);
 
-	bool ok = Write_Range(file, image.data(), (unsigned int)image.size());
-	if (ok) ok = (std::fflush(file) == 0);
-	if (std::fclose(file) != 0) ok = false;
+	bool ok = Write_Range(file, header, HEADER_SIZE);
+	if (ok && !table.empty()) ok = Write_Range(file, table.data(), (std::uint32_t)table.size());
+	if (ok && payload_length > 0) ok = Write_Range(file, payload, payload_length);
+	if (ok) ok = (FlushFileBuffers(file) != FALSE);
+	if (!CloseHandle(file)) ok = false;
 
-	if (ok) {
-		std::error_code error;
-		std::filesystem::rename(temporary, path, error);
-		ok = !error;
-	}
+	if (ok) ok = (MoveFileExA(temporary.c_str(), path, MOVEFILE_REPLACE_EXISTING) != FALSE);
 
 	if (!ok) {
-		std::error_code error;
-		std::filesystem::remove(temporary, error);
+		DeleteFileA(temporary.c_str());
 		return(RESULT_WRITE_FAILED);
 	}
 
@@ -458,24 +426,24 @@ SaveFileClass::ResultType SaveFileClass::Read(char const * path)
 	Fields.clear();
 	Content.clear();
 
-	if (path == NULL) return(RESULT_MISSING);
+	if (path == nullptr) return(RESULT_MISSING);
 
-	std::FILE * const file = std::fopen(path, "rb");
-	if (file == NULL) return(RESULT_MISSING);
+	HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (file == INVALID_HANDLE_VALUE) return(RESULT_MISSING);
 
 	// The header is judged before anything the file's size could ask for is allocated.
 	unsigned char head[HEADER_SIZE];
-	unsigned int const got = (unsigned int)std::fread(head, 1, HEADER_SIZE, file);
-	bool const ok = !std::ferror(file);
+	DWORD got = 0;
+	bool const ok = (ReadFile(file, head, HEADER_SIZE, &got, nullptr) != FALSE);
 
 	HeaderType header;
 	ResultType result = ok ? Parse_Header(head, got, header) : RESULT_CORRUPT;
 
 	std::vector<unsigned char> image;
 	if (result == RESULT_OK) {
-		long const length = File_Length(file);
-		unsigned int const size = (unsigned int)length;
-		if (length < 0 || size != header.ContentOffset + header.StoredLength) {
+		DWORD const size = GetFileSize(file, nullptr);
+		if (size == INVALID_FILE_SIZE || size != header.ContentOffset + header.StoredLength) {
 			result = RESULT_CORRUPT;
 		} else if (!Reserve(image, size)) {
 			result = RESULT_NO_MEMORY;
@@ -484,7 +452,7 @@ SaveFileClass::ResultType SaveFileClass::Read(char const * path)
 			if (!Read_Range(file, image.data() + HEADER_SIZE, size - HEADER_SIZE)) result = RESULT_CORRUPT;
 		}
 	}
-	std::fclose(file);
+	CloseHandle(file);
 	if (result != RESULT_OK) return(result);
 
 	if (Header_CRC(image.data(), image.data() + HEADER_SIZE, header.TableLength) != header.HeaderCRC) {
@@ -508,7 +476,7 @@ SaveFileClass::ResultType SaveFileClass::Read(char const * path)
 
 		lzo_uint unpacked = (lzo_uint)Content.size();
 		int const status = lzo1x_decompress_safe(stored, (lzo_uint)header.StoredLength,
-			Content.data(), &unpacked, NULL);
+			Content.data(), &unpacked, nullptr);
 
 		if (status != LZO_E_OK || unpacked != header.ContentLength) {
 			Fields.clear();
@@ -538,23 +506,23 @@ SaveFileClass::ResultType SaveFileClass::Read_Fields(char const * path)
 	Fields.clear();
 	Content.clear();
 
-	if (path == NULL) return(RESULT_MISSING);
+	if (path == nullptr) return(RESULT_MISSING);
 
-	std::FILE * const file = std::fopen(path, "rb");
-	if (file == NULL) return(RESULT_MISSING);
+	HANDLE const file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (file == INVALID_HANDLE_VALUE) return(RESULT_MISSING);
 
 	unsigned char head[HEADER_SIZE];
-	unsigned int const got = (unsigned int)std::fread(head, 1, HEADER_SIZE, file);
-	bool ok = !std::ferror(file);
+	DWORD got = 0;
+	bool ok = (ReadFile(file, head, HEADER_SIZE, &got, nullptr) != FALSE);
 
 	HeaderType header;
 	ResultType result = ok ? Parse_Header(head, got, header) : RESULT_CORRUPT;
 
 	std::vector<unsigned char> table;
 	if (result == RESULT_OK && header.TableLength > 0) {
-		long const length = File_Length(file);
-		unsigned int const size = (unsigned int)length;
-		if (length < 0 || header.TableLength > size - HEADER_SIZE) {
+		DWORD const size = GetFileSize(file, nullptr);
+		if (size == INVALID_FILE_SIZE || header.TableLength > size - HEADER_SIZE) {
 			result = RESULT_CORRUPT;
 		} else if (!Reserve(table, header.TableLength)) {
 			result = RESULT_NO_MEMORY;
@@ -562,10 +530,10 @@ SaveFileClass::ResultType SaveFileClass::Read_Fields(char const * path)
 			if (!Read_Range(file, table.data(), header.TableLength)) result = RESULT_CORRUPT;
 		}
 	}
-	std::fclose(file);
+	CloseHandle(file);
 
 	if (result != RESULT_OK) return(result);
-	if (Header_CRC(head, table.data(), (unsigned int)table.size()) != header.HeaderCRC) return(RESULT_CORRUPT);
+	if (Header_CRC(head, table.data(), (std::uint32_t)table.size()) != header.HeaderCRC) return(RESULT_CORRUPT);
 
-	return(Parse_Fields(table.data(), (unsigned int)table.size()));
+	return(Parse_Fields(table.data(), (std::uint32_t)table.size()));
 }

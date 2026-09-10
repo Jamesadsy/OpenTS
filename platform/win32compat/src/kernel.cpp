@@ -453,6 +453,26 @@ extern "C" void GetSystemTime(LPSYSTEMTIME system)
 }
 
 
+// A file time counts hundred nanosecond ticks from the start of 1601, which is
+// 11644473600 seconds before the epoch the host clock counts from.
+extern "C" void GetSystemTimeAsFileTime(LPFILETIME file)
+{
+	if (file == NULL) {
+		return;
+	}
+
+	timeval now;
+	gettimeofday(&now, NULL);
+
+	unsigned long long const ticks = 116444736000000000ULL
+		+ (unsigned long long)now.tv_sec * 10000000ULL
+		+ (unsigned long long)now.tv_usec * 10ULL;
+
+	file->dwLowDateTime = (DWORD)(ticks & 0xFFFFFFFFULL);
+	file->dwHighDateTime = (DWORD)(ticks >> 32);
+}
+
+
 extern "C" void GetLocalTime(LPSYSTEMTIME system)
 {
 	if (system == NULL) {
@@ -711,6 +731,44 @@ extern "C" DWORD SetFilePointer(HANDLE handle, LONG distance, LONG * distancehig
 }
 
 
+extern "C" DWORD GetFileSize(HANDLE handle, LPDWORD sizehigh)
+{
+	if (handle == NULL || handle == INVALID_HANDLE_VALUE) {
+		return(INVALID_FILE_SIZE);
+	}
+
+	std::FILE * const file = (std::FILE *)handle;
+	long const here = std::ftell(file);
+
+	if (here < 0 || std::fseek(file, 0, SEEK_END) != 0) {
+		return(INVALID_FILE_SIZE);
+	}
+
+	long const end = std::ftell(file);
+	std::fseek(file, here, SEEK_SET);
+
+	if (end < 0) {
+		return(INVALID_FILE_SIZE);
+	}
+
+	if (sizehigh != NULL) {
+		*sizehigh = 0;
+	}
+
+	return((DWORD)end);
+}
+
+
+extern "C" BOOL FlushFileBuffers(HANDLE handle)
+{
+	if (handle == NULL || handle == INVALID_HANDLE_VALUE) {
+		return(FALSE);
+	}
+
+	return(std::fflush((std::FILE *)handle) == 0 ? TRUE : FALSE);
+}
+
+
 extern "C" BOOL CloseHandle(HANDLE handle)
 {
 	if (handle == NULL || handle == INVALID_HANDLE_VALUE) {
@@ -725,6 +783,20 @@ extern "C" BOOL CloseHandle(HANDLE handle)
 extern "C" BOOL DeleteFileA(LPCSTR name)
 {
 	return(name != NULL && std::remove(name) == 0 ? TRUE : FALSE);
+}
+
+
+// Only the replacing form is supplied, since a rename over an existing file is what the
+// standard library's rename already does and is the one the engine asks for.
+extern "C" BOOL MoveFileExA(LPCSTR from, LPCSTR to, DWORD flags)
+{
+	if (from == NULL || to == NULL || (flags & MOVEFILE_REPLACE_EXISTING) == 0) {
+		return(FALSE);
+	}
+
+	std::error_code error;
+	std::filesystem::rename(from, to, error);
+	return(error ? FALSE : TRUE);
 }
 
 

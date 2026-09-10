@@ -239,3 +239,31 @@ add_library(imgui STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/imgui/imgui_widgets.cpp"
 )
 target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+
+#
+# ---------------------------------------------------------
+# Solution layout
+# ---------------------------------------------------------
+#
+
+# Files a directory's targets, and those of every directory below it, under one solution
+# folder. A target that already names a folder keeps it as a subfolder of that one, so the
+# grouping bgfx gives its own targets survives.
+function(opents_set_solution_folder directory folder)
+    get_property(targets DIRECTORY "${directory}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(target IN LISTS targets)
+        get_target_property(current ${target} FOLDER)
+        if(current)
+            set_target_properties(${target} PROPERTIES FOLDER "${folder}/${current}")
+        else()
+            set_target_properties(${target} PROPERTIES FOLDER "${folder}")
+        endif()
+    endforeach()
+
+    get_property(subdirectories DIRECTORY "${directory}" PROPERTY SUBDIRECTORIES)
+    foreach(subdirectory IN LISTS subdirectories)
+        opents_set_solution_folder("${subdirectory}" "${folder}")
+    endforeach()
+endfunction()
+
+opents_set_solution_folder("${CMAKE_CURRENT_SOURCE_DIR}" "Thirdparty")

@@ -20,8 +20,6 @@
 #include "visual.hh"
 #include "zgrad.hh"
 
-#include <memory>
-
 
 
 /*
@@ -237,12 +235,13 @@ struct ILocomotion
 	virtual void Stop_Movement_Animation(void) = 0;
 
 	/*
-	 * Locks the locomotor from being deleted
+	 * Locks the locomotor against being handed back, so that one piggybacking on it keeps
+	 * control of the object.
 	 */
 	virtual void Lock(void) = 0;
 
 	/*
-	 * Unlocks the locomotor from being deleted
+	 * Unlocks the locomotor, so that a piggyback riding on it may end.
 	 */
 	virtual void Unlock(void) = 0;
 
@@ -261,4 +260,3 @@ struct ILocomotion
 	 */
 	virtual int Get_Speed_Accum(void) = 0;
 };
-

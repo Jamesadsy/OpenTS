@@ -14,6 +14,7 @@
 #endif
 #include <windows.h>
 
+#include <cstdint>
 #include <vector>
 
 // The file a saved game is kept in: a fixed header, a table of listing fields, and one
@@ -52,7 +53,7 @@ class SaveFileClass
 		ResultType Read_Fields(char const * path);
 
 		static char const * Result_Text(ResultType result);
-		static unsigned int Checksum(unsigned char const * data, unsigned int length, unsigned int seed = 0);
+		static std::uint32_t Checksum(unsigned char const * data, std::uint32_t length, std::uint32_t seed = 0);
 
 		std::vector<unsigned char> Content;
 
@@ -70,9 +71,9 @@ class SaveFileClass
 		};
 
 		FieldType const * Find(int id, int kind) const;
-		void Set(int id, int kind, void const * data, unsigned int length);
+		void Set(int id, int kind, void const * data, std::size_t length);
 		void Serialize_Fields(std::vector<unsigned char> & table) const;
-		ResultType Parse_Fields(unsigned char const * table, unsigned int length);
+		ResultType Parse_Fields(unsigned char const * table, std::uint32_t length);
 
 		std::vector<FieldType> Fields;
 };

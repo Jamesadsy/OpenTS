@@ -112,10 +112,10 @@ typedef struct _VQAHeader {
 	 */
 	std::uint32_t AudioPreload;
 } VQAHeader;
+static_assert(sizeof(VQAHeader) == 42, "the VQHD chunk is 42 bytes on disk");
 
 // The VQHD chunk is 42 bytes on disk. MaxCBSize and AudioPreload were written as a 32-bit
 // long by the original 32-bit build, so they stay 32 bits wide here.
-static_assert(sizeof(VQAHeader) == 42, "VQHD chunk layout changed");
 static_assert(offsetof(VQAHeader, MaxCBSize) == 34, "VQHD chunk layout changed");
 static_assert(offsetof(VQAHeader, AudioPreload) == 38, "VQHD chunk layout changed");
 

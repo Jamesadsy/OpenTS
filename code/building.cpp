@@ -123,6 +123,7 @@
 #include "bullettype.h"
 #include "ccrand.h"
 #include "cell.h"
+#include "classids.h"
 #include "combat.h"
 #include "conquer.h"
 #include "dbgprint.h"
@@ -137,7 +138,6 @@
 #include "house.h"
 #include "houstype.h"
 #include "iloco.h"
-#include "classids.h"
 #include "incdec.h"
 #include "infantry.h"
 #include "infatype.h"
@@ -6261,7 +6261,7 @@ int BuildingClass::Do_MISSION_UNLOAD(void)
 							walk->Link_To_Object(unit);
 							piggy = Piggyback_Of(walk.get());
 							if (piggy != NULL) {
-								piggy->Begin_Piggyback(std::move(unit->Locomotion));
+								piggy->Begin_Piggyback(unit->Locomotion);
 								unit->Locomotion = std::move(walk);
 								unit->Locomotion->Force_Track(DriveLocomotionClass::OUT_OF_WEAPON_FACTORY, coord);
 							} else {
