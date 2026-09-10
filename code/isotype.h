@@ -113,7 +113,6 @@ struct IsoTileRecord
 static_assert(sizeof(IsoTileRecord) == 52, "a TMP tile record is 52 bytes on disk");
 #pragma pack()
 
-static_assert(sizeof(IsoTileRecord) == 52, "Isometric tile record layout changed");
 static_assert(offsetof(IsoTileRecord, ExtraZOffset) == 16, "Isometric tile record layout changed");
 static_assert(offsetof(IsoTileRecord, Height) == 40, "Isometric tile record layout changed");
 static_assert(offsetof(IsoTileRecord, LowColor) == 43, "Isometric tile record layout changed");
@@ -204,8 +203,6 @@ class IsoTileSet
 };
 static_assert(sizeof(IsoTileSet) == 20, "the TMP header is 16 bytes on disk, followed by the four-byte tile offsets");
 #pragma pack()
-
-static_assert(sizeof(IsoTileSet) == 20, "Isometric tile set header layout changed");
 
 
 /****************************************************************************

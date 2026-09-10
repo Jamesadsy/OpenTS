@@ -54,8 +54,6 @@ struct RGBStruct
 static_assert(sizeof(RGBStruct) == 3, "a palette entry is 3 bytes on disk");
 #pragma pack()
 
-static_assert(sizeof(RGBStruct) == 3, "Palette entry layout changed");
-
 
 /*
 **	Each color entry is represented by this class. It holds the values for the color

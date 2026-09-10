@@ -85,7 +85,6 @@ struct CompHeaderType {
 static_assert(sizeof(CompHeaderType) == 8, "the compressed file header is 8 bytes on disk");
 #pragma pack(pop)
 
-static_assert(sizeof(CompHeaderType) == 8, "Compressed block header layout changed");
 static_assert(offsetof(CompHeaderType, Size) == 2, "Compressed block header layout changed");
 static_assert(offsetof(CompHeaderType, Skip) == 6, "Compressed block header layout changed");
 

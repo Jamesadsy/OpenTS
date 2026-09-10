@@ -42,9 +42,7 @@ struct AUDChunkHeaderType {
 static_assert(sizeof(AUDChunkHeaderType) == 8, "an AUD chunk header is 8 bytes on disk");
 #pragma pack(pop)
 
-static_assert(sizeof(AUDHeaderType) == 12, "AUD file header layout changed");
 static_assert(offsetof(AUDHeaderType, Flags) == 10, "AUD file header layout changed");
-static_assert(sizeof(AUDChunkHeaderType) == 8, "AUD chunk header layout changed");
 static_assert(offsetof(AUDChunkHeaderType, Magic) == 4, "AUD chunk header layout changed");
 
 

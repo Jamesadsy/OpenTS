@@ -311,7 +311,6 @@ struct VQASN2J {
 static_assert(sizeof(VQASN2J) == 12, "the SN2J chunk is 12 bytes on disk");
 #pragma pack(pop)
 
-static_assert(sizeof(VQASN2J) == 12, "SN2J chunk layout changed");
 static_assert(offsetof(VQASN2J, predicted2) == 8, "SN2J chunk layout changed");
 
 
@@ -3538,8 +3537,6 @@ long Load_SN2J(VQAHandleP *vqap, unsigned long iffsize)
 	} data;
 	static_assert(sizeof(SNJ2Struct) == 12, "the SN2J chunk is 12 bytes on disk");
 	#pragma pack(pop)
-
-	static_assert(sizeof(data) == 12, "SN2J chunk layout changed");
 
 	#if(VQAVOC_ON && VQAAUDIO_ON)
 	if (((config->OptionFlags & VQAOPTF_AUDIO) == 0)

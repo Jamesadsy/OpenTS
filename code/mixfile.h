@@ -88,7 +88,6 @@ class MixFileClass : public Node<MixFileClass *>
 		static_assert(sizeof(FileHeader) == 6, "the MIX header is 6 bytes on disk");
 		#pragma pack()
 
-		static_assert(sizeof(FileHeader) == 6, "Mixfile header layout changed");
 		static_assert(offsetof(FileHeader, size) == 2, "Mixfile header layout changed");
 
 		/*

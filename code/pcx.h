@@ -70,8 +70,6 @@ struct PCX_HEADER
 static_assert(sizeof(PCX_HEADER) == 128, "the PCX header is 128 bytes on disk");
 #pragma pack(pop)
 
-static_assert(sizeof(RGB) == 3, "PCX palette entry layout changed");
-static_assert(sizeof(PCX_HEADER) == 128, "PCX file header layout changed");
 static_assert(offsetof(PCX_HEADER, x) == 4, "PCX file header layout changed");
 static_assert(offsetof(PCX_HEADER, ega_palette) == 16, "PCX file header layout changed");
 static_assert(offsetof(PCX_HEADER, byte_per_line) == 66, "PCX file header layout changed");

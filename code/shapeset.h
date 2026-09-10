@@ -173,7 +173,6 @@ class ShapeSet
 
 		// A shape file is cast straight onto this class, so the frame records that follow the
 		// header keep their file widths and offsets.
-		static_assert(sizeof(ShapeRecord) == 24, "Shape frame record layout changed");
 		static_assert(offsetof(ShapeRecord, Width) == 4, "Shape frame record layout changed");
 		static_assert(offsetof(ShapeRecord, Color) == 12, "Shape frame record layout changed");
 		static_assert(offsetof(ShapeRecord, Data) == 20, "Shape frame record layout changed");
@@ -197,9 +196,6 @@ class ShapeSet
 };
 static_assert(sizeof(ShapeSet) == 8, "the SHP header is 8 bytes on disk");
 #pragma pack(pop)
-
-// A shape file is cast straight onto this header, so its four fields keep their file widths.
-static_assert(sizeof(ShapeSet) == 8, "Shape file header layout changed");
 
 
 /***********************************************************************************************
