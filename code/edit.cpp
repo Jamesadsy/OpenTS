@@ -39,6 +39,7 @@
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #include "always.h"
+#include "winstub.h"
 
 #include "edit.h"
 
@@ -486,4 +487,16 @@ void EditClass::Set_Focus(void)
 		Length = strlen(String);
 	}
 	BASECLASS::Set_Focus();
+
+	// A host with no physical keyboard shows one only while text is being asked for.
+	Win_Text_Input_Begin();
+}
+
+
+void EditClass::Clear_Focus(void)
+{
+	if (Has_Focus()) {
+		Win_Text_Input_End();
+	}
+	BASECLASS::Clear_Focus();
 }

@@ -48,6 +48,7 @@
  *   MessageListClass::Reset -- Reset so no messages are visible.          *
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #include "always.h"
+#include "winstub.h"
 
 #include "msglist.h"
 
@@ -871,6 +872,10 @@ TextLabelClass * MessageListClass::Add_Edit(int color,
 	if (EditLabel) {
 		IsEdit = 1;
 		EditLabel->Set_Focus();
+
+		// The chat field takes keys through this list rather than through an edit gadget, so
+		// it asks the host for a keyboard itself.
+		Win_Text_Input_Begin();
 	}
 	else {
 		IsEdit = 0;
@@ -913,6 +918,7 @@ void MessageListClass::Remove_Edit(void)
 	//------------------------------------------------------------------------
 	if (IsEdit) {
 		IsEdit = 0;
+		Win_Text_Input_End();
 		delete EditLabel;
 
 		//.....................................................................
