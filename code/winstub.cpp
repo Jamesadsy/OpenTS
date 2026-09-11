@@ -378,6 +378,8 @@ extern "C" void * Win32Compat_Native_Window_Handle(HWND window);
 extern "C" int Win32Compat_Window_Refresh_Rate(HWND window);
 extern "C" BOOL Win32Compat_Set_Window_Fullscreen(HWND window, BOOL fullscreen);
 extern "C" BOOL Win32Compat_Preferred_Frame_Size(int * width, int * height);
+extern "C" void Win32Compat_Text_Input_Begin(HWND window);
+extern "C" void Win32Compat_Text_Input_End(HWND window);
 extern "C" BOOL Win32Compat_Log_Directory(char * buffer, int size);
 extern "C" BOOL Win32Compat_Shipped_Data_Directory(char * buffer, int size);
 extern "C" BOOL Win32Compat_Window_Safe_Area(HWND window, LPRECT rect);
@@ -517,6 +519,27 @@ bool Win_Pointer_Can_Warp(void)
 /// The shape of the pointer is where the game says what a click would do, so a display that
 /// draws none has to be given that somewhere else. Windows and the desktop hosts draw one.
 /// </summary>
+/// <summary>
+/// Tells the host that the game is about to read typed text, and that it is finished.
+/// A host with no physical keyboard shows one only while it is asked for; where a keyboard
+/// is always present nothing changes.
+/// </summary>
+void Win_Text_Input_Begin(void)
+{
+#ifndef _WIN32
+	Win32Compat_Text_Input_Begin(MainWindow);
+#endif
+}
+
+
+void Win_Text_Input_End(void)
+{
+#ifndef _WIN32
+	Win32Compat_Text_Input_End(MainWindow);
+#endif
+}
+
+
 bool Win_Pointer_Is_Drawn(void)
 {
 #ifdef _WIN32

@@ -817,6 +817,29 @@ extern "C" int MessageBoxIndirect(MSGBOXPARAMS const * params)
 }
 
 
+// A host with no physical keyboard shows one only while something is asking for text, so
+// the two calls bracket the moments the game spends reading a name or a message. They are
+// harmless where a keyboard is always present: SDL simply reports the state it already has.
+extern "C" void Win32Compat_Text_Input_Begin(HWND handle)
+{
+	Win32Window * window = Win32_Lookup(handle);
+
+	if (window != NULL && window->Handle != NULL) {
+		SDL_StartTextInput(window->Handle);
+	}
+}
+
+
+extern "C" void Win32Compat_Text_Input_End(HWND handle)
+{
+	Win32Window * window = Win32_Lookup(handle);
+
+	if (window != NULL && window->Handle != NULL) {
+		SDL_StopTextInput(window->Handle);
+	}
+}
+
+
 extern "C" void * Win32Compat_Native_Window_Handle(HWND handle)
 {
 	Win32Window * window = Win32_Lookup(handle);
