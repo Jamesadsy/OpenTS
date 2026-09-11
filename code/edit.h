@@ -53,6 +53,7 @@ class EditClass : public ControlClass
 		virtual ~EditClass(void) override;
 
 		virtual void Set_Focus(void) override;
+		virtual void Clear_Focus(void) override;
 		virtual int  Draw_Me(int forced) override;
 		virtual void Set_Text(char * text, int max_len);
 		virtual char * Get_Text(void) {return(String);};

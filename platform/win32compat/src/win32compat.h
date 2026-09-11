@@ -101,6 +101,8 @@ extern "C" int Win32Compat_Window_Refresh_Rate(HWND window);
 // nothing of the host's own covers. Both are in physical pixels; a host with no opinion
 // answers FALSE and leaves the values alone.
 extern "C" BOOL Win32Compat_Preferred_Frame_Size(int * width, int * height);
+extern "C" void Win32Compat_Text_Input_Begin(HWND window);
+extern "C" void Win32Compat_Text_Input_End(HWND window);
 extern "C" BOOL Win32Compat_Window_Safe_Area(HWND window, LPRECT rect);
 
 // Where this host keeps the files the program writes about itself, when it does not keep

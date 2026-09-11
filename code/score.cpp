@@ -898,6 +898,8 @@ void ScoreClass::Input_Name(char str[], int xpos, int ypos)
 	int key = 0;
 	int index = 0;
 
+	Win_Text_Input_Begin();
+
 	do {
 
 		Timing();
@@ -972,6 +974,8 @@ void ScoreClass::Input_Name(char str[], int xpos, int ypos)
 		Call_Back_Delay(1);
 
 	} while (key != KN_RETURN);
+
+	Win_Text_Input_End();
 }
 
 

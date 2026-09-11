@@ -38,6 +38,8 @@
 
 #include <RmlUi/Core.h>
 
+#include "winstub.h"
+
 #include <imgui.h>
 
 #include <windows.h>
@@ -822,6 +824,38 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 // it attaches to is the shell's.
 //---------------------------------------------------------------------------------------
 
+// A host with no physical keyboard shows one only while something is asking for text. RmlUi
+// raises focus and blur on the element itself, so a document listens in the capture phase and
+// asks the host as the focus moves in and out of a text field.
+namespace {
+
+class TextFieldFocusListener final : public Rml::EventListener
+{
+	public:
+		void ProcessEvent(Rml::Event & event) override
+		{
+			Rml::Element * const element = event.GetTargetElement();
+
+			if (element == nullptr || element->GetTagName() != "input") {
+				return;
+			}
+			if (element->GetAttribute<Rml::String>("type", "text") != "text") {
+				return;
+			}
+
+			if (event.GetId() == Rml::EventId::Focus) {
+				Win_Text_Input_Begin();
+			} else {
+				Win_Text_Input_End();
+			}
+		}
+};
+
+TextFieldFocusListener _TextFieldFocus;
+
+}
+
+
 UIRmlViewClass::UIRmlViewClass(UIPresenterClass & presenter, char const * document) :
 	Presenter(presenter),
 	Document(document != nullptr ? document : ""),
@@ -868,6 +902,9 @@ bool UIRmlViewClass::Prepare(bool modal)
 		DebugString("[UI] The document %s could not be loaded.\n", Document.c_str());
 		return(false);
 	}
+
+	Element->AddEventListener(Rml::EventId::Focus, &_TextFieldFocus, true);
+	Element->AddEventListener(Rml::EventId::Blur, &_TextFieldFocus, true);
 
 	Element->Show(modal ? Rml::ModalFlag::Modal : Rml::ModalFlag::None);
 
