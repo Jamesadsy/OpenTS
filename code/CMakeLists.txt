@@ -200,6 +200,10 @@ target_include_directories(OpenTS PRIVATE
 # gets them from the compatibility layer, which carries the headers as well as the code.
 if(NOT WIN32)
     target_link_libraries(OpenTS PRIVATE win32compat)
+
+    # Windows answers code page questions from the kernel; everywhere else that service is
+    # libiconv, which Apple ships as a separate library rather than inside libc.
+    target_link_libraries(OpenTS PRIVATE iconv)
 endif()
 
 # The generated build stamp has to exist before anything compiles.

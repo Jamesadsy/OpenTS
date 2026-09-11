@@ -10,6 +10,10 @@
 
 #include "utf8.h"
 
+#ifndef _WIN32
+#include <iconv.h>
+#endif
+
 #include <cstring>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -118,11 +122,29 @@ int Best_Fit_Index(unsigned page, short * cache, char32_t code)
 #ifdef _WIN32
 		int written = WideCharToMultiByte(page, 0, &wide, 1, &narrow, 1, NULL, &defaulted);
 #else
-		// No host code page service outside Windows, so nothing above ASCII maps and the
-		// caller falls back to its own substitute glyph.
-		(void)page;
+		// libiconv carries the same code page tables Windows answers from, and refuses a
+		// character the page has no exact byte for rather than substituting a near miss,
+		// which is the distinction the defaulted flag draws on Windows.
 		(void)wide;
 		int written = 0;
+		char const * const pagename = (page == 1252) ? "CP1252" : (page == 437) ? "CP437" : NULL;
+
+		if (pagename != NULL) {
+			iconv_t const converter = iconv_open(pagename, "UTF-32LE");
+
+			if (converter != (iconv_t)-1) {
+				char32_t source = code;
+				char * inbuf = (char *)&source;
+				size_t inleft = sizeof(source);
+				char * outbuf = &narrow;
+				size_t outleft = 1;
+
+				if (iconv(converter, &inbuf, &inleft, &outbuf, &outleft) != (size_t)-1 && outleft == 0) {
+					written = 1;
+				}
+				iconv_close(converter);
+			}
+		}
 #endif
 		unsigned char byte = (unsigned char)narrow;
 		slot = (written == 1 && !defaulted && byte >= 0x20 && byte != 0x7F) ? (short)byte : (short)-1;
