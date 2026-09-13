@@ -52,8 +52,10 @@ endforeach()
 # contract linkable on other hosts without compiling its Windows UI.
 if(WIN32)
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/desyncdlg_stub.cpp")
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/languageprovider_apple.cpp")
 else()
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/desyncdlg.cpp")
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/languageprovider_windows.cpp")
 endif()
 
 #
@@ -70,6 +72,9 @@ else()
     add_executable(OpenTS ${OPENTS_SRC})
 endif()
 target_compile_features(OpenTS PRIVATE cxx_std_20)
+if(APPLE)
+    add_dependencies(OpenTS OpenTSLanguageProviderData)
+endif()
 
 #
 # ---------------------------------------------------------
