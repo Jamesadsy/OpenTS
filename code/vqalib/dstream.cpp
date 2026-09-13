@@ -45,9 +45,21 @@
 #include	"vqaplayp.h"
 #include	<stdio.h>
 #include	<fcntl.h>
+#if defined(_WIN32)
 #include	<io.h>
+#else
+#include	<sys/stat.h>
+#include	<unistd.h>
+#endif
 #include	<string.h>
 
+#if !defined(_WIN32)
+static long VQA_File_Length(int const file_descriptor)
+{
+	struct stat status = {};
+	return fstat(file_descriptor, &status) == 0 ? static_cast<long>(status.st_size) : -1;
+}
+#endif
 
 intptr_t __cdecl Disk_VQA_Stream_Handler(VQAHandle *vqa, long action, void *buffer, long nbytes)
 {
@@ -62,7 +74,11 @@ intptr_t __cdecl Disk_VQA_Stream_Handler(VQAHandle *vqa, long action, void *buff
 
 		/* VQACMD_OPEN asks that you open the file for access. */
 		case VQACMD_OPEN:
-			error = open((char *)buffer, (O_RDONLY|O_BINARY));
+			error = open((char *)buffer, O_RDONLY
+#if defined(_WIN32)
+				| O_BINARY
+#endif
+			);
 
 			if (error != -1) {
 				((VQAHandleP*)vqa)->Config.StreamFileHandle = error;
@@ -119,7 +135,11 @@ intptr_t __cdecl Disk_VQA_Stream_Handler(VQAHandle *vqa, long action, void *buff
 			break;
 
 		case VQACMD_SIZE:
+		#if defined(_WIN32)
 			*((unsigned int *)buffer) = filelength(fh);
+		#else
+			*((unsigned int *)buffer) = VQA_File_Length(fh);
+		#endif
 			error = 0;
 			break;
 
