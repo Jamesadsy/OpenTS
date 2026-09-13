@@ -71,6 +71,7 @@ set(OPENTS_GAME_DIR "${CMAKE_SOURCE_DIR}/Run" CACHE PATH "Tiberian Sun game data
 set(OPENTS_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 set(OPENTS_VERSION_HEADER "${OPENTS_GENERATED_DIR}/opents_version.h")
 set(OPENTS_STAMP_HEADER "${OPENTS_GENERATED_DIR}/opents_build.h")
+set(OPENTS_LANGUAGE_PROVIDER_HEADER "${OPENTS_GENERATED_DIR}/language_provider_generated.hh")
 file(MAKE_DIRECTORY "${OPENTS_GENERATED_DIR}")
 
 set(OPENTS_STAMP_ARGS
@@ -94,9 +95,29 @@ add_custom_target(OpenTSBuildStamp ALL
     VERBATIM
 )
 
+# The native provider consumes the same resource script as Language.dll.  Keeping the
+# generated table in the build directory prevents a second hand-maintained string list.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_custom_command(
+    OUTPUT "${OPENTS_LANGUAGE_PROVIDER_HEADER}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/code/language/generate_language_provider.py"
+        --resource "${CMAKE_SOURCE_DIR}/code/language/language.rc"
+        --identifiers "${CMAKE_SOURCE_DIR}/code/language/language.h"
+        --output "${OPENTS_LANGUAGE_PROVIDER_HEADER}"
+    DEPENDS
+        "${CMAKE_SOURCE_DIR}/code/language/generate_language_provider.py"
+        "${CMAKE_SOURCE_DIR}/code/language/language.rc"
+        "${CMAKE_SOURCE_DIR}/code/language/language.h"
+    COMMENT "Generating native language provider data"
+    VERBATIM
+)
+add_custom_target(OpenTSLanguageProviderData DEPENDS "${OPENTS_LANGUAGE_PROVIDER_HEADER}")
+
 add_subdirectory(thirdparty)
 add_subdirectory(code)
-add_subdirectory(code/language)
+if(WIN32)
+    add_subdirectory(code/language)
+endif()
 
 if(OPENTS_BUILD_TESTS)
     enable_testing()
