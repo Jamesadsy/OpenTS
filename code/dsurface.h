@@ -32,8 +32,14 @@
 #pragma once
 
 #include "palette.h"
-#include "win.h"
 #include "xsurface.h"
+
+#include <vector>
+
+#ifdef _WIN32
+class DSurfaceWindowsGDIBackend;
+class DSurfaceWindowsGDIAdapter;
+#endif
 
 
 enum DSurfaceColorMode {
@@ -45,9 +51,10 @@ enum DSurfaceColorMode {
 };
 
 
-// A concrete surface whose pixels are a GDI device independent bitmap in system memory.
-// The bitmap is permanently selected into a memory device context, so the surface can be
-// drawn to either as raw 16 bit pixels through Lock or with GDI through GetDC.
+// A concrete, CPU-addressable RGB565 surface.  Its portable contract is the pixel buffer,
+// dimensions, stride, lock/unlock and software drawing operations below.  A Windows build may
+// attach a private DIB/HDC accelerator, but no native drawing handle is part of this type's
+// cross-platform API.
 class DSurface : public XSurface
 {
 		typedef XSurface BASECLASS;
@@ -59,12 +66,6 @@ class DSurface : public XSurface
 		**	Constructs a working surface (not visible).
 		*/
 		DSurface(int width, int height);
-
-		/*
-		**	Get/Release a windows device context for the surface pixels.
-		*/
-		HDC GetDC(void);
-		int ReleaseDC(HDC hdc);
 
 		/*
 		**	Create a surface object that represents the currently visible screen.
@@ -83,6 +84,7 @@ class DSurface : public XSurface
 		*/
 		virtual bool Fill_Rect(Rect const & rect, int color) override;
 		virtual bool Fill_Rect(Rect const & cliprect, Rect const & fillrect, int color) override;
+		virtual bool Fill(int color) override;
 		virtual bool Fill_Rect_Trans(Rect const & xcliprect, RGBClass const & color, unsigned int opacity) override;
 
 		virtual bool Draw_Depth_Shaded_Line(Rect const & cliprect, Point2D const & startpoint, Point2D const & endpoint, unsigned color, int start_depth, int end_depth, bool write_depth = false) override;
@@ -104,19 +106,13 @@ class DSurface : public XSurface
 		 * The pixels, reachable without the lock bookkeeping. The presenter reads the
 		 * frame this way, since a locked surface refuses to be blitted from.
 		 */
-		void * Get_Buffer(void) const {return(GDIBuffer);}
+		void * Get_Buffer(void) const {return(PixelBuffer);}
 
 		/*
 		**	Queries information about the surface.
 		*/
 		virtual int Bytes_Per_Pixel(void) const override;
 		virtual int Stride(void) const override;
-
-		/*
-		 * This surface owns a device context, so GetDC yields one that draws on these
-		 * same pixels.
-		 */
-		virtual bool Is_GDI_Backed(void) const override {return(true);}
 
 		virtual bool Can_Blit(void) const;
 
@@ -157,28 +153,22 @@ class DSurface : public XSurface
 		*/
 		mutable int BytesPerPixel;
 
-		/*
-		**	If this surface object represents the one that is visible and associated
-		**	with the system GDI, then this flag will be true.
-		*/
+		// Set for the frame consumed by Video_Present.  Any completed mutation of this
+		// surface marks that frame dirty, independently of the host presentation API.
 		bool IsPrimary;
 
-		/*
-		 * The bitmap holding the pixels, the context it is selected into, and the object
-		 * that context held beforehand. GDI will not free a bitmap that is still
-		 * selected, so the original has to go back before this one can be destroyed.
-		 */
-		HBITMAP GDIBitmap;
-		mutable HDC GDIDC;
-		HGDIOBJ GDIOldBitmap;
-
-		/*
-		 * The pixels themselves, owned by the bitmap, and the bytes from one row of them
-		 * to the next. GDI rounds that up to a multiple of four, so it is not always the
-		 * width times the pixel size.
-		 */
-		void * GDIBuffer;
+		// Apple and other non-Windows hosts own ordinary CPU memory here.  Windows can
+		// leave it empty while its private backend exposes the DIB's CPU pixels through
+		// PixelBuffer.  RGB565 rows are naturally four-byte aligned (two bytes/pixel).
+		std::vector<unsigned char> PixelStorage;
+		void * PixelBuffer;
 		int Pitch;
+
+#ifdef _WIN32
+		// Deliberately opaque to the portable surface implementation and absent on Apple.
+		DSurfaceWindowsGDIBackend * WindowsGDIBackend;
+		friend class DSurfaceWindowsGDIAdapter;
+#endif
 
 	public:
 		/*

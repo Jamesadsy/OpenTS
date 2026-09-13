@@ -24,6 +24,7 @@
 #include "dict.h"
 #include "audio/audioengine.h"
 #include "dsurface.h"
+#include "dsurface_windows_gdi.h"
 #include "globals.h"
 #include "goptions.h"
 #include "hsv.h"
@@ -4951,7 +4952,7 @@ LRESULT CALLBACK GroupBoxCtrlProc(HWND window, UINT message, WPARAM wparam, LPAR
 				AlternateSurface->Unlock();
 			}
 
-			HDC hdc = ((DSurface *)AlternateSurface)->GetDC();
+			HDC hdc = DSurfaceWindowsGDIAdapter::Acquire(*(DSurface *)AlternateSurface);
 			SelectObject(hdc, ODFontPtr);
 			SetTextColor(hdc, ODColorText);
 			SetBkMode(hdc, TRANSPARENT);
@@ -4968,7 +4969,7 @@ LRESULT CALLBACK GroupBoxCtrlProc(HWND window, UINT message, WPARAM wparam, LPAR
 			int y = rect.top + text_size.cy / 2;
 			TextOut(hdc, rect.left + 10, rect.top, text, strlen(text));
 
-			((DSurface *)AlternateSurface)->ReleaseDC(hdc);
+			DSurfaceWindowsGDIAdapter::Release(*(DSurface *)AlternateSurface, hdc);
 
 			while (locks > 0) {
 				((DSurface *)AlternateSurface)->Lock();
@@ -5698,7 +5699,7 @@ int ODDrawTextBG(Surface & surface, LPCSTR string, LPRECT rect, HGDIOBJ font, CO
 		surface.Unlock();
 	}
 
-	HDC hdc = ((DSurface &)surface).GetDC();
+	HDC hdc = DSurfaceWindowsGDIAdapter::Acquire((DSurface &)surface);
 
 	SelectObject(hdc, font);
 	SetTextColor(hdc, color);
@@ -5708,7 +5709,7 @@ int ODDrawTextBG(Surface & surface, LPCSTR string, LPRECT rect, HGDIOBJ font, CO
 	GetTextExtentPoint32(hdc, string, strlen(string), &char_size);
 	DrawText(hdc, string, strlen(string), rect, format);
 
-	((DSurface &)surface).ReleaseDC(hdc);
+	DSurfaceWindowsGDIAdapter::Release((DSurface &)surface, hdc);
 
 	while (locks > 0) {
 		((DSurface &)surface).Lock();
@@ -6164,7 +6165,7 @@ int OD_Draw_Text(COLORREF color, HFONT font, Rect const & rect, const char * tex
 
 	SIZE text_size;
 
-	HDC hDC = destsurf->GetDC();
+	HDC hDC = DSurfaceWindowsGDIAdapter::Acquire(*destsurf);
 	if (hDC) {
 
 		if (font) {
@@ -6196,7 +6197,7 @@ int OD_Draw_Text(COLORREF color, HFONT font, Rect const & rect, const char * tex
 		}
 
 		TextOut(hDC, x_offset, y_offset, text, len);
-		destsurf->ReleaseDC(hDC);
+		DSurfaceWindowsGDIAdapter::Release(*destsurf, hDC);
 	} else {
 		text_size.cx = 0;
 	}
