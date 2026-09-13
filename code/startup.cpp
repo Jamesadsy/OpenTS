@@ -175,6 +175,12 @@ extern	HINSTANCE LanguageResources;
 HANDLE AppMutex;
 HANDLE AutoPlayMutex;
 
+#ifdef _WIN32
+// Scheduler policy is deliberately host-local. The common clock is steady_clock,
+// so this affects Sleep granularity only and never supplies an engine timestamp.
+static bool TimerResolutionRaised = false;
+#endif
+
 //WinTimerClass * WinTimer;
 
 /// <summary>
@@ -486,6 +492,10 @@ static int OpenTS_Windows_Run(int argc, char ** argv, HINSTANCE instance, int co
 
 	atexit(Prog_End);
 
+#ifdef _WIN32
+	TimerResolutionRaised = timeBeginPeriod(1) == TIMERR_NOERROR;
+#endif
+
 	if (!Init_Language_Resources(true)) {
 		return(EXIT_SUCCESS);
 	}
@@ -700,6 +710,13 @@ static int OpenTS_Windows_Run(int argc, char ** argv, HINSTANCE instance, int co
 void __cdecl Prog_End(void)
 {
 	int i;
+
+#ifdef _WIN32
+	if (TimerResolutionRaised) {
+		timeEndPeriod(1);
+		TimerResolutionRaised = false;
+	}
+#endif
 
 	GameActive = false;
 

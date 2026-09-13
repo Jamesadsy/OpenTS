@@ -33,7 +33,7 @@
 
 #include "stimer.h"
 
-#include "win.h"
+#include "monotonic.h"
 
 #ifdef _MSC_VER
 #pragma warning (push,3)
@@ -54,7 +54,7 @@
 /// <returns>Returns with the current system time, expressed in timer ticks.</returns>
 int SystemTimerClass::operator () (void) const
 {
-	return(timeGetTime()/16);
+	return(static_cast<int>(System_Milliseconds()/16));
 }
 
 
@@ -66,5 +66,5 @@ int SystemTimerClass::operator () (void) const
 /// <returns>Returns with the current system time, expressed in timer ticks.</returns>
 SystemTimerClass::operator int (void) const
 {
-	return(timeGetTime()/16);
+	return(static_cast<int>(System_Milliseconds()/16));
 }

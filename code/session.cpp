@@ -48,6 +48,8 @@
 
 #include "session.h"
 
+#include "monotonic.h"
+
 #include "_deploymentconfig.h"
 #include "_keyboar.h"
 #include "_map.h"
@@ -1215,7 +1217,7 @@ unsigned int SessionClass::Compute_Unique_ID(void)
 	//------------------------------------------------------------------------
 //	time(&tm);
 //	id = (unsigned long)tm;
-	id = timeGetTime();
+	id = System_Milliseconds();
 
 	//------------------------------------------------------------------------
 	// Now add in the free space on the hard drive

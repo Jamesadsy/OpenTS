@@ -10,6 +10,7 @@
 #pragma once
 
 #include "autosave.h"
+#include "monotonic.h"
 
 #include <cstdint>
 
@@ -44,6 +45,3 @@ class MultiplayerLoadClass
 		std::int64_t DueAt = 0;
 		int SlotNumber = -1;
 };
-
-// The clock the countdown and the heartbeats are measured on.
-std::int64_t Monotonic_Milliseconds(void);

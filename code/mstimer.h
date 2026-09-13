@@ -9,11 +9,13 @@
 
 #pragma once
 
+#include "monotonic.h"
+
 class MillisecondSystemTimerClass
 {
 	public:
-		MillisecondSystemTimerClass(void);
-		~MillisecondSystemTimerClass(void);
+		// The monotonic service starts in this process; save/load must rebase it.
+		static constexpr bool Reading_Survives_A_Save = false;
 
 		int operator () (void) const;
 		operator int (void) const;

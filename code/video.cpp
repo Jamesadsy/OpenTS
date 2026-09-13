@@ -22,6 +22,7 @@
 #include "globals.h"
 #include "goptions.h"
 #include "misc.h"
+#include "monotonic.h"
 #include "surface.h"
 #include "wincursor.h"
 
@@ -289,7 +290,7 @@ void Video_Present(void)
 	_Presenting = false;
 
 	_FrameIsDirty = false;
-	_LastPresentTime = timeGetTime();
+	_LastPresentTime = System_Milliseconds();
 }
 
 
@@ -305,7 +306,7 @@ void Video_Present_If_Dirty(void)
 		return;
 	}
 
-	unsigned int now = timeGetTime();
+	unsigned int now = System_Milliseconds();
 	if ((now - _LastPresentTime) < _PresentInterval) {
 		return;
 	}

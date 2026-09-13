@@ -113,6 +113,17 @@ outright fails the load, since the engine reads these buffers as C strings.
 The body is what each class's `Serialize` produces, member by member, in host
 byte order. It is not described here; the classes are the description.
 
+### Timer anchors
+
+Timers driven by the saved frame counter keep their stored start frame because
+that counter has the same meaning after a load. Timers driven by the
+process-relative monotonic clock store elapsed time instead. Loading rebases
+their start value against the new process clock, so an active count-up or
+countdown keeps its current state after save, exit, relaunch, and load. A
+stopped timer keeps its stopped sentinel and accumulated or remaining value.
+The serialized timer fields remain 4-byte integers; this changes their
+interpretation for process-origin timers, not the record layout.
+
 The swizzle identity and every pointer member travel as four bytes. The save
 numbers the objects it meets rather than writing the address one sat at, so
 the body depends neither on the pointer width of the build that wrote it nor

@@ -136,6 +136,7 @@
 #include "mixfile.h"
 #include "misc.h"
 #include "mono.h"
+#include "monotonic.h"
 #include "movie.h"
 #include "mplayer.h"
 #include "msgbox.h"
@@ -1985,7 +1986,7 @@ void Init_Random(void)
 			Seed = CustomSeed;
 		} else {
 			CryptRandom.Get(&Seed, sizeof(Seed));
-			Seed = GetTickCount();
+			Seed = System_Milliseconds();
 			//srand(time(NULL));
 			//Seed = rand();
 		}
