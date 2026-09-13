@@ -13,14 +13,12 @@
 
 #pragma once
 
-#include "win.h"
-
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <math.h>
-#include <new.h>
+#include <new>
 
 
 template <class T>
@@ -82,7 +80,7 @@ ArrayList<T>::ArrayList(void)
 {
 	Entries_ = 0;
 	Slots_ = 0;
-	Vector_ = NULL;
+	Vector_ = nullptr;
 }
 
 template <class T>
@@ -90,7 +88,7 @@ ArrayList<T>::ArrayList(ArrayList<T>& other)
 {
 	Entries_ = 0;
 	Slots_ = 0;
-	Vector_ = NULL;
+	Vector_ = nullptr;
 	(*this) = other;
 }
 
@@ -166,7 +164,7 @@ char ArrayList<T>::add(T& node, int pos)
 
 	new((void*)(Vector_ + pos)) T((T&)node);
 	Entries_++;
-	return(TRUE);
+	return(true);
 }
 
 template <class T>
@@ -280,7 +278,7 @@ template <class T>
 char ArrayList<T>::replace(T& node, int pos)
 {
 	if (Entries_ == 0)
-		return(FALSE);
+		return(false);
 	if (pos < 0)
 		pos = 0;
 	if (pos >= Entries_)
@@ -290,14 +288,14 @@ char ArrayList<T>::replace(T& node, int pos)
 
 	new((void*)(Vector_ + pos)) T(node);
 
-	return(TRUE);
+	return(true);
 }
 
 template <class T>
 char ArrayList<T>::remove(int pos)
 {
 	if (Entries_ == 0)
-		return(FALSE);
+		return(false);
 	if (pos < 0)
 		pos = 0;
 	if (pos >= Entries_)
@@ -312,7 +310,7 @@ char ArrayList<T>::remove(int pos)
 	if ((Entries_ * 3) <= Slots_)
 		shrinkVector();
 
-	return(TRUE);
+	return(true);
 }
 
 template <class T>
@@ -320,8 +318,8 @@ char ArrayList<T>::remove(T& node, int pos)
 {
 	char retval;
 	retval = get(node, pos);
-	if (retval == FALSE)
-		return(FALSE);
+	if (retval == false)
+		return(false);
 	return(remove(pos));
 }
 
@@ -341,18 +339,18 @@ template <class T>
 char ArrayList<T>::getPointer(T** node, int pos) const
 {
 	if ((pos < 0) || (pos >= Entries_))
-		return(FALSE);
+		return(false);
 	*node = &(Vector_[pos]);
-	return(TRUE);
+	return(true);
 }
 
 template <class T>
 char ArrayList<T>::get(T& node, int pos) const
 {
 	if ((pos < 0) || (pos >= Entries_))
-		return(FALSE);
+		return(false);
 	node = Vector_[pos];
-	return(TRUE);
+	return(true);
 }
 
 template <class T>
@@ -390,7 +388,7 @@ template <class T>
 char ArrayList<T>::growVector(void)
 {
 	if (Entries_ < Slots_)
-		return(FALSE);
+		return(false);
 
 	int   newSlots = Entries_ * 2;
 	if (newSlots < INITIAL_SIZE)
@@ -399,7 +397,7 @@ char ArrayList<T>::growVector(void)
 	T * newVector = (T*)(new unsigned char[newSlots * sizeof(T)]);
 	memset(newVector, 0, newSlots * sizeof(T));
 
-	if (Vector_ != NULL)
+	if (Vector_ != nullptr)
 		memcpy(newVector, Vector_, Entries_ * sizeof(T));
 
 	delete[]((unsigned char*)Vector_);
@@ -407,7 +405,7 @@ char ArrayList<T>::growVector(void)
 	Vector_ = newVector;
 	Slots_ = newSlots;
 
-	return(TRUE);
+	return(true);
 }
 
 template <class T>
@@ -415,18 +413,18 @@ char ArrayList<T>::shrinkVector(void)
 {
 
 	if ((Entries_ * 3) > Slots_)
-		return(FALSE);
+		return(false);
 
 	int   newSlots = Slots_ / 2;
 	if (newSlots < INITIAL_SIZE)
 		newSlots = INITIAL_SIZE;
 
 	if (newSlots >= Slots_)
-		return(FALSE);
+		return(false);
 
 	T * newVector = (T*)(new unsigned char[newSlots * sizeof(T)]);
 
-	if (Vector_ != NULL)
+	if (Vector_ != nullptr)
 		memcpy(newVector, Vector_, Entries_ * sizeof(T));
 
 	delete[]((unsigned char*)Vector_);
@@ -434,5 +432,5 @@ char ArrayList<T>::shrinkVector(void)
 	Vector_ = newVector;
 	Slots_ = newSlots;
 
-	return(TRUE);
+	return(true);
 }
