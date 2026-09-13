@@ -36,6 +36,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#ifdef _WIN32
 #include <windows.h>
 #include <mmsystem.h>
 #include <windowsx.h>
@@ -47,3 +48,4 @@ extern HINSTANCE	ProgramInstance;
 extern HWND			MainWindow;
 extern HWND			UnusedWindow;
 extern bool			GameInFocus;
+#endif

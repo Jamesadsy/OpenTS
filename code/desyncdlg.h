@@ -10,7 +10,6 @@
 #pragma once
 
 #include "desync.h"
-#include "win.h"
 
 #include <cstdint>
 #include <string>
@@ -34,7 +33,14 @@ class DesyncDialogClass
 		// Blocks until a decision has been made; the network is serviced throughout.
 		OutcomeType Run(void);
 
-		bool Is_Active(void) const {return(Window != NULL);}
+		bool Is_Active(void) const
+		{
+#ifdef _WIN32
+			return(Window != NULL);
+#else
+			return(false);
+#endif
+		}
 
 		// Sends the heartbeat and drops silent players; called from the network maintenance
 		// so that both outlive a nested dialog's message loop.
@@ -48,6 +54,7 @@ class DesyncDialogClass
 		void Notify_Master_Changed(void);
 
 	private:
+#ifdef _WIN32
 		void Create_Dialog(void);
 		void Destroy_Dialog(void);
 		void Fit_To_Screen(void);
@@ -76,6 +83,7 @@ class DesyncDialogClass
 		int LastCountdownSecond = -1;
 		DesyncClass State;
 		std::vector<std::string> ChatBacklog;
+#endif
 };
 
 extern DesyncDialogClass DesyncDialog;

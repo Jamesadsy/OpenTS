@@ -48,6 +48,14 @@ foreach(f ${OPENTS_RAW})
     endif()
 endforeach()
 
+# The out-of-sync dialog is a Win32 interaction surface.  Keep its common
+# contract linkable on other hosts without compiling its Windows UI.
+if(WIN32)
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/desyncdlg_stub.cpp")
+else()
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/desyncdlg.cpp")
+endif()
+
 #
 # ---------------------------------------------------------
 # Create the OpenTS executable. Windows uses the Win32 subsystem; native Apple builds use

@@ -9,8 +9,6 @@
 
 #pragma once
 
-#include "win.h"
-
 #include "classid.h"
 
 class SaveStreamClass;
