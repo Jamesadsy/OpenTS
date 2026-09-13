@@ -108,13 +108,6 @@ class XSurface : public Surface
 		virtual int Stride(void) const override = 0;
 
 		/*
-		**	Hack function to serve the purpose that RTTI was invented for, but since
-		**	the Watcom compiler doesn't support RTTI, we must resort to using this
-		**	alternative.
-		*/
-		virtual bool Is_GDI_Backed(void) const override {return(false);}
-
-		/*
 		 * Bounds-checked pixel store: writes 'color' at 'point' only if it lies within
 		 * 'rect' (clipped variant of Put_Pixel). Returns false if outside.
 		 */

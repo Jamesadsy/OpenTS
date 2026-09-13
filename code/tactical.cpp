@@ -1357,10 +1357,8 @@ void Tactical::Clear_Caption_Text(void)
 
 
 /// <summary>
-/// Draws a line of text across the middle of the tactical view.
-/// This routine paints straight onto the composite surface with GDI, so it does nothing
-/// unless that surface can hand out a device context. It also stays quiet while the map
-/// editor is running.
+/// Draws a line of text across the middle of the tactical view using the engine's bitmap-font
+/// path.  This keeps game-visible text in the CPU surface contract on every host.
 /// </summary>
 /// <param name="text">The text to display. A NULL or empty string draws nothing.</param>
 void Tactical::Draw_Screen_Text(char const * text)
@@ -1371,23 +1369,9 @@ void Tactical::Draw_Screen_Text(char const * text)
 	if (text == NULL || !strlen(text)) {
 		return;
 	}
-	if (CompositeSurface->Is_GDI_Backed()) {
-		DSurface * surface = (DSurface *)CompositeSurface;
-		Rect rect = TacticalRect;
-		HDC hdc = surface->GetDC();
-		if (hdc != NULL) {
-			HFONT font = CreateFont(28, 20, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_RASTER_PRECIS, CLIP_DEFAULT_PRECIS, PROOF_QUALITY, FF_SWISS | DEFAULT_PITCH, NULL);
-			HGDIOBJ h = SelectObject(hdc, font);
-			Point2D point = Point2D(TacticalRect.Width / 2, TacticalRect.Height / 2);
-			SetBkMode(hdc, TRANSPARENT);
-			SetTextAlign(hdc, TA_CENTER);
-			SetTextColor(hdc, RGB(255, 255, 255));
-			TextOut(hdc, rect.X + point.X, rect.Y + point.Y, text, strlen(text));
-			SelectObject(hdc, h);
-			DeleteObject(font);
-			surface->ReleaseDC(hdc);
-		}
-	}
+	Point2D point(TacticalRect.X + TacticalRect.Width / 2, TacticalRect.Y + TacticalRect.Height / 2);
+	Simple_Text_Print(text, *CompositeSurface, TacticalRect, point, ColorSchemes[0], TBLACK,
+		TextPrintType(TPF_CENTER | TPF_METAL12 | TPF_FULLSHADOW), 1);
 }
 
 

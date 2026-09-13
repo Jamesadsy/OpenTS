@@ -111,13 +111,6 @@ class Surface
 		virtual int Get_Width(void) const {return(Width);}
 		virtual int Get_Height(void) const {return(Height);}
 
-		/*
-		**	Hack function to serve the purpose that RTTI was invented for, but since
-		**	the Watcom compiler doesn't support RTTI, we must resort to using this
-		**	alternative.
-		*/
-		virtual bool Is_GDI_Backed(void) const {return(false);}
-
 	protected:
 
 		/*
