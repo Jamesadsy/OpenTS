@@ -133,6 +133,7 @@
 #include "tracker.h"
 #include "unit.h"
 #include "unittype.h"
+#include "video.h"
 #include "waypoint.h"
 #include "weapon.h"
 
@@ -356,7 +357,7 @@ bool AircraftClass::Unlimbo(Coord const & coord, Dir256 dir)
  *=============================================================================================*/
 void AircraftClass::Draw_It(Point2D const & xpoint, Rect const & cliprect) const
 {
-	if (!Debug_Map && MainWindow && Scen->Special.IsFogOfWar) {
+	if (!Debug_Map && Presentation_Is_Available() && Scen->Special.IsFogOfWar) {
 		Coord headto = (Coord)Locomotion->Head_To_Coord();
 		headto.Z = PositionCoord.Z;
 		if (Map.Is_Fogged(headto) && Map.Is_Fogged(PositionCoord) && !House->Is_Player_Control()) {
@@ -3985,7 +3986,7 @@ void AircraftClass::Detach(AbstractClass const * target, bool all)
 /// can pick up or set down its cargo.
 /// </summary>
 /// <returns>Returns with the height above ground level to settle at.</returns>
-LONG AircraftClass::Landing_Altitude(void)
+std::int32_t AircraftClass::Landing_Altitude(void)
 {
 	if (Class->IsCarryall && !Cargo.Is_Something_Attached() && In_Radio_Contact()) {
 		BuildingClass * bptr = (BuildingClass *)Contact_With_Whom();
@@ -4013,7 +4014,7 @@ LONG AircraftClass::Landing_Altitude(void)
 /// while loaded, or settles into the default parked pose.
 /// </summary>
 /// <returns>Returns with the facing to land at.</returns>
-LONG AircraftClass::Landing_Direction(void)
+std::int32_t AircraftClass::Landing_Direction(void)
 {
 	TechnoClass * tptr = Contact_With_Whom();
 	if (tptr != NULL) {
@@ -4032,7 +4033,7 @@ LONG AircraftClass::Landing_Direction(void)
 /// empty one.
 /// </summary>
 /// <returns>Returns with true if there is cargo aboard this aircraft.</returns>
-BOOL AircraftClass::Is_Loaded(void)
+bool AircraftClass::Is_Loaded(void)
 {
 	return(Cargo.Is_Something_Attached());
 }
@@ -4044,7 +4045,7 @@ BOOL AircraftClass::Is_Loaded(void)
 /// from a hover. Only a visible and unguided projectile is suited to strafing.
 /// </summary>
 /// <returns>Returns with true if the aircraft should make strafing attack runs.</returns>
-LONG AircraftClass::Is_Strafe(void)
+bool AircraftClass::Is_Strafe(void)
 {
 	const WeaponDataStruct * data = Get_Class_Weapon_Data(0);
 	if (data == NULL) {
@@ -4070,7 +4071,7 @@ LONG AircraftClass::Is_Strafe(void)
 /// to an attack run.
 /// </summary>
 /// <returns>Returns with true if the aircraft must hold its present heading.</returns>
-LONG AircraftClass::Is_Locked(void)
+bool AircraftClass::Is_Locked(void)
 {
 	return(IsLockedStraight);
 }

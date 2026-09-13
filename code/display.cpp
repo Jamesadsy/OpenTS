@@ -142,6 +142,7 @@
 #include "tagtype.h"
 #include "terrtype.h"
 #include "unittype.h"
+#include "video.h"
 #include "vein.h"
 #include "vector3.h"
 #include "vox.h"
@@ -3766,7 +3767,7 @@ char const * DisplayClass::Help_Text(int id)
 	/*
 	**	Give a generic help message when over shadow terrain.
 	*/
-	if (!Map[coord].IsMapped && MainWindow) {
+	if (!Map[coord].IsMapped && Presentation_Is_Available()) {
 		return(Fetch_String(TXT_SHADOW));
 	}
 

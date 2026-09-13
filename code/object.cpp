@@ -130,6 +130,7 @@
 #include "ambient.h"
 #include "tagtype.h"
 #include "tracker.h"
+#include "video.h"
 
 #include <algorithm>
 #include <cassert>
@@ -1188,7 +1189,7 @@ bool ObjectClass::Render(Rect & cliprect, bool forced, bool extras_only) const
 
 	Point2D point;
 
-	if (Debug_Map || !MainWindow || (forced || IsToDisplay) && !IsInLimbo) {
+	if (Debug_Map || !Presentation_Is_Available() || (forced || IsToDisplay) && !IsInLimbo) {
 		IsToDisplay = false;
 
 		if (TacticalMap->Coord_To_Pixel(Render_Coord(), point) || RTTI == RTTI_PARTICLESYSTEM) {

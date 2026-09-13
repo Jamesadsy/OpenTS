@@ -39,6 +39,7 @@
 #include "sun.h"
 #include "tactical.h"
 #include "terrain.h"
+#include "video.h"
 #include "vector.h"
 
 
@@ -281,7 +282,7 @@ FoggedObjectClass::~FoggedObjectClass(void)
 /// <param name="rect">The dirty rectangle currently being redrawn.</param>
 void Draw_Fogged_Objects(Rect const & rect)
 {
-	if (MainWindow == NULL) {
+	if (!Presentation_Is_Available()) {
 		return;
 	}
 

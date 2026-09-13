@@ -41,6 +41,10 @@ struct VideoScaleInfo
 bool Video_Init(NativeWindow const & window, int drawablewidth, int drawableheight, int refreshrate);
 void Video_Shutdown(void);
 
+// Reports whether the primary game presentation target exists and the renderer is ready
+// to receive engine drawing. This is a lifecycle semantic, not a focus or visibility test.
+bool Presentation_Is_Available(void);
+
 bool Video_Set_Mode(int width, int height);
 void Video_On_Resize(int drawablewidth, int drawableheight);
 void Video_Set_Refresh_Rate(int refreshrate);

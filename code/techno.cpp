@@ -197,6 +197,7 @@
 #include "uicontrol.h"
 #include "unit.h"
 #include "unittype.h"
+#include "video.h"
 #include "vanim.h"
 #include "vein.h"
 #include "voc.h"
@@ -1408,7 +1409,7 @@ bool TechnoClass::Is_Decoration_Visible(void) const
 		}
 	}
 
-	if (Map.Is_Shrouded(Center_Coord()) && MainWindow != NULL) {
+	if (Map.Is_Shrouded(Center_Coord()) && Presentation_Is_Available()) {
 		return(false);
 	}
 
@@ -3434,7 +3435,7 @@ bool TechnoClass::Is_Ready_To_Cloak(void) const
  *=============================================================================================*/
 bool TechnoClass::Select(void)
 {
-	if (!IsDiscoveredByPlayer && !House->Is_Player_Control() && MainWindow) {
+	if (!IsDiscoveredByPlayer && !House->Is_Player_Control() && Presentation_Is_Available()) {
 		return(false);
 	}
 
@@ -5540,7 +5541,7 @@ VisualType TechnoClass::Visual_Character(bool raw, HouseClass const * house) con
 	*/
 	if (Cloak == CLOAKED) {
 		if (raw && house != NULL && Map[Get_Coord().As_Cell()].Is_Sensed(house->HeapID)) return(VISUAL_SHADOWY);
-		if (!raw && !MainWindow) return(VISUAL_SHADOWY);
+		if (!raw && !Presentation_Is_Available()) return(VISUAL_SHADOWY);
 		if (!raw && IsOwnedByPlayer) return(VISUAL_SHADOWY);
 		if (!raw && Is_Sensed_By_Player()) return(VISUAL_SHADOWY);
 		if (!raw && (Session.Type != GAME_NORMAL && House != NULL && PlayerPtr != NULL && PlayerPtr->Shares_View_With(House) && House->Shares_View_With(PlayerPtr))) return(VISUAL_SHADOWY);
@@ -8744,7 +8745,7 @@ bool TechnoClass::Is_Radar_Visible(DetectedType & detected) const
 
 		int height = HeightAGL;
 		bool ability_radar_invisible = Has_Ability(ABILITY_RADAR_INVISIBLE);
-		bool is_shrouded = Map.Is_Shrouded(Get_Coord()) && MainWindow;
+		bool is_shrouded = Map.Is_Shrouded(Get_Coord()) && Presentation_Is_Available();
 		bool is_fogged = Scen->Special.IsFogOfWar && Map.Is_Fogged(Get_Coord());
 
 		if (!is_fogged && Cloak != CLOAKED && height >= -20 && !ability_radar_invisible && !is_shrouded) {

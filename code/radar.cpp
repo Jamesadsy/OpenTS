@@ -102,6 +102,7 @@
 #include "scheme.h"
 #include "tactical.h"
 #include "voc.h"
+#include "video.h"
 #include "vox.h"
 #include "vqa.h"
 
@@ -541,7 +542,7 @@ int RadarClass::RTacticalClass::Action(unsigned flags, KeyNumType & key)
 	if (cell != CELL_NONE) {
 		Coord coord = cell.As_Coord();
 		coord.Z = Map.Get_Height_GL(coord);
-		shadow	= (Map.Is_Shrouded(coord) && MainWindow);
+		shadow	= (Map.Is_Shrouded(coord) && Presentation_Is_Available());
 
 		/*
 		**	If there is a currently selected object, then the action to perform if
@@ -1571,7 +1572,7 @@ void RadarClass::Plot_Radar_Pixel(Point2D const & point)
 
 		Coord coord = Radar_Pixel_To_Cell(point);
 		coord.Z = Map.Get_Height_GL(coord);
-		bool shadow	= (MainWindow && Map.Is_Shrouded(coord));
+		bool shadow	= (Presentation_Is_Available() && Map.Is_Shrouded(coord));
 
 		TechnoClass *tech = RadarTracking.First(point);
 
@@ -2304,7 +2305,7 @@ void RadarClass::Play_Movie(void)
 /// </summary>
 void RadarClass::Complete_Radar_Refresh(void)
 {
-	if (MainWindow == NULL) {
+	if (!Presentation_Is_Available()) {
 		RadarSurface->Blit_From(RadarSurface->Get_Rect(), *BackgroundSurface, BackgroundSurface->Get_Rect());
 		Render_Tracked_Objects();
 	} else {
