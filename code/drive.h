@@ -40,6 +40,10 @@
 #include "matrix3d.h"
 #include "timer.h"
 
+#ifdef _WIN32
+#include "win.h"
+#endif
+
 #include <memory>
 
 #include "mark.hh"
@@ -269,4 +273,3 @@ class DriveLocomotionClass : public LocomotionClass, public IPiggyback
 		static TrackType const Track2[];
 		static TrackType const Track1[24];
 };
-
