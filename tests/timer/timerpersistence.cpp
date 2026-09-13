@@ -76,13 +76,20 @@ namespace
 
 
 	template<typename T>
-	void Round_Trip(T & saved, T & loaded)
+	std::vector<int> Save(T & timer)
 	{
 		std::vector<int> values;
 		IntegerArchive writer(values, false);
-		saved.Serialize(writer);
+		timer.Serialize(writer);
+		return(values);
+	}
+
+
+	template<typename T>
+	void Load(T & timer, std::vector<int> & values)
+	{
 		IntegerArchive reader(values, true);
-		loaded.Serialize(reader);
+		timer.Serialize(reader);
 	}
 
 
@@ -120,9 +127,10 @@ namespace
 	{
 		Frame = 100;
 		BasicTimerClass<FrameTimerClass> saved(5);
+		std::vector<int> values = Save(saved);
 		Frame = 300;
 		BasicTimerClass<FrameTimerClass> loaded;
-		Round_Trip(saved, loaded);
+		Load(loaded, values);
 		Check_Equal("frame-origin timer retains raw frame anchor", loaded.Value(), 205);
 	}
 
@@ -133,10 +141,11 @@ namespace
 		BasicTimerClass<MillisecondSystemTimerClass> saved(5);
 		TestNow = 112;
 		Check_Equal("process timer records pre-save elapsed", saved.Value(), 17);
+		std::vector<int> values = Save(saved);
 
 		TestNow = 1000;
 		BasicTimerClass<MillisecondSystemTimerClass> loaded;
-		Round_Trip(saved, loaded);
+		Load(loaded, values);
 		Check_Equal("process timer rebases after load", loaded.Value(), 17);
 		TestNow = 1011;
 		Check_Equal("rebased process timer keeps progressing", loaded.Value(), 28);
@@ -149,19 +158,22 @@ namespace
 		TTimerClass<MillisecondSystemTimerClass> saved(4);
 		TestNow = 109;
 		Check_Equal("count-up has expected active value", saved.Value(), 13);
+		std::vector<int> values = Save(saved);
 
 		TestNow = 1000;
 		TTimerClass<MillisecondSystemTimerClass> loaded;
-		Round_Trip(saved, loaded);
+		Load(loaded, values);
 		Check_Equal("count-up survives save rebase", loaded.Value(), 13);
 		TestNow = 1007;
 		Check_Equal("rebased count-up progresses", loaded.Value(), 20);
 
+		TestNow = 109;
 		saved.Stop();
 		int const stopped_value = saved.Value();
+		std::vector<int> stopped_values = Save(saved);
 		TestNow = 2000;
 		TTimerClass<MillisecondSystemTimerClass> stopped_loaded;
-		Round_Trip(saved, stopped_loaded);
+		Load(stopped_loaded, stopped_values);
 		Check("stopped timer sentinel remains inactive", !stopped_loaded.Is_Active());
 		Check_Equal("stopped timer retains accumulated value", stopped_loaded.Value(), stopped_value);
 	}
@@ -173,10 +185,11 @@ namespace
 		CDTimerClass<MillisecondSystemTimerClass> saved(20);
 		TestNow = 108;
 		Check_Equal("countdown has expected pre-save remainder", saved.Value(), 12);
+		std::vector<int> values = Save(saved);
 
 		TestNow = 1000;
 		CDTimerClass<MillisecondSystemTimerClass> loaded;
-		Round_Trip(saved, loaded);
+		Load(loaded, values);
 		Check_Equal("countdown survives save rebase", loaded.Value(), 12);
 		TestNow = 1005;
 		Check_Equal("rebased countdown keeps counting", loaded.Value(), 7);
