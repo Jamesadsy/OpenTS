@@ -1,0 +1,96 @@
+name: Second Sun G2
+
+on:
+  push:
+    branches: [secondsun/ss-imp-opents-002a]
+    paths:
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "code/**"
+      - "tests/**"
+      - "thirdparty/**"
+      - ".gitmodules"
+      - ".github/workflows/secondsun-g2.yml"
+      - ".github/workflows/engine-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: secondsun-g2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-contract:
+    name: Windows build and CTest contract
+    uses: ./.github/workflows/engine-build.yml
+    with:
+      artifact-prefix: secondsun-g2
+
+  macos-arm64-probe:
+    name: macOS ARM64 native compile probe
+    runs-on: macos-15
+    steps:
+      - name: Check out pinned source and submodules
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: recursive
+
+      - name: Record runner, toolchain, and source provenance
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sw_vers
+          uname -m
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          clang --version
+          cmake --version
+          git rev-parse HEAD
+          git rev-parse 'HEAD^{tree}'
+          git submodule status --recursive
+
+      - name: Configure native Apple Clang C++20 probe
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Compile the OpenTS dependency closure
+        id: compile
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --target OpenTS --parallel 3 2>&1 | tee macos-compile.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Run portable tests when the runtime target compiles
+        if: steps.compile.outcome == 'success'
+        id: tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 3 2>&1 | tee macos-tests-build.log
+          build_status="${PIPESTATUS[0]}"
+          if [ "${build_status}" -eq 0 ]; then
+            ctest --test-dir build --output-on-failure 2>&1 | tee macos-ctest.log
+            exit "${PIPESTATUS[0]}"
+          fi
+          exit "${build_status}"
+
+      - name: Upload macOS probe logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: secondsun-g2-macos-arm64-${{ github.sha }}
+          path: |
+            macos-compile.log
+            macos-tests-build.log
+            macos-ctest.log
+          if-no-files-found: warn
+          retention-days: 90

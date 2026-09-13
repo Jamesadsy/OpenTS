@@ -16,7 +16,9 @@ set(BGFX_INSTALL OFF CACHE BOOL "" FORCE)
 set(BGFX_CONFIG_RENDERER_WEBGPU OFF CACHE BOOL "" FORCE)
 
 # The engine links the static CRT, so its dependencies must agree.
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 add_subdirectory(bgfx.cmake)
 

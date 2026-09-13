@@ -12,6 +12,7 @@ set(OPENTS_VERSION_PRERELEASE "")
 option(OPENTS_OFFICIAL_BUILD "Build as an official release of the declared version" OFF)
 
 option(OPENTS_EXPERIMENTAL_CLANG_CL "Build with clang-cl using the MSVC ABI" OFF)
+option(OPENTS_BUILD_TESTS "Build the OpenTS test harnesses" ON)
 
 # Lets a target's FOLDER place it in a Visual Studio solution folder. The bgfx submodule sets
 # this as well, so declare it here rather than inherit it from a vendored build.
@@ -33,6 +34,8 @@ elseif(MSVC)
         message(FATAL_ERROR
             "OpenTS targets Win32 and x64. Reconfigure with -A Win32 or -A x64.")
     endif()
+elseif(APPLE)
+    message(STATUS "OpenTS: configuring a native Apple compile probe.")
 else()
     message(FATAL_ERROR
         "OpenTS requires the Visual Studio 2022 MSVC toolchain. "
@@ -45,7 +48,9 @@ if(NOT OPENTS_ARCH)
     set(OPENTS_ARCH "unknown")
 endif()
 
-enable_language(RC)
+if(WIN32)
+    enable_language(RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -91,5 +96,7 @@ add_subdirectory(thirdparty)
 add_subdirectory(code)
 add_subdirectory(code/language)
 
-enable_testing()
-add_subdirectory(tests)
+if(OPENTS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

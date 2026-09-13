@@ -24,20 +24,28 @@ add_executable(NetConnection
     "${OPENTS_ROOT}/code/nettiming.cpp"
 )
 
-target_compile_definitions(NetConnection PRIVATE NOMINMAX)
-set_source_files_properties("${OPENTS_ROOT}/code/combuf.cpp" PROPERTIES
-    COMPILE_OPTIONS "/source-charset:437;/execution-charset:437"
-)
+if(WIN32)
+    target_compile_definitions(NetConnection PRIVATE NOMINMAX)
+endif()
+if(MSVC)
+    set_source_files_properties("${OPENTS_ROOT}/code/combuf.cpp" PROPERTIES
+        COMPILE_OPTIONS "/source-charset:437;/execution-charset:437"
+    )
+endif()
 
 foreach(target NetTiming NetConnection)
     target_compile_features(${target} PRIVATE cxx_std_20)
     target_include_directories(${target} PRIVATE "${OPENTS_ROOT}/code")
-    target_compile_definitions(${target} PRIVATE WIN32 _WINDOWS _MBCS)
-    target_compile_options(${target} PRIVATE
-        $<$<CONFIG:Debug>:/MTd /EHsc /Zc:__cplusplus>
-        $<$<CONFIG:Release>:/MT /EHsc /Zc:__cplusplus>
-    )
-    target_link_libraries(${target} PRIVATE kernel32 winmm)
+    if(WIN32)
+        target_compile_definitions(${target} PRIVATE WIN32 _WINDOWS _MBCS)
+        target_link_libraries(${target} PRIVATE kernel32 winmm)
+    endif()
+    if(MSVC)
+        target_compile_options(${target} PRIVATE
+            $<$<CONFIG:Debug>:/MTd /EHsc /Zc:__cplusplus>
+            $<$<CONFIG:Release>:/MT /EHsc /Zc:__cplusplus>
+        )
+    endif()
     set_target_properties(${target} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )

@@ -22,8 +22,12 @@ file(GLOB_RECURSE OPENTS_RAW CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/*.hh"
     "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.rc"
 )
+
+if(WIN32)
+    file(GLOB_RECURSE OPENTS_RC CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.rc")
+    list(APPEND OPENTS_RAW ${OPENTS_RC})
+endif()
 
 #
 # ---------------------------------------------------------
@@ -46,12 +50,17 @@ endforeach()
 
 #
 # ---------------------------------------------------------
-# Create actual OpenTS executable (Win32)
+# Create the OpenTS executable. Windows uses the Win32 subsystem; native Apple builds use
+# normal executable semantics until a later host package supplies the platform host.
 # ---------------------------------------------------------
 #
 message(STATUS "${PROJECT_NAME}: Creating '${PROJECT_NAME}' executable...")
 
-add_executable(OpenTS WIN32 ${OPENTS_SRC})
+if(WIN32)
+    add_executable(OpenTS WIN32 ${OPENTS_SRC})
+else()
+    add_executable(OpenTS ${OPENTS_SRC})
+endif()
 target_compile_features(OpenTS PRIVATE cxx_std_20)
 
 #
@@ -74,11 +83,13 @@ set_target_properties(OpenTS PROPERTIES
     PDB_NAME_RELEASE "Game"
 )
 
-set_target_properties(OpenTS PROPERTIES
-    VS_DEBUGGER_COMMAND "$<TARGET_FILE:OpenTS>"
-    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:OpenTS>"
-    VS_DEBUGGER_COMMAND_ARGUMENTS "-DATADIR=${OPENTS_GAME_DIR}"
-)
+if(MSVC)
+    set_target_properties(OpenTS PROPERTIES
+        VS_DEBUGGER_COMMAND "$<TARGET_FILE:OpenTS>"
+        VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:OpenTS>"
+        VS_DEBUGGER_COMMAND_ARGUMENTS "-DATADIR=${OPENTS_GAME_DIR}"
+    )
+endif()
 
 #
 # ---------------------------------------------------------
@@ -87,6 +98,8 @@ set_target_properties(OpenTS PROPERTIES
 #
 message(STATUS "${PROJECT_NAME}: Applying compiler flags...")
 
+set(OPENTS_COMPILE_OPTIONS)
+if(MSVC)
 set(OPENTS_COMPILE_OPTIONS
 
     # ================= DEBUG =================
@@ -123,6 +136,7 @@ set(OPENTS_COMPILE_OPTIONS
         >
     >
 )
+endif()
 
 target_compile_options(OpenTS PRIVATE ${OPENTS_COMPILE_OPTIONS})
 
@@ -152,8 +166,12 @@ set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/bgfxbackend.cpp" PROPER
         "${BGFX_ROOT}/include;${CMAKE_SOURCE_DIR}/thirdparty/bgfx.cmake/bx/include;${BGFX_ROOT}/examples/common/imgui"
     COMPILE_DEFINITIONS
         "BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,$<BOOL:${BX_CONFIG_DEBUG}>>"
-    COMPILE_OPTIONS "/Zc:preprocessor"
 )
+
+if(MSVC)
+    set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/bgfxbackend.cpp" APPEND PROPERTY
+        COMPILE_OPTIONS "/Zc:preprocessor")
+endif()
 
 # bx rewrites __stdcall while its headers are being parsed by clang-cl.  Force the
 # compatibility header into the renderer translation unit as well as bx/bgfx so the
@@ -165,11 +183,9 @@ if(OPENTS_EXPERIMENTAL_CLANG_CL AND CMAKE_SIZEOF_VOID_P EQUAL 4)
 endif()
 
 message(STATUS "${PROJECT_NAME}: Adding compilier definitions...")
-target_compile_definitions(OpenTS PRIVATE
-    WIN32
-    _WINDOWS
-    NOMINMAX
-)
+if(WIN32)
+    target_compile_definitions(OpenTS PRIVATE WIN32 _WINDOWS NOMINMAX)
+endif()
 
 #
 # ---------------------------------------------------------
@@ -190,22 +206,18 @@ message(STATUS "${PROJECT_NAME}: Applying linker options...")
 
 target_link_libraries(OpenTS PRIVATE
     VQALib
-
     bgfx
     bx
     bimg
     miniaudio
     lzo
-    comctl32
-    dbghelp
-    iphlpapi
-    psapi
-    version
-    winmm
-    ws2_32
-    kernel32 user32 gdi32 winspool comdlg32 advapi32 shell32
-    odbc32 odbccp32
 )
+
+if(WIN32)
+    target_link_libraries(OpenTS PRIVATE
+        comctl32 dbghelp iphlpapi psapi version winmm ws2_32
+        kernel32 user32 gdi32 winspool comdlg32 advapi32 shell32 odbc32 odbccp32)
+endif()
 
 if(MSVC)
     target_link_options(OpenTS PRIVATE
@@ -280,7 +292,9 @@ set_property(GLOBAL PROPERTY VS_STARTUP_PROJECT OpenTS)
 # ---------------------------------------------------------
 # Add the .natvis file for Visual Studio debugging
 # ---------------------------------------------------------
-set(NATVIS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/sun.natvis")
-source_group("Natvis Files" FILES ${NATVIS_FILE})
-target_sources(OpenTS PRIVATE ${NATVIS_FILE})
-target_link_options(OpenTS PRIVATE "/NATVIS:${NATVIS_FILE}")
+if(MSVC)
+    set(NATVIS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/sun.natvis")
+    source_group("Natvis Files" FILES ${NATVIS_FILE})
+    target_sources(OpenTS PRIVATE ${NATVIS_FILE})
+    target_link_options(OpenTS PRIVATE "/NATVIS:${NATVIS_FILE}")
+endif()

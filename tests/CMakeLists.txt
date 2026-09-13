@@ -31,6 +31,9 @@ function(opents_add_test target)
     )
 
     if(TEST_DEFINITIONS)
+        if(NOT WIN32)
+            list(REMOVE_ITEM TEST_DEFINITIONS WIN32 _WINDOWS _MBCS NOMINMAX)
+        endif()
         target_compile_definitions(${target} PRIVATE ${TEST_DEFINITIONS})
     endif()
 
@@ -55,8 +58,11 @@ function(opents_add_test target)
         endif()
     endif()
 
-    if(MSVC)
+    if(WIN32)
         target_link_libraries(${target} PRIVATE kernel32 user32 shell32)
+    endif()
+    if(NOT WIN32)
+        list(REMOVE_ITEM TEST_LIBRARIES ws2_32)
     endif()
     target_link_libraries(${target} PRIVATE ${TEST_LIBRARIES})
 

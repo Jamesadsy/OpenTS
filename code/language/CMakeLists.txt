@@ -1,11 +1,18 @@
 file(GLOB_RECURSE LANG_SRC CONFIGURE_DEPENDS
-    "*.cpp" "*.c" "*.cc" "*.rc"
+    "*.cpp" "*.c" "*.cc"
     "*.h" "*.hpp" "*.hm"
 )
 
+if(WIN32)
+    file(GLOB_RECURSE LANG_RC CONFIGURE_DEPENDS "*.rc")
+    list(APPEND LANG_SRC ${LANG_RC})
+endif()
+
 add_library(Language SHARED ${LANG_SRC})
 target_compile_features(Language PRIVATE cxx_std_20)
-target_compile_definitions(Language PRIVATE NOMINMAX)
+if(WIN32)
+    target_compile_definitions(Language PRIVATE NOMINMAX)
+endif()
 
 # The version resource is stamped from the generated headers, which the resource compiler
 # reaches through the target's include paths.
