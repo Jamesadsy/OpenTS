@@ -11,8 +11,6 @@
 
 #include "hostruntime.hh"
 
-#include "keyboard.h"
-
 #include <chrono>
 #include <cstdio>
 #include <deque>
@@ -182,7 +180,7 @@ class MacOpenTSHost final : public OpenTSHost
 		{
 			NSString * characters = [event charactersIgnoringModifiers];
 			if ([characters length] == 0) {
-				return(VK_NONE);
+				return(OPENTS_HOST_KEY_NONE);
 			}
 
 			unichar character = [characters characterAtIndex:0];
@@ -194,39 +192,39 @@ class MacOpenTSHost final : public OpenTSHost
 			}
 
 			switch (character) {
-				case NSUpArrowFunctionKey: return(VK_UP);
-				case NSDownArrowFunctionKey: return(VK_DOWN);
-				case NSLeftArrowFunctionKey: return(VK_LEFT);
-				case NSRightArrowFunctionKey: return(VK_RIGHT);
-				case NSHomeFunctionKey: return(VK_HOME);
-				case NSEndFunctionKey: return(VK_END);
-				case NSPageUpFunctionKey: return(VK_PRIOR);
-				case NSPageDownFunctionKey: return(VK_NEXT);
-				case NSDeleteFunctionKey: return(VK_DELETE);
-				case NSF1FunctionKey: return(VK_F1);
-				case NSF2FunctionKey: return(VK_F2);
-				case NSF3FunctionKey: return(VK_F3);
-				case NSF4FunctionKey: return(VK_F4);
-				case NSF5FunctionKey: return(VK_F5);
-				case NSF6FunctionKey: return(VK_F6);
-				case NSF7FunctionKey: return(VK_F7);
-				case NSF8FunctionKey: return(VK_F8);
-				case NSF9FunctionKey: return(VK_F9);
-				case NSF10FunctionKey: return(VK_F10);
-				case NSF11FunctionKey: return(VK_F11);
-				case NSF12FunctionKey: return(VK_F12);
-				case 0x1B: return(VK_ESCAPE);
-				case '\r': return(VK_RETURN);
-				case '\t': return(VK_TAB);
-				case 0x7F: return(VK_BACK);
-				case ' ': return(VK_SPACE);
-				default: return(VK_NONE);
+				case NSUpArrowFunctionKey: return(OPENTS_HOST_KEY_UP);
+				case NSDownArrowFunctionKey: return(OPENTS_HOST_KEY_DOWN);
+				case NSLeftArrowFunctionKey: return(OPENTS_HOST_KEY_LEFT);
+				case NSRightArrowFunctionKey: return(OPENTS_HOST_KEY_RIGHT);
+				case NSHomeFunctionKey: return(OPENTS_HOST_KEY_HOME);
+				case NSEndFunctionKey: return(OPENTS_HOST_KEY_END);
+				case NSPageUpFunctionKey: return(OPENTS_HOST_KEY_PAGE_UP);
+				case NSPageDownFunctionKey: return(OPENTS_HOST_KEY_PAGE_DOWN);
+				case NSDeleteFunctionKey: return(OPENTS_HOST_KEY_DELETE);
+				case NSF1FunctionKey: return(OPENTS_HOST_KEY_F1);
+				case NSF2FunctionKey: return(OPENTS_HOST_KEY_F2);
+				case NSF3FunctionKey: return(OPENTS_HOST_KEY_F3);
+				case NSF4FunctionKey: return(OPENTS_HOST_KEY_F4);
+				case NSF5FunctionKey: return(OPENTS_HOST_KEY_F5);
+				case NSF6FunctionKey: return(OPENTS_HOST_KEY_F6);
+				case NSF7FunctionKey: return(OPENTS_HOST_KEY_F7);
+				case NSF8FunctionKey: return(OPENTS_HOST_KEY_F8);
+				case NSF9FunctionKey: return(OPENTS_HOST_KEY_F9);
+				case NSF10FunctionKey: return(OPENTS_HOST_KEY_F10);
+				case NSF11FunctionKey: return(OPENTS_HOST_KEY_F11);
+				case NSF12FunctionKey: return(OPENTS_HOST_KEY_F12);
+				case 0x1B: return(OPENTS_HOST_KEY_ESCAPE);
+				case '\r': return(OPENTS_HOST_KEY_RETURN);
+				case '\t': return(OPENTS_HOST_KEY_TAB);
+				case 0x7F: return(OPENTS_HOST_KEY_BACKSPACE);
+				case ' ': return(OPENTS_HOST_KEY_SPACE);
+				default: return(OPENTS_HOST_KEY_NONE);
 			}
 		}
 
 		void Push_Key(NSEvent * nativeevent, unsigned short key, bool release)
 		{
-			if (key == VK_NONE) {
+			if (key == OPENTS_HOST_KEY_NONE) {
 				return;
 			}
 			NSEventModifierFlags const flags = [nativeevent modifierFlags];
@@ -267,12 +265,12 @@ class MacOpenTSHost final : public OpenTSHost
 					break;
 
 				case NSEventTypeFlagsChanged: {
-					unsigned short key = VK_NONE;
+					unsigned short key = OPENTS_HOST_KEY_NONE;
 					NSEventModifierFlags mask = 0;
 					switch ([nativeevent keyCode]) {
-						case 56: case 60: key = VK_SHIFT; mask = NSEventModifierFlagShift; break;
-						case 59: case 62: key = VK_CONTROL; mask = NSEventModifierFlagControl; break;
-						case 58: case 61: key = VK_MENU; mask = NSEventModifierFlagOption; break;
+						case 56: case 60: key = OPENTS_HOST_KEY_SHIFT; mask = NSEventModifierFlagShift; break;
+						case 59: case 62: key = OPENTS_HOST_KEY_CONTROL; mask = NSEventModifierFlagControl; break;
+						case 58: case 61: key = OPENTS_HOST_KEY_ALT; mask = NSEventModifierFlagOption; break;
 						default: break;
 					}
 					Push_Key(nativeevent, key, ([nativeevent modifierFlags] & mask) == 0);
@@ -283,24 +281,24 @@ class MacOpenTSHost final : public OpenTSHost
 				case NSEventTypeLeftMouseDragged:
 				case NSEventTypeRightMouseDragged:
 				case NSEventTypeOtherMouseDragged:
-					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_MOVE, VK_NONE, false);
+					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_MOVE, OPENTS_HOST_KEY_NONE, false);
 					break;
 
 				case NSEventTypeLeftMouseDown:
 				case NSEventTypeLeftMouseUp:
-					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_BUTTON, VK_LBUTTON,
+					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_BUTTON, OPENTS_HOST_KEY_LEFT_BUTTON,
 						[nativeevent type] == NSEventTypeLeftMouseUp);
 					break;
 
 				case NSEventTypeRightMouseDown:
 				case NSEventTypeRightMouseUp:
-					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_BUTTON, VK_RBUTTON,
+					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_BUTTON, OPENTS_HOST_KEY_RIGHT_BUTTON,
 						[nativeevent type] == NSEventTypeRightMouseUp);
 					break;
 
 				case NSEventTypeOtherMouseDown:
 				case NSEventTypeOtherMouseUp:
-					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_BUTTON, VK_MBUTTON,
+					Push_Mouse(nativeevent, OPENTS_HOST_EVENT_MOUSE_BUTTON, OPENTS_HOST_KEY_MIDDLE_BUTTON,
 						[nativeevent type] == NSEventTypeOtherMouseUp);
 					break;
 
