@@ -43,6 +43,7 @@
 #include "tactical.h"
 #include "tracker.h"
 #include "unit.h"
+#include "video.h"
 #include "wave.h"
 #include "zbuffer.h"
 
@@ -661,7 +662,7 @@ void ParticleClass::Behavior_AI(void)
 void ParticleClass::Draw_It(Point2D const & point, Rect const & cliprect) const
 {
 	if (Options.DetailLevel != 0 || Class->BehavesLike != BEHAVIOR_SMOKE && Class->BehavesLike != BEHAVIOR_SPARK) {
-		if (Debug_Map || MainWindow == 0 || !Scen->Special.IsFogOfWar || !Map.Is_Fogged((Coord const &)PositionCoord)) {
+		if (Debug_Map || !Presentation_Is_Available() || !Scen->Special.IsFogOfWar || !Map.Is_Fogged((Coord const &)PositionCoord)) {
 
 			if (Class->BehavesLike != BEHAVIOR_SPARK && Class->BehavesLike != BEHAVIOR_RAILGUN) {
 				int height_offset = -15 - TacticalMap->Z_Lepton_To_Pixel(Height);

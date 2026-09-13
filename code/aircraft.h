@@ -68,11 +68,11 @@ class AircraftClass : public FootClass, public IFlyControl
 		/*
 		 * IFlyControl methods.
 		 */
-		virtual LONG Landing_Altitude(void) override;
-		virtual LONG Landing_Direction(void) override;
-		virtual BOOL Is_Loaded(void) override;
-		virtual LONG Is_Strafe(void) override;
-		virtual LONG Is_Locked(void) override;
+		virtual std::int32_t Landing_Altitude(void) override;
+		virtual std::int32_t Landing_Direction(void) override;
+		virtual bool Is_Loaded(void) override;
+		virtual bool Is_Strafe(void) override;
+		virtual bool Is_Locked(void) override;
 
 		virtual void Init(void) override;
 		virtual void Detach(AbstractClass const * target, bool all = true) override;

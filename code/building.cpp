@@ -173,6 +173,7 @@
 #include "tracker.h"
 #include "unit.h"
 #include "unittype.h"
+#include "video.h"
 #include "vox.h"
 #include "warhead.h"
 #include "weapon.h"
@@ -688,7 +689,7 @@ void BuildingClass::Debug_Dump(MonoClass * mono) const
 /// <returns>bool; Was anything drawn?</returns>
 bool BuildingClass::Render(Rect & rect, bool forced, bool extras_only) const
 {
-	if (Debug_Map || !MainWindow || ((forced || IsToDisplay) && IsDown && !IsInLimbo)) {
+	if (Debug_Map || !Presentation_Is_Available() || ((forced || IsToDisplay) && IsDown && !IsInLimbo)) {
 		IsToDisplay = false;
 		rect = Intersect(rect, TacticalRect);
 
@@ -933,7 +934,7 @@ void BuildingClass::Draw_Extras(Point2D & xy, Rect & rect)
 			Coord coord = techno->Destination_Coord();
 			coord.Z = techno->PositionCoord.Z;
 
-			if (!MainWindow || Debug_Map || !Scen->Special.IsFogOfWar || (!Map.Is_Fogged(techno->PositionCoord) && !Map.Is_Fogged(coord))) {
+			if (!Presentation_Is_Available() || Debug_Map || !Scen->Special.IsFogOfWar || (!Map.Is_Fogged(techno->PositionCoord) && !Map.Is_Fogged(coord))) {
 				Point2D point;
 				TacticalMap->Coord_To_Pixel(techno->Render_Coord(), point);
 				techno->Draw_It(point, rect);
@@ -9009,7 +9010,7 @@ VisualType BuildingClass::Visual_Character(bool raw, HouseClass const * house) c
 					}
 				}
 			} else {
-				if (IsOwnedByPlayer || Is_Sensed_By_Player() || !MainWindow || (Session.Type != GAME_NORMAL && House != NULL && PlayerPtr != NULL && PlayerPtr->Shares_View_With(House) && House->Shares_View_With(PlayerPtr))) {
+				if (IsOwnedByPlayer || Is_Sensed_By_Player() || !Presentation_Is_Available() || (Session.Type != GAME_NORMAL && House != NULL && PlayerPtr != NULL && PlayerPtr->Shares_View_With(House) && House->Shares_View_With(PlayerPtr))) {
 					return(VISUAL_SHADOWY);
 				}
 			}
@@ -9993,7 +9994,7 @@ bool BuildingClass::Is_Radar_Visible(DetectedType & detected) const
 
 		int height = Class->Height() * CELL_LEPTON_H - CELL_LEPTON;
 		int width = Class->Width() * CELL_LEPTON_W - CELL_LEPTON;
-		bool shrouded = Map.Is_Shrouded(PositionCoord) && Map.Is_Shrouded(PositionCoord + Coord(width, height)) && MainWindow;
+		bool shrouded = Map.Is_Shrouded(PositionCoord) && Map.Is_Shrouded(PositionCoord + Coord(width, height)) && Presentation_Is_Available();
 
 		if (Cloak != CLOAKED && TranslucencyLevel != 15 && !IsFogged && !shrouded) {
 			return(true);

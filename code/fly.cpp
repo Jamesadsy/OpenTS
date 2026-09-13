@@ -610,7 +610,7 @@ void FlyLocomotionClass::Movement_AI(void)
 		bool is_loaded = false;
 		IFlyControl * const flyctrl = dynamic_cast<IFlyControl *>(LinkedTo);
 		if (flyctrl != NULL) {
-			is_loaded = flyctrl->Is_Loaded() != 0;
+			is_loaded = flyctrl->Is_Loaded();
 		}
 
 		if (is_dropship) {

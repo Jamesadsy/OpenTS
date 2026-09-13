@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "win.h"
+#include <cstdint>
 
 
 
@@ -18,25 +18,27 @@ struct IFlyControl
 	/*
 	 * Landing altitude
 	 */
-	virtual LONG Landing_Altitude(void) = 0;
+	virtual std::int32_t Landing_Altitude(void) = 0;
 
 	/*
 	 * Lading direction
 	 */
-	virtual LONG Landing_Direction(void) = 0;
+	virtual std::int32_t Landing_Direction(void) = 0;
 
 	/*
 	 * Loaded with cargo?
 	 */
-	virtual BOOL Is_Loaded(void) = 0;
+	virtual bool Is_Loaded(void) = 0;
 
 	/*
 	 * Does it strafe over the target rather than hover?
 	 */
-	virtual LONG Is_Strafe(void) = 0;
+	virtual bool Is_Strafe(void) = 0;
 
 	/*
 	 * Is the aircraft locked into straight flight?
 	 */
-	virtual LONG Is_Locked(void) = 0;
+	virtual bool Is_Locked(void) = 0;
 };
+
+static_assert(sizeof(std::int32_t) == 4, "IFlyControl numeric values must remain 32-bit");

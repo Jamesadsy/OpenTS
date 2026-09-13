@@ -60,6 +60,7 @@
 #include "sun.h"
 #include "terrain.h"
 #include "terrtype.h"
+#include "video.h"
 #include "vector.h"
 #include "vein.h"
 #include "waypoint.h"
@@ -562,7 +563,7 @@ void Tactical::Wipe_Depth(bool fullredraw, int xoff, int yoff, Rect const & clip
 			pixel += Point2D(ISO_TILE_PIXEL_W, ISO_TILE_PIXEL_H) / -2;
 			pixel += TacticalRect.TopLeft;
 
-			if (MainWindow) {
+			if (Presentation_Is_Available()) {
 				CellRedraw[i]->Wipe_Depth(pixel, cliprect);
 			}
 		}
@@ -849,7 +850,7 @@ void Tactical::Render_Shroud(Rect const & xpanrect, Rect const & ypanrect, Rect 
 			pixel += Point2D(ISO_TILE_PIXEL_W, ISO_TILE_PIXEL_H) / -2;
 			pixel += TacticalRect.TopLeft;
 
-			if (MainWindow) {
+			if (Presentation_Is_Available()) {
 				CellRedraw[i]->Draw_Shroud_And_Fog(pixel, cliprect);
 			}
 			AlphaShapeClass::Draw_In_Area(pixel, cliprect);
@@ -2167,7 +2168,7 @@ void Tactical::Draw_Shroud(Rect const & area)
 
 	Cell base(origin.X - 2, origin.Y);
 
-	if (MainWindow != NULL) {
+	if (Presentation_Is_Available()) {
 		int ix, iy;
 		for (iy = 0; iy < ycount; iy++) {
 			Cell step(iy / 2, (iy + 1) / 2);
@@ -2760,7 +2761,7 @@ void Tactical::Draw_Objects(bool forced)
 				 * cached and must render here. Under the fog it stays hidden -- the fog
 				 * layer shows it as the player last saw it.
 				 */
-				if (MainWindow && !Debug_Map && Map.Is_Fogged(obj->PositionCoord)) {
+				if (Presentation_Is_Available() && !Debug_Map && Map.Is_Fogged(obj->PositionCoord)) {
 					continue;
 				}
 				obj->Render(TacticalRect, forced, false);
@@ -2775,7 +2776,7 @@ void Tactical::Draw_Objects(bool forced)
 				 * already given itself away.
 				 */
 				AnimClass * anim = (AnimClass *)obj;
-				if (MainWindow && !Debug_Map && Map.Is_Fogged(anim->Center_Coord())
+				if (Presentation_Is_Available() && !Debug_Map && Map.Is_Fogged(anim->Center_Coord())
 					&& !anim->IsBuildingAnim && anim->Class->IsShouldFogRemove) {
 					continue;
 				}
@@ -2798,7 +2799,7 @@ void Tactical::Draw_Objects(bool forced)
 					 * A unit that has slipped back under the fog of war is not drawn at
 					 * all. What the player remembers of it is drawn by the fog layer.
 					 */
-					if (MainWindow && !Debug_Map && Scen->Special.IsFogOfWar && Map.Is_Fogged(obj->PositionCoord)) {
+					if (Presentation_Is_Available() && !Debug_Map && Scen->Special.IsFogOfWar && Map.Is_Fogged(obj->PositionCoord)) {
 						continue;
 					}
 				}

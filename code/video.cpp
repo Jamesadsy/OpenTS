@@ -173,6 +173,17 @@ bool Video_Init(NativeWindow const & window, int drawablewidth, int drawableheig
 
 
 /// <summary>
+/// Reports whether the primary game presentation target exists and engine drawing is valid.
+/// This remains true from successful video initialization until presenter teardown; it does
+/// not expose or infer any native window identity, focus state or visibility state.
+/// </summary>
+bool Presentation_Is_Available(void)
+{
+	return(_Initialized);
+}
+
+
+/// <summary>
 /// Stops the presenter and releases the renderer.
 /// </summary>
 void Video_Shutdown(void)
@@ -181,9 +192,9 @@ void Video_Shutdown(void)
 		return;
 	}
 
+	_Initialized = false;
 	Win_Cursor_Shutdown();
 	Backend_Shutdown();
-	_Initialized = false;
 	_FrameIsDirty = false;
 }
 

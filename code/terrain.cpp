@@ -80,6 +80,7 @@
 #include "tactical.h"
 #include "terrtype.h"
 #include "tracker.h"
+#include "video.h"
 #include "warhead.h"
 
 #include "draw.hh"
@@ -861,7 +862,7 @@ bool TerrainClass::Render(Rect & cliprect, bool forced, bool extras_only) const
 {
 	assert(this != NULL);
 
-	if (Debug_Map || !MainWindow || ((forced || IsToDisplay) && IsDown && !IsInLimbo)) {
+	if (Debug_Map || !Presentation_Is_Available() || ((forced || IsToDisplay) && IsDown && !IsInLimbo)) {
 		IsToDisplay = false;
 
 		Point2D point;

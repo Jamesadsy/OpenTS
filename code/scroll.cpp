@@ -61,6 +61,7 @@
 #include "surface.h"
 #include "tactical.h"
 #include "vidscale.h"
+#include "video.h"
 #include "waypoint.h"
 
 #include "special.hh"
@@ -191,7 +192,7 @@ bool ScrollClass::Resolve_Point(Point2D const & point, Cell & cell, Coord & coor
 	if (TacticalMap != NULL && Map.In_Radar(coord)) {
 		Coord coord_height_adjusted = Coord(cell, Map.Get_Height_GL(Coord(cell)));
 
-		shadow = Map.Is_Shrouded(coord_height_adjusted) && MainWindow != NULL;
+		shadow = Map.Is_Shrouded(coord_height_adjusted) && Presentation_Is_Available();
 		fog = false;
 
 		if (Scen->Special.IsFogOfWar) {
@@ -199,7 +200,7 @@ bool ScrollClass::Resolve_Point(Point2D const & point, Cell & cell, Coord & coor
 			if (building != NULL) {
 				fog = building->IsFogged;
 			} else {
-				fog = Map.Is_Fogged(coord_height_adjusted) && MainWindow != NULL;
+				fog = Map.Is_Fogged(coord_height_adjusted) && Presentation_Is_Available();
 			}
 		}
 
