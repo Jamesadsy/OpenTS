@@ -142,7 +142,7 @@ target_compile_options(OpenTS PRIVATE ${OPENTS_COMPILE_OPTIONS})
 
 # TRect retains the source-compatible MSVC property spelling.  Apple Clang
 # implements that language extension independently of the Win32 ABI.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(OpenTS PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fdeclspec>)
 endif()
 
