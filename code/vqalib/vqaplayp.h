@@ -41,7 +41,9 @@
 #include "vqaplay.h"
 #include "cmp.h"
 
+#ifndef NULL
 #define  NULL 0
+#endif
 
 #if 0
 #define STATIC static
@@ -789,4 +791,3 @@ long AllocBuffers(VQAHandleP *vqap);
 void FreeBuffers(VQAHandleP *vqap);
 
 #endif /* VQAPLAYP_H */
-
