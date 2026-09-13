@@ -65,7 +65,12 @@ MotionLibrary::~MotionLibrary()
 /// file is closed before returning.
 /// </summary>
 /// <returns>bool; Was the animation read successfully?</returns>
-BOOL MotionLibrary::Read_File(FileClass & file)
+#ifdef _WIN32
+BOOL
+#else
+bool
+#endif
+MotionLibrary::Read_File(FileClass & file)
 {
 	Clear();
 
