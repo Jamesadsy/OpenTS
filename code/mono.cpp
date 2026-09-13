@@ -95,8 +95,12 @@ MonoClass * MonoClass::Current;
  *   10/17/1994 JLB : Created.                                                                 *
  *   01/06/1997 JLB : Updated to WindowsNT style of mono output.                               *
  *=============================================================================================*/
+#ifdef _WIN32
 MonoClass::MonoClass(void) :
 	Handle(INVALID_HANDLE_VALUE)
+#else
+MonoClass::MonoClass(void)
+#endif
 {
 #ifdef _WINDOWS
 	Handle = CreateFile("\\\\.\\MONO", GENERIC_READ|GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);

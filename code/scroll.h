@@ -102,7 +102,9 @@ class ScrollClass: public TabClass
 
 		ActionType What_Action(Cell const & cell, ObjectClass * object, bool check_fog);
 
+#ifdef _WIN32
 		void Message_Handler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+#endif
 
 	protected:
 		virtual void Mouse_Right_Press(Point2D const & point = Point2D()) override;

@@ -84,7 +84,9 @@ class MonoClass {
 		/*
 		**	Handle of the mono page.
 		*/
+#ifdef _WIN32
 		HANDLE Handle;
+#endif
 
 		/*
 		**	If this is true, then monochrome output is allowed. It defaults to false

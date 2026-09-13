@@ -3849,10 +3849,12 @@ void DisplayClass::Reposition_Sidebar(void)
 /// Handles a window message by handing it straight back to Windows.
 /// </summary>
 /// <returns>Returns with whatever the default window procedure decides.</returns>
+#ifdef _WIN32
 LRESULT DisplayClass::Windows_Message_Proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	return(DefWindowProc(hWnd, Msg, wParam, lParam));
 }
+#endif
 
 
 /// <summary>
