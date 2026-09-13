@@ -7,11 +7,9 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
-
 #include "nettime.h"
 
-#include <windows.h>
-#include <mmsystem.h>
+#include "monotonic.h"
 
 
 namespace NetTiming
@@ -26,10 +24,10 @@ namespace NetTiming
 	}
 
 
-	/// <summary>Reads the system's wrapping millisecond clock.</summary>
+	/// <summary>Reads the process-relative wrapping monotonic millisecond clock.</summary>
 	Milliseconds SystemMillisecondClock::Now(void) const
 	{
-		return(static_cast<Milliseconds>(::timeGetTime()));
+		return(static_cast<Milliseconds>(System_Milliseconds()));
 	}
 
 

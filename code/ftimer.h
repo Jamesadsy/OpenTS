@@ -21,6 +21,9 @@ extern int Frame;
 class FrameTimerClass
 {
 	public:
+		// Frame state is serialized with the game, so its reading remains meaningful.
+		static constexpr bool Reading_Survives_A_Save = true;
+
 		int operator () (void) const {return(Frame);};
 		operator int (void) const {return(Frame);};
 };
