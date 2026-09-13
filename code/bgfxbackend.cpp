@@ -12,8 +12,10 @@
 
 #include "bgfxbackend.h"
 
+#if defined(_WIN32)
 #include "dbgprint.h"
 #include "except.h"
+#endif
 
 #include <bx/allocator.h>
 #include <bgfx/bgfx.h>
@@ -26,7 +28,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(_WIN32)
 #include <malloc.h>
+#endif
 
 
 static const bgfx::EmbeddedShader _EmbeddedShaders[] = {
@@ -59,6 +63,7 @@ static int _PrescaleHeight = 0;
 static int _DrawableWidth = 0;
 static int _DrawableHeight = 0;
 static unsigned int _ResetFlags = BGFX_RESET_FLIP_AFTER_RENDER;
+static unsigned int _SubmittedFrames = 0;
 
 // True while the frame texture holds the game's own 565 layout. When the hardware cannot
 // sample that format the frame is widened to 32 bits on the way in instead.
@@ -91,20 +96,35 @@ class BackendCallback : public bgfx::CallbackI
 			// or the Direct3D debug layer is free to hold, so ending the process over one would
 			// report somebody else's reference as a crash.
 			if (code == bgfx::Fatal::DebugCheck) {
+#if defined(_WIN32)
 				DebugString("Renderer check failed at %s(%u): %s\n",
 							filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+#else
+				fprintf(stderr, "Renderer check failed at %s(%u): %s\n",
+							filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+#endif
 				return;
 			}
 
+#if defined(_WIN32)
 			Fatal("Renderer error %d at %s(%u): %s", (int)code,
 						filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+#else
+			fprintf(stderr, "Renderer error %d at %s(%u): %s\n", (int)code,
+						filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+			abort();
+#endif
 		}
 
 		virtual void traceVargs(const char * filepath, uint16_t line, const char * format, va_list argList) override
 		{
 			char message[1024];
 			vsnprintf(message, sizeof(message), format, argList);
+#if defined(_WIN32)
 			OutputDebugString(message);
+#else
+			fputs(message, stderr);
+#endif
 		}
 
 		virtual void profilerBegin(const char *, uint32_t, const char *, uint16_t) override {}
@@ -122,6 +142,7 @@ class BackendCallback : public bgfx::CallbackI
 static BackendCallback _Callback;
 
 
+#if defined(_WIN32)
 // bgfx contains cache-line-aligned render records but requests their backing arrays with
 // the allocator's default alignment. The Win32 CRT only guarantees eight-byte alignment,
 // which is insufficient when clang-cl copies those records with aligned SSE instructions.
@@ -144,6 +165,7 @@ class BackendAllocator : public bx::AllocatorI
 };
 
 static BackendAllocator _Allocator;
+#endif
 
 
 /// <summary>
@@ -304,7 +326,9 @@ bool Backend_Init(NativeWindow const & window, int drawablewidth, int drawablehe
 	init.resolution.height = (uint32_t)drawableheight;
 	init.resolution.reset = _ResetFlags;
 	init.callback = &_Callback;
+#if defined(_WIN32)
 	init.allocator = &_Allocator;
+#endif
 
 	switch (renderer) {
 		case BACKEND_RENDERER_D3D11:
@@ -356,6 +380,7 @@ bool Backend_Init(NativeWindow const & window, int drawablewidth, int drawablehe
 	}
 
 	_Initialized = true;
+	_SubmittedFrames = 0;
 	return(true);
 }
 
@@ -391,6 +416,7 @@ void Backend_Shutdown(void)
 
 	_FrameWidth = 0;
 	_FrameHeight = 0;
+	_SubmittedFrames = 0;
 	_Initialized = false;
 }
 
@@ -537,6 +563,7 @@ void Backend_Present(void const * pixels, int pitch, int destx, int desty, int d
 	Submit_Quad(VIEW_PRESENT, source, (float)destx, (float)desty, (float)destwidth, (float)destheight, samplerflags, flipv);
 
 	bgfx::frame();
+	_SubmittedFrames++;
 }
 
 
@@ -549,4 +576,10 @@ char const * Backend_Renderer_Name(void)
 		return("none");
 	}
 	return(bgfx::getRendererName(bgfx::getRendererType()));
+}
+
+
+unsigned int Backend_Submitted_Frame_Count(void)
+{
+	return(_SubmittedFrames);
 }

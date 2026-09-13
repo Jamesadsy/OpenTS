@@ -50,6 +50,8 @@ endif()
 
 if(WIN32)
     enable_language(RC)
+elseif(APPLE)
+    enable_language(OBJCXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)

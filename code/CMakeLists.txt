@@ -174,6 +174,30 @@ set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/bgfxbackend.cpp" PROPER
         "BX_CONFIG_DEBUG=$<IF:$<CONFIG:Debug>,1,$<BOOL:${BX_CONFIG_DEBUG}>>"
 )
 
+if(APPLE)
+    find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+
+    add_executable(OpenTSHostSmoke
+        "${CMAKE_CURRENT_SOURCE_DIR}/macoshost.mm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/hostruntime.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/keyboard.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/bgfxbackend.cpp"
+    )
+    target_compile_features(OpenTSHostSmoke PRIVATE cxx_std_20)
+    target_compile_options(OpenTSHostSmoke PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-fdeclspec>"
+        "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>"
+    )
+    target_include_directories(OpenTSHostSmoke PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${OPENTS_GENERATED_DIR}"
+    )
+    target_link_libraries(OpenTSHostSmoke PRIVATE bgfx bx bimg "${APPKIT_FRAMEWORK}")
+    set_target_properties(OpenTSHostSmoke PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+endif()
+
 if(MSVC)
     set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/bgfxbackend.cpp" APPEND PROPERTY
         COMPILE_OPTIONS "/Zc:preprocessor")

@@ -55,8 +55,10 @@
 #include "keyboard.h"
 
 #include "_xmouse.h"
+#if defined(_WIN32)
 #include "msgloop.h"
 #include "vidscale.h"
+#endif
 
 #include <cmath>
 
@@ -207,7 +209,7 @@ bool WWKeyboardClass::Put(unsigned short key)
 
 
 /***********************************************************************************************
- * WWKeyboardClass::Put_Key_Message -- Translates and inserts wParam into Keyboard Buffer      *
+ * WWKeyboardClass::Put_Key_Event -- Translates and inserts a host key into Keyboard Buffer    *
  *                                                                                             *
  * INPUT:                                                                                      *
  *                                                                                             *
@@ -218,7 +220,7 @@ bool WWKeyboardClass::Put(unsigned short key)
  * HISTORY:                                                                                    *
  *   10/16/1995 PWG : Created.                                                                 *
  *=============================================================================================*/
-bool WWKeyboardClass::Put_Key_Message(unsigned short vk_key, bool release)
+bool WWKeyboardClass::Put_Key_Event(unsigned short vk_key, bool release, bool shift, bool control, bool alt)
 {
 	/*
 	**	Get the status of all of the different keyboard modifiers.  Note, only pay attention
@@ -227,20 +229,20 @@ bool WWKeyboardClass::Put_Key_Message(unsigned short vk_key, bool release)
 	**	would be incompatible with the dos version.
 	*/
 	if (!Is_Mouse_Key(vk_key)) {
-		if (((GetKeyState(VK_SHIFT) & 0x8000) != 0) /*||
-			((GetKeyState(VK_CAPITAL) & 0x0008) != 0) ||
-			((GetKeyState(VK_NUMLOCK) & 0x0008) != 0)*/) {
-
+		if (shift) {
 			vk_key |= WWKEY_SHIFT_BIT;
 		}
-		if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+		if (control) {
 			vk_key |= WWKEY_CTRL_BIT;
 		}
-		if ((GetKeyState(VK_MENU) & 0x8000) != 0) {
+		if (alt) {
 			vk_key |= WWKEY_ALT_BIT;
 		}
 	}
 
+#if !defined(_WIN32)
+	KeyState[vk_key & 0xFF] = release ? 0 : 0x80;
+#endif
 	if (release) {
 		vk_key |= WWKEY_RLS_BIT;
 	}
@@ -250,6 +252,44 @@ bool WWKeyboardClass::Put_Key_Message(unsigned short vk_key, bool release)
 	**	system.
 	*/
 	return(Put(vk_key));
+}
+
+
+#if defined(_WIN32)
+bool WWKeyboardClass::Put_Key_Message(unsigned short vk_key, bool release)
+{
+	return(Put_Key_Event(vk_key, release,
+		(GetKeyState(VK_SHIFT) & 0x8000) != 0,
+		(GetKeyState(VK_CONTROL) & 0x8000) != 0,
+		(GetKeyState(VK_MENU) & 0x8000) != 0));
+}
+#endif
+
+
+bool WWKeyboardClass::Put_Host_Event(OpenTSHostEvent const & event)
+{
+	switch (event.Type) {
+		case OPENTS_HOST_EVENT_KEY:
+			return(Put_Key_Event(event.Key, event.Release, event.Shift, event.Control, event.Alt));
+
+		case OPENTS_HOST_EVENT_MOUSE_MOVE:
+			MouseQX = event.X;
+			MouseQY = event.Y;
+			MousePos = Point2D(MouseQX, MouseQY);
+			return(true);
+
+		case OPENTS_HOST_EVENT_MOUSE_BUTTON:
+			return(Put_Mouse_Message(event.Key, event.X, event.Y, event.Release));
+
+		case OPENTS_HOST_EVENT_FOCUS:
+			if (!event.Focused) {
+				memset(KeyState, '\0', sizeof(KeyState));
+			}
+			return(false);
+
+		default:
+			return(false);
+	}
 }
 
 
@@ -276,7 +316,7 @@ bool WWKeyboardClass::Put_Key_Message(unsigned short vk_key, bool release)
 bool WWKeyboardClass::Put_Mouse_Message(unsigned short vk_key, int x, int y, bool release)
 {
 	if (Available_Buffer_Room() >= 3 && Is_Mouse_Key(vk_key)) {
-		Put_Key_Message(vk_key, release);
+		Put_Key_Event(vk_key, release, false, false, false);
 		Put((unsigned short)x);
 		Put((unsigned short)y);
 		return(true);
@@ -310,6 +350,7 @@ int WWKeyboardClass::To_ASCII(unsigned short key)
 		return(0);
 	}
 
+#if defined(_WIN32)
 	/*
 	**	Set the KeyState buffer to reflect the shift bits stored in the key value.
 	*/
@@ -361,6 +402,21 @@ int WWKeyboardClass::To_ASCII(unsigned short key)
 	}
 
 	return(buffer[0]);
+#else
+	unsigned short const virtualkey = key & 0xFF;
+	bool const shift = (key & WWKEY_SHIFT_BIT) != 0;
+	if (virtualkey >= VK_A && virtualkey <= VK_Z) {
+		return(shift ? virtualkey : virtualkey + ('a' - 'A'));
+	}
+	if (virtualkey >= VK_0 && virtualkey <= VK_9) {
+		static char const shifted[] = ")!@#$%^&*(";
+		return(shift ? shifted[virtualkey - VK_0] : virtualkey);
+	}
+	if (virtualkey == VK_SPACE || virtualkey == VK_TAB || virtualkey == VK_RETURN || virtualkey == VK_BACK) {
+		return(virtualkey);
+	}
+	return(0);
+#endif
 }
 
 
@@ -382,11 +438,15 @@ bool WWKeyboardClass::Down(unsigned short key)
 {
 	key &= 0xFF;
 
+#if defined(_WIN32)
 	if ((key == VK_LBUTTON || key == VK_RBUTTON) && GetSystemMetrics(SM_SWAPBUTTON) == TRUE) {
 		key = (key != VK_LBUTTON) ? VK_LBUTTON : VK_RBUTTON;
 	}
 
 	return(GetAsyncKeyState(key) != 0);
+#else
+	return(KeyState[key] != 0);
+#endif
 }
 
 
@@ -537,6 +597,7 @@ bool WWKeyboardClass::Is_Buffer_Empty(void) const
  *=============================================================================================*/
 void WWKeyboardClass::Fill_Buffer_From_System(void)
 {
+#if defined(_WIN32)
 	if (!Is_Buffer_Full()) {
 		Windows_Message_Handler();
 //		MSG	msg;
@@ -548,6 +609,7 @@ void WWKeyboardClass::Fill_Buffer_From_System(void)
 //			DispatchMessage(&msg);
 //		}
 	}
+#endif
 }
 
 
@@ -606,6 +668,7 @@ void WWKeyboardClass::Clear(void)
  * HISTORY:                                                                                    *
  *   09/30/1996 JLB : Created.                                                                 *
  *=============================================================================================*/
+#if defined(_WIN32)
 int WWKeyboardClass::Message_Handler(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	bool processed = false;
@@ -757,6 +820,7 @@ int WWKeyboardClass::Message_Handler(HWND window, UINT message, WPARAM wParam, L
 	}
 	return(false);
 }
+#endif
 
 
 /***********************************************************************************************

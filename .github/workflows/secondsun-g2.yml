@@ -40,24 +40,45 @@ jobs:
       - name: Record runner, toolchain, and source provenance
         shell: bash
         run: |
-          set -euxo pipefail
-          sw_vers
-          uname -m
-          test "$(uname -m)" = arm64
-          xcodebuild -version
-          clang --version
-          cmake --version
-          git rev-parse HEAD
-          git rev-parse 'HEAD^{tree}'
-          git submodule status --recursive
+          set -o pipefail
+          {
+            set -eux
+            sw_vers
+            uname -m
+            test "$(uname -m)" = arm64
+            xcodebuild -version
+            clang --version
+            cmake --version
+            git rev-parse HEAD
+            git rev-parse 'HEAD^{tree}'
+            git submodule status --recursive
+          } 2>&1 | tee macos-provenance.log
 
       - name: Configure native Apple Clang C++20 probe
-        run: >
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_OSX_ARCHITECTURES=arm64
-          -DCMAKE_C_COMPILER=clang
-          -DCMAKE_CXX_COMPILER=clang++
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_OBJCXX_COMPILER=clang++ 2>&1 | tee macos-configure.log
+
+      - name: Compile native Cocoa host diagnostic
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --target OpenTSHostSmoke --parallel 3 2>&1 | tee macos-host-build.log
+
+      - name: Run no-data Cocoa and bgfx host diagnostic
+        shell: bash
+        run: |
+          set -o pipefail
+          build/bin/OpenTSHostSmoke --opents-host-smoke 2>&1 | tee macos-host-run.log
+          file build/bin/OpenTSHostSmoke | tee macos-host-file.log
+          otool -L build/bin/OpenTSHostSmoke | tee macos-host-linkage.log
+          shasum -a 256 build/bin/OpenTSHostSmoke | tee macos-host-sha256.log
 
       - name: Compile the OpenTS dependency closure
         id: compile
@@ -89,6 +110,13 @@ jobs:
         with:
           name: secondsun-g2-macos-arm64-${{ github.sha }}
           path: |
+            macos-provenance.log
+            macos-configure.log
+            macos-host-build.log
+            macos-host-run.log
+            macos-host-file.log
+            macos-host-linkage.log
+            macos-host-sha256.log
             macos-compile.log
             macos-tests-build.log
             macos-ctest.log

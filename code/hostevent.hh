@@ -10,19 +10,26 @@
 #pragma once
 
 
-enum NativeWindowType
+enum OpenTSHostEventType
 {
-	NATIVE_WINDOW_DEFAULT,
-	NATIVE_WINDOW_WAYLAND,
-	NATIVE_WINDOW_COCOA,
+	OPENTS_HOST_EVENT_NONE,
+	OPENTS_HOST_EVENT_KEY,
+	OPENTS_HOST_EVENT_MOUSE_MOVE,
+	OPENTS_HOST_EVENT_MOUSE_BUTTON,
+	OPENTS_HOST_EVENT_FOCUS,
+	OPENTS_HOST_EVENT_QUIT,
 };
 
 
-// The native handles bgfx needs to present into a window supplied by the application shell.
-// Display is unused on platforms where the window identifies its display by itself.
-struct NativeWindow
+struct OpenTSHostEvent
 {
-	NativeWindowType Type;
-	void * Display;
-	void * Handle;
+	OpenTSHostEventType Type = OPENTS_HOST_EVENT_NONE;
+	unsigned short Key = 0;
+	int X = 0;
+	int Y = 0;
+	bool Release = false;
+	bool Shift = false;
+	bool Control = false;
+	bool Alt = false;
+	bool Focused = false;
 };

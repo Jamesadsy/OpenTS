@@ -32,7 +32,11 @@
 #pragma once
 
 #include "_xmouse.h"
+#include "hostevent.hh"
+
+#if defined(_WIN32)
 #include "win.h"
+#endif
 
 enum WWKey_Type {
 	WWKEY_SHIFT_BIT	= 0x100,
@@ -59,9 +63,12 @@ class WWKeyboardClass
 		void Clear(void);
 		int To_ASCII(unsigned short num);
 		bool Down(unsigned short key);
+		bool Put_Host_Event(OpenTSHostEvent const & event);
 
 		/* Define the main hook for the message processing loop.					*/
+#if defined(_WIN32)
 		int Message_Handler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+#endif
 
 		/* Define the public access variables which are used with the			*/
 		/*   Keyboard Class.																	*/
@@ -92,7 +99,10 @@ class WWKeyboardClass
 		bool Is_Buffer_Empty(void) const;
 		static bool Is_Mouse_Key(unsigned short key);
 		void Fill_Buffer_From_System(void);
+		bool Put_Key_Event(unsigned short vk_key, bool release, bool shift, bool control, bool alt);
+#if defined(_WIN32)
 		bool Put_Key_Message(unsigned short vk_key, bool release = false);
+#endif
 		bool Put_Mouse_Message(unsigned short vk_key, int x, int y, bool release = false);
 		int Available_Buffer_Room(void) const;
 		int Noop(void) const; /// Empty routine added in a TS patch.

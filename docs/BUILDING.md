@@ -111,6 +111,26 @@ Saved games, logs, and crash reports go to the user directory, which defaults to
 the executable's own directory, so a build writes beside itself unless
 `-USERDIR=` says otherwise.
 
+## Native macOS host diagnostic
+
+The Second Sun branch provides an unsupported ARM64 macOS diagnostic for the
+native process, Cocoa window, event/input adapter, and bgfx presentation seam.
+It does not run the game and needs no game data:
+
+```bash
+cmake -S . -B build/macos -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_OSX_ARCHITECTURES=arm64
+cmake --build build/macos --target OpenTSHostSmoke
+build/macos/bin/OpenTSHostSmoke --opents-host-smoke
+```
+
+The diagnostic creates a native `NSWindow`/`NSView`, passes the view through
+`NativeWindow` to bgfx, translates Cocoa keyboard and mouse events into the
+engine input queue, submits a fixed number of frames, and exits. Success proves
+only that data-independent host seam. It does not prove gameplay, audio, user
+storage, saved games, or a supported macOS build.
+
 ## Experimental clang-cl cross-build
 
 An unsupported Linux cross-build is available for compiler-portability work. It

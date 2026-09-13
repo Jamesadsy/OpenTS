@@ -44,3 +44,4 @@ void Backend_On_Resize(int drawablewidth, int drawableheight);
 void Backend_Present(void const * pixels, int pitch, int destx, int desty, int destwidth, int destheight, BackendScaleMode mode);
 
 char const * Backend_Renderer_Name(void);
+unsigned int Backend_Submitted_Frame_Count(void);

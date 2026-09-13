@@ -79,6 +79,7 @@
 #include "goptions.h"
 #include "house.h"
 #include "houstype.h"
+#include "hostruntime.hh"
 #include "hover.h"
 #include "infantry.h"
 #include "infatype.h"
@@ -357,15 +358,43 @@ static int Build_Arguments(char const * path_to_exe, char ** & argv)
  * HISTORY:                                                                                    *
  *   03/20/1995 JLB : Created.                                                                 *
  *=============================================================================================*/
-int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_show )
-{
-	int		argc;       //Command line argument count
-	char **	argv;       //Pointers to command line arguments
-	char	path_to_exe[MAX_PATH];
-	char	buffer[512];
+static int OpenTS_Windows_Run(int argc, char ** argv, HINSTANCE instance, int command_show);
 
-	// First, so that everything after it is covered, including the rest of this function.
+
+class WindowsOpenTSHost final : public OpenTSHost
+{
+	public:
+		WindowsOpenTSHost(HINSTANCE instance, int command_show) : Instance(instance), CommandShow(command_show) {}
+
+		virtual char const * Name(void) const override { return("Win32"); }
+		virtual int Run_Game(int argc, char ** argv) override
+		{
+			return(OpenTS_Windows_Run(argc, argv, Instance, CommandShow));
+		}
+
+	private:
+		HINSTANCE Instance;
+		int CommandShow;
+};
+
+
+int CALLBACK WinMain(HINSTANCE instance, HINSTANCE, char *, int command_show)
+{
 	Install_Exception_Handler();
+
+	char path_to_exe[MAX_PATH];
+	GetModuleFileName(instance, path_to_exe, sizeof(path_to_exe));
+	char ** argv = NULL;
+	int const argc = Build_Arguments(path_to_exe, argv);
+
+	WindowsOpenTSHost host(instance, command_show);
+	return(OpenTS_Run(argc, argv, host));
+}
+
+
+static int OpenTS_Windows_Run(int argc, char ** argv, HINSTANCE instance, int command_show)
+{
+	char	buffer[512];
 
 	ProgramInstance = instance;
 
@@ -462,17 +491,6 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 	}
 
 	RegisterClasses();
-
-	/*
-	**	Get the full path to the .EXE
-	*/
-	GetModuleFileName (instance, &path_to_exe[0], sizeof(path_to_exe));
-
-	/*
-	**	Get pointers to command line arguments just like if we were in DOS
-	**
-	*/
-	argc = Build_Arguments(path_to_exe, argv);
 
 	/*
 	**	Change directory to the where the executable is located. Handle the
