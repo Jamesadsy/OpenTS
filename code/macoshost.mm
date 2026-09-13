@@ -71,7 +71,7 @@ class MacOpenTSHost final : public OpenTSHost
 
 		virtual NativeWindow Native_Window(void) const override
 		{
-			return({NATIVE_WINDOW_COCOA, nullptr, (__bridge void *)View});
+			return NativeWindow{NATIVE_WINDOW_COCOA, nullptr, (__bridge void *)View};
 		}
 
 		virtual bool Drawable_Size(int & width, int & height) const override
