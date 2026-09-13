@@ -20,8 +20,13 @@
 #include <algorithm>
 #include <iterator>
 
+#ifdef _WIN32
 BOOL VoxelDrawSystem::EnableLighting;
 BOOL VoxelDrawSystem::EnableZBuffer;
+#else
+bool VoxelDrawSystem::EnableLighting;
+bool VoxelDrawSystem::EnableZBuffer;
+#endif
 
 unsigned char VoxelDrawBuffer[VOXEL_BITMAP_WIDTH * VOXEL_BITMAP_HEIGHT * VOXEL_BITMAP_BPP];
 BSurface VoxelSurface(VOXEL_BITMAP_WIDTH, VOXEL_BITMAP_HEIGHT, VOXEL_BITMAP_BPP, VoxelDrawBuffer);

@@ -27,18 +27,18 @@ VoxelPaletteLibrary::VoxelPaletteLibrary(RGBStruct * rgb, void * lut)
 {
 	if (rgb == NULL) {
 		Colors = new RGBStruct[VPL_NUM_COLORS];
-		ColorsAllocated = TRUE;
+		ColorsAllocated = true;
 	} else {
 		Colors = rgb;
-		ColorsAllocated = FALSE;
+		ColorsAllocated = false;
 	}
 
 	if (lut == NULL) {
 		LUT = new unsigned char[VPL_NUM_COLORS*VPL_NUM_ENTRIES];
-		LUTAllocated = TRUE;
+		LUTAllocated = true;
 	} else {
 		LUT = (unsigned char *)lut;
-		LUTAllocated = FALSE;
+		LUTAllocated = false;
 	}
 }
 

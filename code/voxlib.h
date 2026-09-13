@@ -177,8 +177,13 @@ class VoxelPaletteLibrary
 		 * These flags record which of the two buffers this library allocated for itself. A
 		 * buffer the creator supplied is left alone when the library is destroyed.
 		 */
+#ifdef _WIN32
 		BOOL ColorsAllocated;
 		BOOL LUTAllocated;
+#else
+		bool ColorsAllocated;
+		bool LUTAllocated;
+#endif
 
 	enum {
 		VPL_NUM_COLORS = 256,
