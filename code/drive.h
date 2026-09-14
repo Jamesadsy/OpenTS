@@ -109,7 +109,7 @@ class DriveLocomotionClass : public LocomotionClass, public IPiggyback
 		Matrix3D Get_Slope_Matrix(void) const;
 		double Get_Slope_Ratio(void) const;
 		void Set_Slope(int ramp);
-		BOOL Is_Angled(void) const;
+		bool Is_Angled(void) const;
 		bool Incoming(Cell cell);
 		bool Abandon_Navigation(void);
 

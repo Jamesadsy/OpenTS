@@ -396,7 +396,7 @@ void DriveLocomotionClass::Stop_Moving(void)
 /// ways of building the unit's draw matrix.
 /// </summary>
 /// <returns>bool; Is the unit level and settled?</returns>
-BOOL DriveLocomotionClass::Is_Angled(void) const
+bool DriveLocomotionClass::Is_Angled(void) const
 {
 	float percent = Get_Slope_Ratio();
 	if (percent == 1.0) {
