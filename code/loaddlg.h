@@ -34,6 +34,7 @@
 
 #include "house.hh"
 #include "opents_version.h"
+#include "savefileenum.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -48,7 +49,7 @@ class FileEntryClass {
 		HousesType House;   // house
 		char PlayerName[64];
 		int Num;            // save file number (from the extension)
-		FILETIME DateTime;  // date/time stamp of file
+		std::chrono::system_clock::time_point DateTime;  // date/time stamp of file
 		bool Valid;         // Is the scenario valid?
 		GameType Type;
 
@@ -62,8 +63,7 @@ class FileEntryClass {
 			Descr[0] = '\0';
 			Filename[0] = '\0';
 			PlayerName[0] = '\0';
-			DateTime.dwHighDateTime = 0;
-			DateTime.dwLowDateTime = 0;
+			DateTime = std::chrono::system_clock::time_point::min();
 		}
 };
 
@@ -105,13 +105,14 @@ class LoadOptionsClass
 		virtual bool Load_File(const char * file_name);
 		virtual bool Save_File(const char * file_name, const char * descr);
 		virtual bool Delete_File(const char * file_name);
-		virtual bool Read_File(FileEntryClass * entry, WIN32_FIND_DATAA * ff);
+		virtual bool Read_File(FileEntryClass * entry, SaveFileRecord const * record);
 
 	protected:
 		/*
 		**	Internal routines
 		*/
 		void Clear_List (void);                                     // clears the list & game # array
+		void Build_List (void);                                     // builds the model list from saves
 		void Fill_List (HWND window);                               // fills the list & game # array
 		int Num_From_Ext (char *fname);                             // translates filename to file #
 		static int __cdecl Compare(const void *p1, const void *p2); // for qsort()
@@ -204,7 +205,7 @@ class MultiplayerLoadOptionsClass : public LoadOptionsClass
 		MultiplayerLoadOptionsClass(void);
 
 		virtual bool Load_File(const char * file_name);
-		virtual bool Read_File(FileEntryClass * entry, WIN32_FIND_DATAA * ff);
+		virtual bool Read_File(FileEntryClass * entry, SaveFileRecord const * record);
 
 		char const * Picked_File(void) const {return(Picked);}
 

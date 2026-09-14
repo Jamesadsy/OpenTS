@@ -66,6 +66,7 @@
 #include "ramp.hh"
 
 #include <algorithm>
+#include <cstdio>
 #include <deque>
 #include <optional>
 #include <vector>
@@ -4525,15 +4526,15 @@ bool MapSeedClass::Delete_File(const char * file_name)
 /// is passed over.
 /// </summary>
 /// <param name="entry">The list entry to fill in.</param>
-/// <param name="ff">The file the directory search turned up.</param>
+/// <param name="record">The portable record the directory enumeration turned up.</param>
 /// <returns>bool; Was the entry filled in from a readable random map file?</returns>
-bool MapSeedClass::Read_File(FileEntryClass * entry, WIN32_FIND_DATAA * ff)
+bool MapSeedClass::Read_File(FileEntryClass * entry, SaveFileRecord const * record)
 {
 	char buffer[128];
 
-	if (entry != NULL && ff != NULL) {
-		if (stricmp(ff->cFileName, RANDOM_MAP_FILE_NAME)) {
-			RawFileClass file(Saved_Game_Name(ff->cFileName).c_str());
+	if (entry != NULL && record != NULL) {
+		if (stricmp(record->Filename.c_str(), RANDOM_MAP_FILE_NAME)) {
+			RawFileClass file(Saved_Game_Name(record->Filename.c_str()).c_str());
 			INIClass ini;
 			if (ini.Load(file)) {
 				if (ini.Get_String("RandomMap", "Description", 0, buffer, sizeof(buffer)) > 0 )
@@ -4546,12 +4547,8 @@ bool MapSeedClass::Read_File(FileEntryClass * entry, WIN32_FIND_DATAA * ff)
 				}
 				entry->Scenario = 0;
 				entry->House = HOUSE_FIRST;
-				strncpy(entry->Filename, ff->cFileName, sizeof(entry->Filename));
-				if (!strlen(entry->Filename)) {
-					strncpy(entry->Filename, ff->cAlternateFileName, sizeof(entry->Filename));
-				}
-				entry->DateTime.dwHighDateTime = ff->ftLastWriteTime.dwHighDateTime;
-				entry->DateTime.dwLowDateTime = ff->ftLastWriteTime.dwLowDateTime;
+				std::snprintf(entry->Filename, sizeof(entry->Filename), "%s", record->Filename.c_str());
+				entry->DateTime = record->ModifiedAt;
 				return(true);
 			}
 		}

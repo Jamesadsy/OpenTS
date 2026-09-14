@@ -339,7 +339,7 @@ class MapSeedClass : public LoadOptionsClass
 		virtual bool Load_File(const char * file_name) override;
 		virtual bool Save_File(const char * file_name, const char * descr) override;
 		virtual bool Delete_File(const char * file_name) override;
-		virtual bool Read_File(FileEntryClass * entry, WIN32_FIND_DATAA * ff) override;
+		virtual bool Read_File(FileEntryClass * entry, SaveFileRecord const * record) override;
 
 	protected:
 
