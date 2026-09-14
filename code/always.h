@@ -110,6 +110,7 @@
 #define stricmp  strcasecmp
 #define _stricmp strcasecmp
 #define strnicmp strncasecmp
+#define _strnicmp strncasecmp
 #define memicmp  strncasecmp
 #define __cdecl
 

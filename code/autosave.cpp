@@ -9,6 +9,8 @@
 
 #include "autosave.h"
 
+#include "always.h"
+
 #include <cctype>
 #include <cstdio>
 #include <cstring>
