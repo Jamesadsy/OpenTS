@@ -115,6 +115,7 @@
 #include "partsys.h"
 #include "revent.h"
 #include "rules.h"
+#include "returnaddress.h"
 #include "saveload.h"
 #include "savestream.h"
 #include "session.h"
@@ -2140,7 +2141,7 @@ void FootClass::Per_Cell_Process(PCPType why)
  *=========================================================================*/
 void FootClass::Override_Mission(MissionType mission, AbstractClass * tarcom, AbstractClass * navcom)
 {
-	Sync_Record_Mission(*this, CurrentMission, mission, SYNC_MISSION_OVERRIDE, (unsigned)(uintptr_t)_ReturnAddress());
+	Sync_Record_Mission(*this, CurrentMission, mission, SYNC_MISSION_OVERRIDE, (unsigned)OPENTS_RETURN_ADDRESS());
 
 	SuspendedNavCom = NavCom;
 	BASECLASS::Override_Mission(mission, tarcom, navcom);

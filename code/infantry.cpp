@@ -120,6 +120,7 @@
 #include "overlay.h"
 #include "overtype.h"
 #include "rules.h"
+#include "returnaddress.h"
 #include "savestream.h"
 #include "scheme.h"
 #include "session.h"
@@ -1234,7 +1235,7 @@ void InfantryClass::Assign_Destination(AbstractClass * target, bool immediate)
  *=============================================================================================*/
 void InfantryClass::Assign_Target(AbstractClass * target)
 {
-	Sync_Record_Target(*this, target, (unsigned)(uintptr_t)_ReturnAddress());
+	Sync_Record_Target(*this, target, (unsigned)OPENTS_RETURN_ADDRESS());
 
 	if (target != TarCom && Strength > 0) {
 		IsFiring = false;

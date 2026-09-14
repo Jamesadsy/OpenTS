@@ -37,6 +37,7 @@
 #include "always.h"
 
 #include "facing.h"
+#include "returnaddress.h"
 
 #include "syncrechook.h"
 
@@ -124,7 +125,7 @@ bool FacingClass::Set_Desired(DirType const & facing)
 /// <returns>bool; Did the facing actually change?</returns>
 bool FacingClass::Set(DirType const & facing)
 {
-	Sync_Record_Facing(facing, (unsigned)(uintptr_t)_ReturnAddress());
+	Sync_Record_Facing(facing, (unsigned)OPENTS_RETURN_ADDRESS());
 
 	if (Current() != facing) {
 		DesiredFacing = facing;

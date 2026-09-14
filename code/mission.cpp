@@ -46,6 +46,7 @@
 #include "always.h"
 
 #include "mission.h"
+#include "returnaddress.h"
 
 #include "_bench.h"
 #include "_mission.h"
@@ -343,7 +344,7 @@ bool MissionClass::Commence(void)
  *=============================================================================================*/
 void MissionClass::Assign_Mission(MissionType order)
 {
-	Sync_Record_Mission(*this, CurrentMission, order, SYNC_MISSION_ASSIGN, (unsigned)(uintptr_t)_ReturnAddress());
+	Sync_Record_Mission(*this, CurrentMission, order, SYNC_MISSION_ASSIGN, (unsigned)OPENTS_RETURN_ADDRESS());
 
 	if (CurrentMission == MISSION_DECONSTRUCTION) return;
 	/*
