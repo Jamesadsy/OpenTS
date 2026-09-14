@@ -17,19 +17,22 @@
 
 #include "data.h"
 #include "dbgprint.h"
-#include "vidscale.h"
 
 
 /// <summary>
-/// Constructs an empty tooltip manager for the window specified.
+/// Constructs an empty tooltip manager.
 /// The manager starts out deactivated and carrying no tooltips, with the default hover
 /// delay and lifetime.
 /// </summary>
-/// <param name="window">The window whose tooltips this manager will look after.</param>
 /// <remarks>No tooltip will appear until Activate is called.</remarks>
-ToolTipManager::ToolTipManager(HWND window) :
-	Window(window),
+ToolTipManager::ToolTipManager(void) :
 	IsActive(false),
+	CandidateToolTip(NULL),
+	CandidateStarted(0),
+	CurrentStarted(0),
+	HasPointer(false),
+	HasFocus(true),
+	PresentationAvailable(true),
 	CurrentToolTip(NULL),
 	ToolTipDelay(TOOLTIP_DELAY),
 	ToolTipLifetime(TOOLTIP_LIFETIME)
@@ -41,13 +44,10 @@ ToolTipManager::ToolTipManager(HWND window) :
 
 /// <summary>
 /// Destroys the tooltip manager.
-/// The hover timer is handed back to Windows and every tooltip registered with the manager
-/// is destroyed along with it.
+/// Every tooltip registered with the manager is destroyed along with it.
 /// </summary>
 ToolTipManager::~ToolTipManager(void)
 {
-	KillTimer(Window, TOOLTIP_EVENT);
-
 	Reset_Current();
 
 	ToolTipIndex.Clear();
@@ -74,8 +74,7 @@ void ToolTipManager::Activate(bool state)
 	if (IsActive != state) {
 		IsActive = state;
 		if (!IsActive) {
-			KillTimer(Window, TOOLTIP_EVENT);
-			Reset_Current();
+			Pointer_Activity();
 		}
 
 		DebugString("Tooltips are %s.\n", IsActive == true ? "on" : "off");
@@ -84,50 +83,99 @@ void ToolTipManager::Activate(bool state)
 
 
 /// <summary>
-/// Handles the window messages that drive the tooltip display.
-/// This routine must be fed the message pump's traffic. Mouse movement restarts the hover
-/// countdown, a button press dismisses whatever is showing, and the timer message is what
-/// brings a tooltip up and later takes it away again.
-/// </summary>
-/// <param name="msg">The window message to examine.</param>
-void ToolTipManager::Message_Handler(MSG * msg)
+/// Applies one translated host event to tooltip state.
+void ToolTipManager::Host_Event(OpenTSHostEvent const & event, std::int64_t now)
 {
-	if (IsActive == true) {
+	switch (event.Type) {
+		case OPENTS_HOST_EVENT_MOUSE_MOVE:
+			Pointer_Moved(Point2D(event.X, event.Y), now);
+			break;
 
-		switch (msg->message) {
-			case WM_LBUTTONDOWN:
-			case WM_LBUTTONUP:
-			case WM_RBUTTONDOWN:
-			case WM_RBUTTONUP:
-			case WM_MBUTTONDOWN:
-			case WM_MBUTTONUP:
-				KillTimer(Window, TOOLTIP_EVENT);
-				Reset_Current();
-				break;
+		case OPENTS_HOST_EVENT_MOUSE_BUTTON:
+			Pointer_Activity();
+			break;
 
-			case WM_MOUSEMOVE:
-				KillTimer(Window, TOOLTIP_EVENT);
-				SetTimer(Window, TOOLTIP_EVENT, ToolTipDelay, NULL);
-				Reset_Current();
-				break;
+		case OPENTS_HOST_EVENT_KEY:
+			Keyboard_Activity();
+			break;
 
-			case WM_TIMER:
-				if (msg->wParam == TOOLTIP_EVENT) {
-					KillTimer(Window, TOOLTIP_EVENT);
-					if (CurrentToolTip != NULL) {
-						Reset_Current();
-					} else {
-						GetCursorPos((LPPOINT)&LastMousePos);
-						Screen_Point_To_Game((POINT &)LastMousePos);
-						CurrentToolTip = Find_From_Pos((Point2D &)LastMousePos);
-						if (Process() == true) {
-							SetTimer(Window, TOOLTIP_EVENT, ToolTipLifetime, NULL);
-						}
-					}
-				}
-				break;
+		case OPENTS_HOST_EVENT_FOCUS:
+			Focus_Changed(event.Focused);
+			break;
 
+		case OPENTS_HOST_EVENT_QUIT:
+			Presentation_Changed(false);
+			break;
+
+		default:
+			break;
+	}
+}
+
+
+void ToolTipManager::Pointer_Moved(Point2D const & point, std::int64_t now)
+{
+	LastMousePos = point;
+	HasPointer = true;
+	Pointer_Activity();
+	if (IsActive && HasFocus && PresentationAvailable) {
+		CandidateToolTip = Find_From_Pos(point);
+		CandidateStarted = now;
+	}
+}
+
+
+void ToolTipManager::Pointer_Activity(void)
+{
+	CandidateToolTip = NULL;
+	CandidateStarted = 0;
+	CurrentStarted = 0;
+	Reset_Current();
+}
+
+
+void ToolTipManager::Keyboard_Activity(void)
+{
+	Pointer_Activity();
+}
+
+
+void ToolTipManager::Focus_Changed(bool focused)
+{
+	HasFocus = focused;
+	if (!HasFocus) {
+		Pointer_Activity();
+	}
+}
+
+
+void ToolTipManager::Presentation_Changed(bool available)
+{
+	PresentationAvailable = available;
+	if (!PresentationAvailable) {
+		Pointer_Activity();
+	}
+}
+
+
+void ToolTipManager::Tick(std::int64_t now)
+{
+	if (!IsActive || !HasFocus || !PresentationAvailable) {
+		return;
+	}
+
+	if (CurrentToolTip != NULL) {
+		if (now - CurrentStarted >= ToolTipLifetime) {
+			Pointer_Activity();
 		}
+		return;
+	}
+
+	if (CandidateToolTip != NULL && now - CandidateStarted >= ToolTipDelay) {
+		CurrentToolTip = CandidateToolTip;
+		CandidateToolTip = NULL;
+		CurrentStarted = now;
+		Process();
 	}
 }
 
@@ -220,6 +268,10 @@ void ToolTipManager::Remove(unsigned id)
 		if (CurrentToolTip == tooltip) {
 			Reset_Current();
 		}
+		if (CandidateToolTip == tooltip) {
+			CandidateToolTip = NULL;
+			CandidateStarted = 0;
+		}
 
 		ToolTipIndex.Remove_Index(tooltip->ID);
 		ToolTips.Delete(tooltip);
@@ -257,7 +309,7 @@ bool ToolTipManager::Find(unsigned id, ToolTip * tooltip)
 /// </summary>
 /// <param name="xy">The point, in frame coordinates, to test the regions against.</param>
 /// <returns>Returns with a pointer to the tooltip found, or NULL if the point is bare.</returns>
-ToolTip const * ToolTipManager::Find_From_Pos(Point2D &xy)
+ToolTip const * ToolTipManager::Find_From_Pos(Point2D const &xy) const
 {
 	for (int i = 0; i < ToolTips.Count(); i++) {
 		Rect const & region = ToolTips[i]->Region;
@@ -294,8 +346,8 @@ bool ToolTipManager::Update(ToolTipText *text)
 /// <param name="text">The tooltip display record being retired.</param>
 void ToolTipManager::Reset(const ToolTipText *text)
 {
-	CurrentToolTipInfo.Pos.x = 0;
-	CurrentToolTipInfo.Pos.y = 0;
+	CurrentToolTipInfo.Pos.X = 0;
+	CurrentToolTipInfo.Pos.Y = 0;
 	CurrentToolTipInfo.TextWidth = 0;
 	CurrentToolTipInfo.TextHeight = 0;
 	CurrentToolTip = NULL;
@@ -318,24 +370,23 @@ bool ToolTipManager::Process(void)
 
 			strncpy(CurrentToolTipInfo.Text, str, sizeof(CurrentToolTipInfo.Text));
 
-			CurrentToolTipInfo.Pos.x = LastMousePos.x;
-			CurrentToolTipInfo.Pos.y = LastMousePos.y;
+			CurrentToolTipInfo.Pos = LastMousePos;
 			CurrentToolTipInfo.TextWidth = 0;
 			CurrentToolTipInfo.TextHeight = 0;
 
 			ToolTipText & txt = CurrentToolTipInfo;
 
 			if (!Update(&CurrentToolTipInfo)) {
-				txt.Pos.x = 0;
-				txt.Pos.y = 0;
+				txt.Pos.X = 0;
+				txt.Pos.Y = 0;
 				txt.TextWidth = 0;
 				txt.TextHeight = 0;
 				CurrentToolTip = NULL;
 			}
 
 		} else {
-			CurrentToolTipInfo.Pos.x = 0;
-			CurrentToolTipInfo.Pos.y = 0;
+			CurrentToolTipInfo.Pos.X = 0;
+			CurrentToolTipInfo.Pos.Y = 0;
 			CurrentToolTipInfo.TextWidth = 0;
 			CurrentToolTipInfo.TextHeight = 0;
 			CurrentToolTip = NULL;

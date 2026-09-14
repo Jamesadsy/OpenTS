@@ -16,7 +16,10 @@
 #include "index.h"
 #include "rect.h"
 #include "vector.h"
-#include "win.h"
+
+#include <cstdint>
+
+#include "hostevent.hh"
 
 class ToolTip
 {
@@ -48,7 +51,7 @@ public:
 
 struct ToolTipText
 {
-	POINT Pos;
+	Point2D Pos;
 	int TextWidth;
 	int TextHeight;
 	char Text[256];
@@ -57,12 +60,18 @@ struct ToolTipText
 class ToolTipManager
 {
 	public:
-		ToolTipManager(HWND window);
+		ToolTipManager(void);
 		virtual ~ToolTipManager(void);
 
 		void Activate(bool state);
 
-		void Message_Handler(MSG *msg);
+		void Host_Event(OpenTSHostEvent const & event, std::int64_t now);
+		void Pointer_Moved(Point2D const & point, std::int64_t now);
+		void Pointer_Activity(void);
+		void Keyboard_Activity(void);
+		void Focus_Changed(bool focused);
+		void Presentation_Changed(bool available);
+		void Tick(std::int64_t now);
 
 		int Get_Timer_Delay(void);
 		void Set_Timer_Delay(int delay);
@@ -77,7 +86,10 @@ class ToolTipManager
 
 		bool Find(unsigned id, ToolTip * tooltip);
 
-		ToolTip const * Find_From_Pos(Point2D &pt);
+		ToolTip const * Find_From_Pos(Point2D const & pt) const;
+		bool Has_Candidate(void) const { return(CandidateToolTip != NULL); }
+		bool Has_Current(void) const { return(CurrentToolTip != NULL); }
+		unsigned Current_ID(void) const { return(CurrentToolTip != NULL ? CurrentToolTip->ID : 0); }
 
 		virtual bool Update(ToolTipText *text);
 		virtual void Reset(ToolTipText const *text);
@@ -91,31 +103,30 @@ class ToolTipManager
 		void Reset_Current(void);
 
 		enum {
-			TOOLTIP_EVENT = 'TTIP',
 			TOOLTIP_DELAY = 1000, /// 1 second
 			TOOLTIP_LIFETIME = 10000, /// 10 seconds
 		};
 
 	private:
 		/*
-		 * This is the window whose tooltips this manager looks after. Mouse positions are
-		 * expressed in its client coordinates, and it is the window the hover timer is hung
-		 * off of.
-		 */
-		HWND Window;
-
-		/*
 		 * If this manager is allowed to display tooltips, then this flag will be true. A
-		 * deactivated manager ignores the message traffic entirely, so nothing will appear
+		 * deactivated manager ignores semantic activity, so nothing will appear
 		 * however long the mouse rests.
 		 */
 		bool IsActive;
 
 		/*
-		 * This is where the cursor was, in frame coordinates, when the hover delay expired.
+		 * This is where the logical pointer was when the candidate region was selected.
 		 * It decides which tooltip is chosen and where the tooltip box is placed.
 		 */
-		POINT LastMousePos;
+		Point2D LastMousePos;
+
+		ToolTip const * CandidateToolTip;
+		std::int64_t CandidateStarted;
+		std::int64_t CurrentStarted;
+		bool HasPointer;
+		bool HasFocus;
+		bool PresentationAvailable;
 
 		/*
 		 * This points to the tooltip the mouse is currently resting over, or NULL when

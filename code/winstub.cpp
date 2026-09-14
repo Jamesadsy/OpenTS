@@ -257,7 +257,7 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 			break;
 
 		case WM_CREATE:
-			ToolTips = new CCToolTip(hwnd);
+			ToolTips = new CCToolTip;
 			if (ToolTips) {
 				ToolTips->Set_Timer_Delay(500);
 			}
@@ -274,6 +274,7 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 			*/
 		case WM_DESTROY:
 			if (ToolTips != NULL) {
+				ToolTips->Presentation_Changed(false);
 				delete ToolTips;
 				ToolTips = NULL;
 			}
@@ -300,9 +301,15 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 			if (hwnd == MainWindow && GameInFocus != (wParam != 0)) {
 				GameInFocus = (wParam != 0);
 				if (!GameInFocus) {
+					if (ToolTips != NULL) {
+						ToolTips->Focus_Changed(false);
+					}
 					Focus_Loss();
 					DebugString("Focus lost\n");
 				} else {
+					if (ToolTips != NULL) {
+						ToolTips->Focus_Changed(true);
+					}
 					Focus_Restore();
 					DebugString("Focus gained\n");
 				}

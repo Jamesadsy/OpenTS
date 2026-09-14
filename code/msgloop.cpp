@@ -40,8 +40,11 @@
 
 #include "_tooltip.h"
 #include "cctooltip.h"
+#include "hostevent.hh"
+#include "monotonic.h"
 #include "vector.h"
 #include "video.h"
+#include "vidscale.h"
 
 
 /*
@@ -73,6 +76,48 @@ static DynamicVectorClass<AcceleratorTracker> _Accelerators;
 **	pointer to than message intercept handler.
 */
 bool (*Message_Intercept_Handler)(MSG &msg) = NULL;
+
+
+static void Translate_Tooltip_Event(MSG const & msg)
+{
+	if (ToolTips == NULL) {
+		return;
+	}
+
+	OpenTSHostEvent event;
+	switch (msg.message) {
+	case WM_MOUSEMOVE: {
+		POINT point = msg.pt;
+		ScreenToClient(MainWindow, &point);
+		Screen_Point_To_Game(point);
+		event.Type = OPENTS_HOST_EVENT_MOUSE_MOVE;
+		event.X = point.x;
+		event.Y = point.y;
+		break;
+	}
+
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+		event.Type = OPENTS_HOST_EVENT_MOUSE_BUTTON;
+		break;
+
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+	case WM_SYSKEYDOWN:
+	case WM_SYSKEYUP:
+		event.Type = OPENTS_HOST_EVENT_KEY;
+		break;
+
+	default:
+		return;
+	}
+
+	ToolTips->Host_Event(event, Monotonic_Milliseconds());
+}
 
 
 /***********************************************************************************************
@@ -108,9 +153,7 @@ void Windows_Message_Handler(void)
 			return;
 		}
 
-		if (ToolTips != NULL) {
-			ToolTips->Message_Handler(&msg);
-		}
+		Translate_Tooltip_Event(msg);
 
 		/*
 		**	Pass the windows message through any modeless dialogs that may
@@ -165,6 +208,9 @@ void Windows_Message_Handler(void)
 	 * reach the screen.
 	 */
 	Video_Present_If_Dirty();
+	if (ToolTips != NULL) {
+		ToolTips->Tick(Monotonic_Milliseconds());
+	}
 }
 
 
