@@ -17,9 +17,13 @@
 #include "deploymentconfig.h"
 #include "init.h"
 #include "language/language.h"
+#ifdef _WIN32
 #include "ownrdraw.h"
+#endif
 
+#ifdef _WIN32
 INT_PTR CALLBACK Select_Game_Type_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
+#endif
 
 int AvailableAddOns = 1 << ADDON_BASE_GAME;
 int ActiveAddOns = 1 << ADDON_BASE_GAME;
@@ -62,6 +66,7 @@ bool Select_Game_Type_Dialog(AddonType &type)
 	type = ADDON_BASE_GAME;
 
 	if (Addon_Installed(ADDON_ANY)) {
+#ifdef _WIN32
 		HWND dialog = OwnerDraw::Begin_Dialog(IDD_SELECT_GAME_TYPE, Select_Game_Type_Dialog_Proc);
 		if (dialog != 0) {
 
@@ -99,6 +104,10 @@ bool Select_Game_Type_Dialog(AddonType &type)
 
 		Set_Required_Addon(type);
 		return(true);
+#else
+		Set_Required_Addon(type);
+		return(true);
+#endif
 	}
 
 	return(true);
@@ -110,6 +119,7 @@ bool Select_Game_Type_Dialog(AddonType &type)
 /// This routine stashes the control that the player pressed into the caller's result
 /// variable, which is what lets the dialog loop know it can stop.
 /// </summary>
+#ifdef _WIN32
 INT_PTR CALLBACK Select_Game_Type_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
 	int * retval;
@@ -128,6 +138,7 @@ INT_PTR CALLBACK Select_Game_Type_Dialog_Proc(HWND window, UINT message, WPARAM 
 
 	return(rc);
 }
+#endif
 
 
 /// <summary>
