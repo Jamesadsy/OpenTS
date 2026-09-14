@@ -11,9 +11,10 @@
 
 #include "animate.h"
 #include "palette.h"
-#include "win.h"
 
-#define MakeID(d,c,b,a) ((LONG)(a)<<24 | (LONG)(b)<<16 | (LONG)(c)<<8 | (LONG)(d) )
+#include <cstdint>
+
+#define MakeID(d,c,b,a) ((std::int32_t)(a)<<24 | (std::int32_t)(b)<<16 | (std::int32_t)(c)<<8 | (std::int32_t)(d) )
 
 /*
  * This class plays back a Deluxe Paint ANM animation file. The format is the one described
