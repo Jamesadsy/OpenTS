@@ -43,6 +43,19 @@ else()
         "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/clang-cl-msvc.cmake.")
 endif()
 
+# Product profiles are selected from the target platform, not from a source-file accident.
+# The Apple target is the supported single-player product shape; Windows remains the complete
+# multiplayer/skirmish regression oracle.
+if(APPLE)
+    set(OPENTS_PROFILE_DEFINITIONS OPENTS_APPLE_SINGLE_PLAYER_PROFILE=1)
+    message(STATUS "OpenTS product profile: Apple Single-Player")
+    message(STATUS "OpenTS deferred capabilities: remote multiplayer; LAN/IPX transport entry points; legacy netdlg/netdlg2 lobby UI; remote file transfer; Win32 skirmish setup")
+elseif(WIN32)
+    set(OPENTS_PROFILE_DEFINITIONS OPENTS_WINDOWS_FULL_PROFILE=1)
+    message(STATUS "OpenTS product profile: Windows Full")
+    message(STATUS "OpenTS retained capabilities: multiplayer; LAN/IPX transport; network UI; skirmish setup")
+endif()
+
 string(TOLOWER "${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" OPENTS_ARCH)
 if(NOT OPENTS_ARCH)
     set(OPENTS_ARCH "unknown")

@@ -21,7 +21,6 @@
 #include "mschoice.h"
 #include "msfont.h"
 #include "newmenu.h"
-#include "netshare.h"
 #include "ownrdraw.h"
 #include "pcx.h"
 #include "session.h"

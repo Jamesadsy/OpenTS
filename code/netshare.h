@@ -10,6 +10,7 @@
 #pragma once
 
 #include "dict.h"
+#include "gameplaycommon.h"
 #include "globals.h"
 #include "preview.h"
 #include "wstring.h"
@@ -20,18 +21,12 @@ int ODMessageBox(const char *text, int type, bool (*callback)(void), bool large 
 INT_PTR CALLBACK ODMessageBox_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 
 bool Set_Scenario_Info_From_Index(int index);
-void Commit_Session_Specials(void);
 void PregameSetup(void);
 void Update_Network_Dialog_Preview(HWND win);
 void Receive_Random_Map_Preview(void);
 void Send_Preview_To_Guests(void);
-int CountAliveTeams(HouseClass * house);
-
 int RandomMapWaypointCount(int index);
 int Scenario_Dialog(HWND hWndParent);
-
-unsigned int Wstring_Hash(Wstring & string);
-
 
 void __cdecl PMessagePrintf(int color, const char * fmt, ...);
 void __cdecl SMessagePrintf(int color, const char * fmt, ...);
@@ -50,10 +45,6 @@ void DisplayGameopts(HWND window, BOOL initialize);
 void LBSaveSelections(HWND win, Dictionary<Wstring,bool> & lbdict);
 void LBRestoreSelections(HWND win, Dictionary<Wstring,bool> & lbdict);
 
-// Eight hexadecimal digits, a terminator, and slack.
-constexpr int RANDOM_MAP_DIGEST_SIZE = 12;
-
-void CalcRandomMapDigest(char * digest, int bufsize);
 int CreateRandomMap(void);
 
 extern COLORREF PlayerColorTable[MAX_PLAYERS];

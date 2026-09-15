@@ -79,28 +79,6 @@ MapPreviewClass *MultiplayerMapPreview;
 
 
 /// <summary>
-/// Computes a hash value for a string.
-/// This routine supplies the bucket value for the dictionaries that the multiplayer dialogs
-/// key by name.
-/// </summary>
-/// <param name="string">The string to hash.</param>
-/// <returns>Returns with the hash value of the string.</returns>
-unsigned int Wstring_Hash(Wstring & string)
-{
-	unsigned int hash = 0;
-
-	hash = string.length();
-
-	for (unsigned int i = 0; i < string.length(); i++) {
-		hash += *(string.get() + i);
-		hash += i;
-		hash = (hash << 8) ^ (hash >> 24);
-	}
-	return(hash);
-}
-
-
-/// <summary>
 /// Fetches the game options dialog that is currently up.
 /// The same options are presented by four different dialogs depending on how the game was
 /// started. Use this routine rather than trying to remember which one the player is looking
@@ -313,43 +291,6 @@ void _SetMessageString(HWND window,  const char * message, int length, int color
 
 	ListBox_SetTopIndex(window, topindex);
 	SendMessage(window, OD_DISABLEPAINT, 0, old);
-}
-
-
-/// <summary>
-/// Counts the human teams still in the game.
-/// A group of allied players counts as one team. This routine is used to recognize the point
-/// where only one side is left standing, which is why the house being examined is left out
-/// of the tally.
-/// </summary>
-/// <param name="house">The house to leave out of the count.</param>
-/// <returns>Returns with the number of opposing teams still alive.</returns>
-int CountAliveTeams(HouseClass * house)
-{
-	int count = 0;
-	for (int i = 0; i < Houses.Count(); i++) {
-		HouseClass * house1 = Houses[i];
-		if (house1 != NULL && !house1->IsDefeated && house1->IsHuman && house1 != house) {
-			bool has_ally = false;
-			for (int j = 0; j < Houses.Count(); j++) {
-				if (j != i) {
-					HouseClass * house2 = Houses[j];
-					if (house2 != NULL && !house2->IsDefeated && house2->IsHuman) {
-						if (house2 != house && house1->Is_Ally(Houses[j]) && house2->Is_Ally(house1)) {
-							if (j > i && !has_ally) {
-								count++;
-							}
-							has_ally = true;
-						}
-					}
-				}
-			}
-			if (!has_ally) {
-				count++;
-			}
-		}
-	}
-	return(count);
 }
 
 
@@ -1263,21 +1204,6 @@ INT_PTR CALLBACK Scenario_DlgProc(HWND window, UINT message, WPARAM wparam, LPAR
 
 
 /// <summary>
-/// Puts the options every machine agreed on into the globals the simulation reads, so a match
-/// against other machines is played under one set of rules however it was set up.
-/// </summary>
-void Commit_Session_Specials(void)
-{
-	Special.IsHarvesterImmune = Session.Options.HarvTruce;
-	Special.IsDestroyBridges = Session.Options.BridgeDestruction;
-	Special.IsScrapMetal = Session.Options.ScrapMetal;
-	Special.IsTGrowth = true;
-	Special.IsTSpread = true;
-	Special.Apply_To_Game();
-}
-
-
-/// <summary>
 /// Performs the last setup step before a multiplayer game begins.
 /// This routine copies the agreed session options into the globals the game logic actually
 /// reads, so that every machine starts the scenario with the same rules in force.
@@ -1551,60 +1477,6 @@ void Send_Preview_To_Guests(void)
 			}
 		}
 	}
-}
-
-
-/// <summary>
-/// Fetches a digest string for the current random map seed.
-/// A generated map has no file to checksum, so this routine builds the identity string that
-/// stands in for one. It is what lets the multiplayer scenario checks tell one generated map
-/// from another. The map description is deliberately left out -- renaming a map does not
-/// make it a different map.
-/// </summary>
-/// <param name="digest">Buffer to fill in with the digest string.</param>
-/// <param name="bufsize">Size of the destination buffer.</param>
-void CalcRandomMapDigest(char * digest, int bufsize)
-{
-	unsigned char * data;
-	char description[sizeof(RandomMapGen.SeedData.MapDescription)];
-	int size;
-	unsigned char *bytes;
-	unsigned int val;
-	unsigned int hibit;
-	unsigned int checksum = 0;
-
-	memcpy(description, RandomMapGen.SeedData.MapDescription, sizeof(description));
-
-	/// Hash all of SeedData except UseTransitions
-	data = (unsigned char *)&RandomMapGen.SeedData.Biome;
-	size = (sizeof(RandomMapGen.SeedData) - offsetof(MapSeedClass, Biome) - sizeof(RandomMapGen.SeedData.UseTransitions));
-	memset(RandomMapGen.SeedData.MapDescription, '\0', sizeof(description));
-
-	while (size > 0) {
-		hibit = checksum >> 31;
-		if (size >= 4) {
-			val = (*(unsigned int *)data);
-			checksum <<= 1;
-			checksum += val;
-			checksum += hibit;
-			data += sizeof(unsigned int);
-			size -= sizeof(unsigned int);
-		} else {
-			val = 0;
-			bytes = data;
-			while (size) {
-				val <<= 8;
-				val |= (*bytes++);
-				size--;
-			}
-			checksum <<= 1;
-			checksum += val;
-			checksum += hibit;
-		}
-	}
-
-	snprintf(digest, bufsize, "%08X", checksum);
-	memcpy(RandomMapGen.SeedData.MapDescription, description, sizeof(description));
 }
 
 

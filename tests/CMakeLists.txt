@@ -36,6 +36,7 @@ function(opents_add_test target)
         endif()
         target_compile_definitions(${target} PRIVATE ${TEST_DEFINITIONS})
     endif()
+    target_compile_definitions(${target} PRIVATE ${OPENTS_PROFILE_DEFINITIONS})
 
     # The option spellings and the Win32 import libraries below are MSVC's, so a harness built
     # by another compiler takes its defaults instead.
@@ -120,3 +121,4 @@ add_subdirectory(timer)
 add_subdirectory(tooltip)
 add_subdirectory(hostservice)
 add_subdirectory(savebrowser)
+add_subdirectory(appleprofile)

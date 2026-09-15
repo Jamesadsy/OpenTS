@@ -129,7 +129,7 @@
 #include "netglobal.h"
 #include "netpacket.h"
 #include "netsemantic.h"
-#include "netshare.h"
+#include "gameplaycommon.h"
 #include "nettiming.h"
 #include "opents_build.h"
 #include "overlay.h"
@@ -3465,6 +3465,16 @@ static int Execute_DoList(int max_houses, HousesType base_house,
 				}
 				Map.Flag_To_Redraw(GS_REDRAW_ALL);
 
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+
+			} else {
+				// A non-local queue owner cannot exist in this product profile. Keep the
+				// dependency fail-closed if stale state ever reaches this branch.
+				return(0);
+			}
+
+#else
+
 			} else if (SaveManager.Multiplayer_Load_Is_Pending()) {
 
 				// The load every machine agreed on brings them back into step.
@@ -3489,6 +3499,8 @@ static int Execute_DoList(int max_houses, HousesType base_house,
 						return(0);
 				}
 			}
+
+#endif
 		}
 	}
 

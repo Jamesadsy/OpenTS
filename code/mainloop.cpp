@@ -26,7 +26,9 @@
 #include "_timer.h"
 #include "_xmouse.h"
 #include "bench.h"
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 #include "chat.h"
+#endif
 #include "command.h"
 #include "conquer.h"
 #include "data.h"
@@ -647,6 +649,7 @@ void Message_Input(KeyNumType &input)
 	**	'to' portion.  At the other end, the buffer allocated to display the
 	**	message must be MAX_MESSAGE_LENGTH plus the size of "From: xxx (house)".
 	*/
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 	if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && input >= KN_F1 && input < (KN_F1 + Session.MaxPlayers) && !Session.Messages.Is_Edit()) {
 		if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
 			/*
@@ -661,6 +664,7 @@ void Message_Input(KeyNumType &input)
 			}
 		}
 	}
+#endif
 
 	/*
 	**	Process message-system input; send the message out if RETURN is hit.
@@ -694,12 +698,14 @@ void Message_Input(KeyNumType &input)
 	*/
 	if ((rc==3 || rc==4) && Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH) {
 		if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
+		#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 			if (rc==3) {
 				Chat_Send(Session.Messages.Get_Edit_Buf());
 			} else {
 				Chat_Send(Session.Messages.Get_Overflow_Buf());
 				Session.Messages.Clear_Overflow_Buf();
 			}
+		#endif
 		}
 
 		/*

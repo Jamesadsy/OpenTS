@@ -154,27 +154,6 @@ INT_PTR CALLBACK Select_MPlayer_Game_Dialog_Proc(HWND window, UINT message, WPAR
 
 
 /***************************************************************************
- * Surrender_Dialog -- Prompts user for surrendering                       *
- *                                                                         *
- * INPUT:                                                                  *
- *      none.                                                              *
- *                                                                         *
- * OUTPUT:                                                                 *
- *      0 = user cancels, 1 = user wants to surrender.                     *
- *                                                                         *
- * WARNINGS:                                                               *
- *      none.                                                              *
- *                                                                         *
- * HISTORY:                                                                *
- *   07/05/1995 BRR : Created.                                             *
- *=========================================================================*/
-int Surrender_Dialog(int text)
-{
-	return(WWMessageBox()._Process(text, 1, TXT_OK, TXT_CANCEL) == 0);
-}
-
-
-/***************************************************************************
  * Clear_Vector -- clears the given NodeNameType vector                    *
  *                                                                         *
  * INPUT:                                                                  *

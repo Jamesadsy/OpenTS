@@ -98,7 +98,10 @@
 #include "ccfile.h"
 #include "cctooltip.h"
 #include "cell.h"
+#include "productprofile.h"
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 #include "chat.h"
+#endif
 #include "command.h"
 #include "conquer.h"
 #include "data.h"
@@ -141,7 +144,9 @@
 #include "mplayer.h"
 #include "msgbox.h"
 #include "netdlg.h"
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 #include "netdlg2.h"
+#endif
 #include "newmenu.h"
 #include "obscure.h"
 #include "opents_build.h"
@@ -165,7 +170,9 @@
 #include "session.h"
 #include "spawner.h"
 #include "side.h"
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 #include "skirmish.h"
+#endif
 #include "smudtype.h"
 #include "stimer.h"
 #include "tactical.h"
@@ -1255,6 +1262,14 @@ restart:
 				/*
 				**	SEL_MULTIPLAYER_GAME: set 'Session.Type' to network play.
 				*/
+				#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+				case SEL_MULTIPLAYER_GAME:
+					// The old menu is disabled on Apple; this guard also closes stale saved/session
+					// state from re-entering a deferred network or skirmish presentation.
+					Session.Type = GAME_NORMAL;
+					selection = SEL_NONE;
+					break;
+				#else
 				case SEL_MULTIPLAYER_GAME: {
 						Session.Read_MultiPlayer_Settings();
 						Prepare_Side_Roster();
@@ -1334,6 +1349,7 @@ restart:
 						break;
 					}
 					break;
+				#endif
 
 				/*
 				**	Play a VQ
@@ -3202,10 +3218,16 @@ INT_PTR CALLBACK Main_Menu_Dialog_Proc(HWND window, UINT message, WPARAM wparam,
 			if (control) {
 				if (LoadOptionsClass().Files_Present() == true) {
 					EnableWindow(control, TRUE);
-					return(FALSE);
+				} else {
+					EnableWindow(control, FALSE);
 				}
+			}
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+			control = GetDlgItem(window, IDC_MULTIPLAYER_GAME);
+			if (control) {
 				EnableWindow(control, FALSE);
 			}
+#endif
 		}
 		break;
 
@@ -5567,6 +5589,7 @@ class QuickLoadCommandClass : public CommandClass
 };
 
 
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 class ChatToAllCommandClass : public CommandClass
 {
 	public:
@@ -5610,6 +5633,7 @@ class ChatToAlliesCommandClass : public CommandClass
 			Chat_Begin(PlayerPtr->IsObserver ? ChatScopeType::Observers : ChatScopeType::Allies);
 		}
 };
+#endif
 
 
 class DeleteWaypointCommandClass : public CommandClass
@@ -5665,6 +5689,7 @@ class DeleteWaypointCommandClass : public CommandClass
 };
 
 
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 /// <summary>
 /// Gives a command a key when the keyboard file bound neither the command nor the key.
 /// </summary>
@@ -5680,6 +5705,7 @@ static void Claim_Free_Key(KeyNumType key, CommandClass const * command)
 	}
 	HotkeyCommands.Add_Index(key, command);
 }
+#endif
 
 
 /// <summary>
@@ -5839,11 +5865,13 @@ static void Init_Commands(void)
 	AllCommands.Add(new QuickSaveCommandClass);
 	AllCommands.Add(new QuickLoadCommandClass);
 
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 	const CommandClass * chatallcmd = new ChatToAllCommandClass;
 	AllCommands.Add(chatallcmd);
 
 	const CommandClass * chatteamcmd = new ChatToAlliesCommandClass;
 	AllCommands.Add(chatteamcmd);
+#endif
 
 	const CommandClass * delwpcmd = new DeleteWaypointCommandClass;
 	AllCommands.Add(delwpcmd);
@@ -5860,8 +5888,10 @@ static void Init_Commands(void)
 	}
 	HotkeyCommands.Add_Index(KN_ESC, optcmd);
 
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 	Claim_Free_Key(KN_RETURN, chatallcmd);
 	Claim_Free_Key(KN_BACKSPACE, chatteamcmd);
+#endif
 }
 
 
@@ -6622,10 +6652,16 @@ int New_Main_Menu(void)
 			return(SEL_LOAD_GAME);
 
 		case NSEL_LAN:
+			if (!OpenTSProductProfile::Route_Available(OpenTSProductProfile::MenuRoute::Lan)) {
+				return(SEL_NONE);
+			}
 			Session.Type = GAME_IPX;
 			break;
 
 		case NSEL_SKIRMISH:
+			if (!OpenTSProductProfile::Route_Available(OpenTSProductProfile::MenuRoute::Skirmish)) {
+				return(SEL_NONE);
+			}
 			Session.Type = GAME_SKIRMISH;
 			break;
 

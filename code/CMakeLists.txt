@@ -61,6 +61,32 @@ else()
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/msgloop.cpp")
 endif()
 
+# The Apple Single-Player profile owns its deferrals at the target boundary.  These are
+# source-level omissions, not alternate implementations or compatibility identities.
+if(APPLE)
+    set(OPENTS_APPLE_DEFERRED_SOURCE_NAMES
+        chat.cpp
+        desync.cpp
+        desyncdlg.cpp
+        desyncdlg_stub.cpp
+        _desyncdlg.cpp
+        mplayer.cpp
+        netdlg2.cpp
+        netshare.cpp
+        sendfile.cpp
+        skirmish.cpp
+    )
+    foreach(source_name IN LISTS OPENTS_APPLE_DEFERRED_SOURCE_NAMES)
+        list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${source_name}")
+        list(FIND OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${source_name}" deferred_source_index)
+        if(NOT deferred_source_index EQUAL -1)
+            message(FATAL_ERROR "Deferred Apple source remained in OpenTS target: ${source_name}")
+        endif()
+    endforeach()
+    string(JOIN ", " OPENTS_APPLE_DEFERRED_SOURCE_SUMMARY ${OPENTS_APPLE_DEFERRED_SOURCE_NAMES})
+    message(STATUS "OpenTS Apple Single-Player target excludes: ${OPENTS_APPLE_DEFERRED_SOURCE_SUMMARY}")
+endif()
+
 #
 # ---------------------------------------------------------
 # Create the OpenTS executable. Windows uses the Win32 subsystem; native Apple builds use
@@ -232,6 +258,7 @@ message(STATUS "${PROJECT_NAME}: Adding compilier definitions...")
 if(WIN32)
     target_compile_definitions(OpenTS PRIVATE WIN32 _WINDOWS NOMINMAX)
 endif()
+target_compile_definitions(OpenTS PRIVATE ${OPENTS_PROFILE_DEFINITIONS})
 
 #
 # ---------------------------------------------------------

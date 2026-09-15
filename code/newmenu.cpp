@@ -19,6 +19,7 @@
 #include "loaddlg.h"
 #include "mixfile.h"
 #include "movie.h"
+#include "productprofile.h"
 #include "vector.h"
 
 
@@ -288,6 +289,12 @@ int NewMenuClass::Display_Tiberian_Sun_Menu(void)
 
 	// The button is drawn by the menu artwork, so it is disabled rather than taken away.
 	options.Add(NSEL_INTERNET);
+	if (!OpenTSProductProfile::Route_Available(OpenTSProductProfile::MenuRoute::Lan)) {
+		options.Add(NSEL_LAN);
+	}
+	if (!OpenTSProductProfile::Route_Available(OpenTSProductProfile::MenuRoute::Skirmish)) {
+		options.Add(NSEL_SKIRMISH);
+	}
 
 	return(Display_Menu("TiberianSunMenu", options));
 }
@@ -314,6 +321,12 @@ int NewMenuClass::Display_Firestorm_Menu(void)
 	// away. Neither the online service they led to nor the tour it hosted can be reached.
 	options.Add(NSEL_INTERNET);
 	options.Add(NSEL_WDT);
+	if (!OpenTSProductProfile::Route_Available(OpenTSProductProfile::MenuRoute::Lan)) {
+		options.Add(NSEL_LAN);
+	}
+	if (!OpenTSProductProfile::Route_Available(OpenTSProductProfile::MenuRoute::Skirmish)) {
+		options.Add(NSEL_SKIRMISH);
+	}
 
 	return(Display_Menu("FirestormMenu", options));
 }

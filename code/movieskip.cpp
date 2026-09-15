@@ -107,6 +107,7 @@ namespace MovieSkip
 		}
 
 
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 		void Send_Status(void)
 		{
 			int const local = Local_Player();
@@ -124,8 +125,10 @@ namespace MovieSkip
 			}
 			State.StatusTimer = STATUS_INTERVAL;
 		}
+#endif
 
 
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 		void Cast_Local_Vote(void)
 		{
 			int const local = Local_Player();
@@ -136,6 +139,7 @@ namespace MovieSkip
 			DebugString("Movie skip: this machine votes to skip movie %08x/%u.\n", State.Movie, State.Instance);
 			Send_Status();
 		}
+#endif
 
 
 		/// <summary>Counts the players the vote waits on and how many have voted.</summary>
@@ -218,9 +222,12 @@ namespace MovieSkip
 		}
 
 		if (escape) {
+		#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 			Cast_Local_Vote();
+		#endif
 		}
 
+		#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 		if (State.ServiceTimer == 0) {
 			IPX_Call_Back();
 			State.ServiceTimer = SERVICE_INTERVAL;
@@ -235,6 +242,9 @@ namespace MovieSkip
 		int remote_voter;
 		Tally(players, votes, remote_voter);
 		return(players > 0 && votes == players);
+		#else
+		return(escape);
+		#endif
 	}
 
 

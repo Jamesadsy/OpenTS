@@ -29,7 +29,7 @@
 #include "language/language.h"
 #include "loaddlg.h"
 #include "mplayer.h"
-#include "netshare.h"
+#include "gameplaycommon.h"
 #include "msgbox.h"
 #include "saveload.h"
 #include "savever.h"

@@ -78,7 +78,9 @@
 #include "_wsproto.h"
 #include "autosave.h"
 #include "cctooltip.h"
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 #include "chat.h"
+#endif
 #include "data.h"
 #include "dbgprint.h"
 #include "audio/audioengine.h"
@@ -101,9 +103,10 @@
 #include "mplayer.h"
 #include "hostruntime.hh"
 #include "netdlg.h"
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 #include "netdlg2.h"
+#endif
 #include "netglobal.h"
-#include "netshare.h"
 #include "progress.h"
 #include "queue.h"
 #include "rules.h"
@@ -541,9 +544,11 @@ void Call_Back(void)
 	/*
 	 * Network game maintenance.
 	 */
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 	if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
 		IPX_Call_Back();
 	}
+#endif
 }
 
 
@@ -559,6 +564,8 @@ bool MapGen_Call_Back(void)
 	return(false);
 }
 
+
+#if !defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
 
 static NetGlobal::RejectionCounters GlobalPacketRejections;
 
@@ -738,6 +745,8 @@ void IPX_Call_Back(void)
 		}
 	}
 }
+
+#endif
 
 
 /***********************************************************************************************

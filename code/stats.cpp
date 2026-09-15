@@ -52,7 +52,6 @@ int WestwoodOnline_PortNumber = 1234;
 #include "infantry.h"
 #include "infatype.h"
 #include "misc.h"
-#include "netshare.h"
 #include "packet.h"
 #include "session.h"
 #include "stats.h"
