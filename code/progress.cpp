@@ -9,6 +9,7 @@
 
 #include "always.h"
 
+#include "progress_dialog.h"
 #include "progress.h"
 
 #include "_convert.h"
@@ -23,16 +24,11 @@
 #include "language/language.h"
 #include "lightcon.h"
 #include "mixfile.h"
-#include "ownrdraw.h"
 #include "scheme.h"
 #include "session.h"
 #include "shapeset.h"
 #include "surface.h"
 #include "voc.h"
-#include "windlg.h"
-
-#include <algorithm>
-
 
 ProgressScreenClass Progress;
 
@@ -75,7 +71,7 @@ ProgressScreenClass::~ProgressScreenClass(void)
 void ProgressScreenClass::Initialize(double progress, int count, bool usedialog)
 {
 	MainProgress = progress;
-	PlayerCount = std::max(count, 1);
+	PlayerCount = ProgressScreenContract::Player_Count(count);
 
 	for (int i = 0; i < PlayerCount; i++) {
 		PlayerProgress[i] = 0;
@@ -83,9 +79,12 @@ void ProgressScreenClass::Initialize(double progress, int count, bool usedialog)
 	IsActive = true;
 
 	if (usedialog) {
-		if (Dialog == NULL) {
-			Begin_Dialog();
-		}
+#if defined(_WIN32)
+		Begin_Dialog();
+#else
+		// The common engine-surface presentation is the only progress surface on Apple.
+		HiddenSurface->Fill(0);
+#endif
 	} else {
 		HiddenSurface->Fill(0);
 	}
@@ -149,7 +148,7 @@ void ProgressScreenClass::Set_Graphic_Data(const char * progbar, const char * ba
 				}
 				rect.Width = rect.Width + 2;
 				rect.Height = rect.Height + 2;
-				if (PlayerCount == 1 && Dialog != 0) {
+				if (PlayerCount == 1 && ProgressDialog::Is_Active()) {
 					HiddenSurface->Draw_Rect(rect, NormalDrawer->Convert_Pixel(15));
 				}
 				if (PlayerCount != 1) {
@@ -192,7 +191,7 @@ double ProgressScreenClass::Get_Current_Progress(void) const
 		total += PlayerProgress[i];
 	}
 
-	return(total / PlayerCount / MainProgress);
+	return(ProgressScreenContract::Average_Fraction(total, PlayerCount, MainProgress));
 }
 
 
@@ -225,7 +224,7 @@ void ProgressScreenClass::Display_Progress(Point2D xpt)
 		Point2D pt = xpt;
 
 		Surface *surface;
-		if (Dialog == 0) {
+		if (!ProgressDialog::Is_Active()) {
 			surface = HiddenSurface;
 		} else {
 			surface = AlternateSurface;
@@ -233,16 +232,14 @@ void ProgressScreenClass::Display_Progress(Point2D xpt)
 
 		ConvertClass * drawer = NormalDrawer;
 		for (int i = 0; i < PlayerCount; i++) {
-			if (PlayerProgress[i] > MainProgress) {
-				PlayerProgress[i] = MainProgress;
-			}
+			PlayerProgress[i] = ProgressScreenContract::Clamp_To_Main_Progress(PlayerProgress[i], MainProgress);
 			if (Shape != NULL) {
 				if (pt == Point2D(-1,-1)) {
 					if (PlayerCount == 1) {
-						if (Dialog) {
-							RECT crect;
-							Get_Display_Rect(GetDlgItem(Dialog, IDC_PROGRESS_BAR_FRAME), &crect);
-							pt = Point2D(crect.left + (crect.right - crect.left) / 2, crect.top + (crect.bottom - crect.top) / 2);
+						if (ProgressDialog::Is_Active()) {
+							if (!ProgressDialog::Bar_Center(pt)) {
+								pt = Pos;
+							}
 						} else {
 							int progress = PlayerProgress[i];
 							int percent = Percentage;
@@ -315,11 +312,11 @@ int ProgressScreenClass::Get_Bar_Width(void) const
 void ProgressScreenClass::Set_Progress_Percent(int index, double value, Point2D pt)
 {
 	double prog1 = PlayerProgress[index];
-	PlayerProgress[index] = (MainProgress / 100.0) * value;
+	PlayerProgress[index] = ProgressScreenContract::Progress_From_Percent(MainProgress, value);
 
 	if (PlayerProgress[index] != prog1) {
-		if (Dialog != NULL) {
-			SendMessage(Dialog, WM_PAINT, 0, 0);
+		if (ProgressDialog::Is_Active()) {
+			ProgressDialog::Paint();
 		} else {
 			Display_Progress(pt);
 		}
@@ -338,11 +335,11 @@ void ProgressScreenClass::Set_Progress_Percent(int index, double value, Point2D 
 void ProgressScreenClass::Add_Progress_Percent(int index, double value, Point2D pt)
 {
 	double prog1 = PlayerProgress[index];
-	PlayerProgress[index] += (MainProgress / 100.0) * value;
+	PlayerProgress[index] += ProgressScreenContract::Progress_From_Percent(MainProgress, value);
 
 	if (PlayerProgress[index] != prog1) {
-		if (Dialog != NULL) {
-			SendMessage(Dialog, WM_PAINT, 0, 0);
+		if (ProgressDialog::Is_Active()) {
+			ProgressDialog::Paint();
 		} else {
 			Display_Progress(pt);
 		}
@@ -358,12 +355,7 @@ void ProgressScreenClass::Add_Progress_Percent(int index, double value, Point2D 
 /// </summary>
 void ProgressScreenClass::Begin_Dialog(void)
 {
-	Dialog = OwnerDraw::Begin_Dialog(IDD_PROGRESS_WAIT, ProgressScreenClass::Dialog_Proc);
-	if (Dialog != NULL) {
-		SetWindowLongPtr(Dialog, DWLP_USER, (LONG_PTR)this);
-		OwnerDraw::Display_Dialog(Dialog);
-		SendMessage(Dialog, WM_PAINT, 0, 0);
-	}
+	ProgressDialog::Begin();
 }
 
 
@@ -374,29 +366,5 @@ void ProgressScreenClass::Begin_Dialog(void)
 /// </summary>
 void ProgressScreenClass::End_Dialog(void)
 {
-	if (Dialog != NULL) {
-		OwnerDraw::End_Dialog(Dialog);
-		Dialog = NULL;
-	}
-}
-
-
-/// <summary>
-/// Handles the messages sent to the progress dialog.
-/// This routine gives the owner draw default dialog procedure first refusal on every
-/// message, and repaints the progress display itself when a paint request comes back
-/// unhandled.
-/// </summary>
-/// <returns>Returns with the dialog result, zero if the message was left unhandled.</returns>
-INT_PTR CALLBACK ProgressScreenClass::Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
-{
-	INT_PTR res = OwnerDraw::Default_Dialog_Proc(window, message, wparam, lparam);
-	if (res == 0) {
-		if (message == WM_PAINT) {
-			ProgressScreenClass *screen = (ProgressScreenClass *)GetWindowLongPtr(window, DWLP_USER);
-			screen->Display_Progress();
-		}
-		res = 0;
-	}
-	return(res);
+	ProgressDialog::End();
 }

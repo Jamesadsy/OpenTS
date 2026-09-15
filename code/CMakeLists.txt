@@ -59,6 +59,8 @@ else()
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/gamedlg_win32.cpp")
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/loaddlg_win32.cpp")
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/msgloop.cpp")
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/progress_dialog_win32.cpp")
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/sounddlg.cpp")
 endif()
 
 # The Apple Single-Player profile owns its deferrals at the target boundary.  These are

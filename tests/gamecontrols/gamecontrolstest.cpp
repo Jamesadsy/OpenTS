@@ -171,8 +171,13 @@ namespace {
 		Check("session local speed policy", local_session.SpeedPolicy == GameControlsSpeedPolicy::DIRECT);
 		Check("session speed present", local_session.HasSpeed);
 		Check("session difficulty absent", !local_session.HasDifficulty);
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+		Check("Apple session sound option absent", !local_session.HasSound && local_session.HasKeyboard);
+		Check("Apple session sound unavailable", !local_session.SoundAvailable);
+#else
 		Check("session subordinate buttons present", local_session.HasSound && local_session.HasKeyboard);
 		Check("session sound available", local_session.SoundAvailable);
+#endif
 
 		GameControlsContext network_session = GameControlsContext::For_Session(false, false);
 		Check("network session event policy", network_session.SpeedPolicy == GameControlsSpeedPolicy::NETWORK_EVENT);
@@ -182,7 +187,11 @@ namespace {
 		Check("internet mode", internet.Mode == GameControlsMode::INTERNET);
 		Check("internet speed absent", !internet.HasSpeed);
 		Check("internet difficulty absent", !internet.HasDifficulty);
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+		Check("Apple internet sound option absent", !internet.HasSound && internet.HasKeyboard);
+#else
 		Check("internet subordinate buttons present", internet.HasSound && internet.HasKeyboard);
+#endif
 	}
 
 
@@ -271,9 +280,14 @@ namespace {
 		RecordingService sound_service;
 		GameControlsPresenter sound(GameControlsContext::For_Session(true, true), Initial_State(), sound_service);
 		sound.Set_Scroll_Rate_Position(0);
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+		Check("Apple sound transition stays unavailable", sound.Request_Sound() == GameControlsResult::PENDING);
+		Check("Apple sound transition does not save", sound_service.SaveCount == 0 && sound_service.Calls.empty());
+#else
 		Check("sound transition result", sound.Request_Sound() == GameControlsResult::SOUND);
 		Check("sound transition saves once", sound_service.SaveCount == 1);
 		Check("sound transition applies before save", !sound_service.Calls.empty() && sound_service.Calls.back() == "save");
+#endif
 
 		RecordingService keyboard_service;
 		GameControlsPresenter keyboard(GameControlsContext::For_Session(true, true), Initial_State(), keyboard_service);

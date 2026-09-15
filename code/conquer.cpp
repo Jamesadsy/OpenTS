@@ -114,7 +114,9 @@
 #include "scenario.h"
 #include "session.h"
 #include "sidebar.h"
+#if defined(_WIN32)
 #include "sounddlg.h"
+#endif
 #include "stats.h"
 #include "surface.h"
 #include "tactical.h"
@@ -131,11 +133,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
-#include <direct.h>
-#include <dos.h>
+#include <filesystem>
 #include <fcntl.h>
-#include <io.h>
-#include <share.h>
+#include <limits>
 #include <span>
 
 
@@ -192,6 +192,14 @@ void Special_Dialog(void)
 /// </summary>
 void Ingame_Menu_Dialog(void)
 {
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+	if (SpecialDialog == SDLG_SOUND) {
+		// The Apple profile has no Win32 sound presenter, so stale requests fail closed.
+		SpecialDialog = SDLG_NONE;
+		return;
+	}
+#endif
+
 	if (SpecialDialog != SDLG_NONE) {
 		if (Session.Type != GAME_NORMAL) {
 			if (PlayerPtr->IsToLose || PlayerPtr->IsToWin || PlayerPtr->IsToDie) {
@@ -260,10 +268,12 @@ void Ingame_Menu_Dialog(void)
 					SpecialDialog = SDLG_OPTIONS;
 					break;
 
+#if defined(_WIN32)
 				case SDLG_SOUND:
 					SoundControlsClass().Dialog();
 					SpecialDialog = SDLG_SETTINGS;
 					break;
+#endif
 
 				case SDLG_LOAD:
 					SpecialDialog = SaveManager.Multiplayer_Load_Prompt() ? SDLG_NONE : SDLG_OPTIONS;
@@ -1210,8 +1220,6 @@ TechnoTypeClass const * Fetch_Techno_Type(RTTIType type, int id)
  *=========================================================================*/
 unsigned int Disk_Space_Available(void)
 {
-	ULARGE_INTEGER freebytecount;		// Free bytes on disk available to caller (caller may not have access to entire disk).
-
 	DebugString("Checking available disk space\n");
 
 	/*
@@ -1219,16 +1227,17 @@ unsigned int Disk_Space_Available(void)
 	 * directory once a player has one of their own.
 	 */
 	std::string const user_directory = User_File_Write_Name("");
-	LPCTSTR const disk = user_directory.empty() ? NULL : user_directory.c_str();
+	std::filesystem::path const disk = user_directory.empty() ? std::filesystem::path(".") : std::filesystem::path(user_directory);
+	std::error_code error;
+	std::filesystem::space_info const space = std::filesystem::space(disk, error);
 
-	if (!GetDiskFreeSpaceEx(disk, &freebytecount, NULL, NULL)) {
-		DWORD const error = GetLastError();
-		DebugString("GetDiskFreeSpaceEx failed with error code %d - %s\n", error, Last_Error_Text(error));
+	if (error) {
+		DebugString("Disk space query failed for %s - %s\n", disk.string().c_str(), error.message().c_str());
 		return(0);
 	}
 
 	// The kilobyte count saturates rather than wrapping.
-	unsigned int const diskspace = (unsigned int)std::min<ULONGLONG>(freebytecount.QuadPart / 1024, UINT_MAX);
+	unsigned int const diskspace = (unsigned int)std::min<std::uintmax_t>(space.available / 1024, std::numeric_limits<unsigned int>::max());
 	DebugString("Free disk space is %u Mb\n", diskspace / 1024);
 	return(diskspace);
 }

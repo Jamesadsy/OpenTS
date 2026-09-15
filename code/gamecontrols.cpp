@@ -31,9 +31,14 @@ GameControlsContext GameControlsContext::For_Session(bool local_speed, bool soun
 	context.SpeedPolicy = local_speed ? GameControlsSpeedPolicy::DIRECT : GameControlsSpeedPolicy::NETWORK_EVENT;
 	context.HasSpeed = true;
 	context.HasDifficulty = false;
-	context.HasSound = true;
 	context.HasKeyboard = true;
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+	context.HasSound = false;
+	context.SoundAvailable = false;
+#else
+	context.HasSound = true;
 	context.SoundAvailable = sound_available;
+#endif
 	return(context);
 }
 
@@ -45,9 +50,14 @@ GameControlsContext GameControlsContext::For_Internet(bool sound_available)
 	context.SpeedPolicy = GameControlsSpeedPolicy::DISABLED;
 	context.HasSpeed = false;
 	context.HasDifficulty = false;
-	context.HasSound = true;
 	context.HasKeyboard = true;
+#if defined(OPENTS_APPLE_SINGLE_PLAYER_PROFILE)
+	context.HasSound = false;
+	context.SoundAvailable = false;
+#else
+	context.HasSound = true;
 	context.SoundAvailable = sound_available;
+#endif
 	return(context);
 }
 

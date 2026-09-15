@@ -13,9 +13,38 @@
 
 #include "point.h"
 #include "sun.h"
-#include "win.h"
 
 class ShapeSet;
+
+namespace ProgressScreenContract
+{
+
+constexpr int Player_Count(int count)
+{
+	return(count < 1 ? 1 : count);
+}
+
+constexpr double Progress_From_Percent(double main_progress, double percent)
+{
+	return((main_progress / 100.0) * percent);
+}
+
+constexpr double Clamp_To_Main_Progress(double progress, double main_progress)
+{
+	return(progress > main_progress ? main_progress : progress);
+}
+
+constexpr double Player_Fraction(double progress, double main_progress)
+{
+	return(progress / main_progress);
+}
+
+constexpr double Average_Fraction(double total, int count, double main_progress)
+{
+	return(total / count / main_progress);
+}
+
+} // namespace ProgressScreenContract
 
 class ProgressScreenClass
 {
@@ -31,10 +60,7 @@ class ProgressScreenClass
 
 		double Get_Current_Progress(int index) const
 		{
-			//if (index < 8) {
-				return(PlayerProgress[index] / MainProgress);
-			//}
-			//return MainProgress;
+			return(ProgressScreenContract::Player_Fraction(PlayerProgress[index], MainProgress));
 		}
 		double Get_Current_Progress(void) const;
 
@@ -45,8 +71,6 @@ class ProgressScreenClass
 
 		void Begin_Dialog(void);
 		void End_Dialog(void);
-	private:
-		static INT_PTR CALLBACK Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 
 	public:
 		/*
@@ -95,13 +119,6 @@ class ProgressScreenClass
 		 * bar, while a multiplayer job stacks a bar per player with the names alongside.
 		 */
 		char PlayerCount;
-
-		/*
-		 * Handle of the progress dialog, or NULL when the progress is presented on the full
-		 * screen instead. The dialog is used where the game must keep a window up while it
-		 * works rather than take the screen over.
-		 */
-		HWND Dialog;
 
 		/*
 		 * This is the center of the progress bar display, expressed in screen pixels. A job

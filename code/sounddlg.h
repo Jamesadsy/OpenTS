@@ -32,6 +32,8 @@
 
 #pragma once
 
+#if defined(_WIN32)
+
 #include "gadget.h"
 
 class SoundControlsClass
@@ -46,3 +48,5 @@ class SoundControlsClass
 
 		static INT_PTR CALLBACK Sound_Option_Dialog_Func(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 };
+
+#endif

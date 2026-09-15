@@ -31,7 +31,9 @@
 #include "newmenu.h"
 #include "ownrdraw.h"
 #include "sidebar.h"
+#if defined(_WIN32)
 #include "sounddlg.h"
+#endif
 #include "stimer.h"
 #include "surface.h"
 #include "wwmouse.h"
@@ -86,9 +88,11 @@ void Main_Options_Dialog(void)
 		OwnerDraw::End_Dialog(main_handle);
 
 		switch (main_rc) {
+#if defined(_WIN32)
 			case IDC_OPTMAIN_SOUND:
 				SoundControlsClass().Dialog();
 				break;
+#endif
 
 			case IDC_OPTMAIN_DISPLAY: {
 				while (true) {
