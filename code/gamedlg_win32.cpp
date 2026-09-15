@@ -14,6 +14,7 @@
 #include "_map.h"
 #include "_tooltip.h"
 #include "cctooltip.h"
+#include "data.h"
 #include "dbgprint.h"
 #include "audio/audioengine.h"
 #include "event.h"
