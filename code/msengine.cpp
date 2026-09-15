@@ -19,7 +19,7 @@
 #include "goptions.h"
 #include "video.h"
 #include "msanim.h"
-#include "msgloop.h"
+#include "hostruntime.hh"
 #include "mssfx.h"
 #include "rect.h"
 #include "surface.h"
@@ -369,7 +369,7 @@ void MSEngine::Wait_Delay(int delay)
 			Process_Idle();
 			Advance(HiddenSurface);
 			Blit_All(HiddenSurface);
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 
 			if (!GameInFocus) {
 				timer.Stop();
@@ -407,7 +407,7 @@ void MSEngine::Wait_For_Focus(void)
 		while (!GameInFocus) {
 			DebugString("MSEngine - Sleeping\n");
 			Sleep(500);
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 		}
 
 		DebugString("MSEngine - Resuming animations\n");

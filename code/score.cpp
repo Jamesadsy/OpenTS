@@ -65,7 +65,7 @@
 #include "misc.h"
 #include "mixfile.h"
 #include "movie.h"
-#include "msgloop.h"
+#include "hostruntime.hh"
 #include "scenario.h"
 #include "session.h"
 #include "shapeset.h"
@@ -1047,7 +1047,7 @@ void ScoreClass::Call_Back_Delay(int time)
 		do {
 
 			Call_Back();
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 
 			if (!GameInFocus) {
 
@@ -1120,7 +1120,7 @@ void ScoreClass::Timing(void)
 
 	while (!GameInFocus) {
 		Sleep(500);
-		Windows_Message_Handler();
+		OpenTS_Host_Service();
 	}
 
 	for (i = 0; i < ScoreObjs.Count(); i++) {

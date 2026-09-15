@@ -43,7 +43,7 @@
 #include "misc.h"
 #include "mpscore.h"
 #include "msgbox.h"
-#include "msgloop.h"
+#include "hostruntime.hh"
 #include "mstimer.h"
 #include "netdlg.h"
 #include "pcx.h"
@@ -161,10 +161,10 @@ static void Check_For_Focus_Loss(void)
 	while (!GameInFocus) {
 		if (Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH) {
 			Sleep(500);
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 		} else {
 			Sleep(10);
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 			break;
 		}
 	}
@@ -209,10 +209,10 @@ bool Main_Loop(void)
 	while (!GameInFocus) {
 		if (Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH) {
 			Sleep(500);
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 		} else {
 			Sleep(10);
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 			break;
 		}
 	}

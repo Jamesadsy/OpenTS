@@ -166,6 +166,8 @@ static int Run_Host_Smoke(OpenTSHost & host)
 
 int OpenTS_Run(int argc, char ** argv, OpenTSHost & host)
 {
+	OpenTSHostLifetime active_host(host);
+
 	if (Host_Smoke_Requested(argc, argv)) {
 		return(Run_Host_Smoke(host));
 	}

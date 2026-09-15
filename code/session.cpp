@@ -64,7 +64,7 @@
 #include "globals.h"
 #include "ipxmgr.h"
 #include "language/language.h"
-#include "msgloop.h"
+#include "hostruntime.hh"
 #include "netglobal.h"
 #include "progress.h"
 #include "queue.h"
@@ -1441,7 +1441,7 @@ void SessionClass::Update_Progress(int percent)
 
 				while (Ipx.Global_Num_Send() > 5 && timer > 0) {
 					Sleep(20);
-					Windows_Message_Handler();
+					OpenTS_Host_Service();
 					Call_Back();
 				}
 			}

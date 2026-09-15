@@ -44,7 +44,7 @@
 #include "globals.h"
 #include "ini.h"
 #include "ipxmgr.h"
-#include "msgloop.h"
+#include "hostruntime.hh"
 #include "progress.h"
 #include "session.h"
 #include "stimer.h"
@@ -239,7 +239,7 @@ bool Receive_Remote_File ( char *file_name, unsigned int file_length, bool show_
 	progress = 0;
 	while ( true ) {
 
-		Windows_Message_Handler();
+		OpenTS_Host_Service();
 		Call_Back();
 
 		int receive_packet_length = sizeof (RemoteFileTransferType);
@@ -430,7 +430,7 @@ bool Send_Remote_File ( char const *file_name, bool send_to_all, bool show_progr
 	response_timer = RESPONSE_TIMEOUT;
 	while ( response_timer ){
 
-		Windows_Message_Handler();
+		OpenTS_Host_Service();
 		Call_Back();
 		if (block_number < total_blocks){
 
@@ -479,7 +479,7 @@ bool Send_Remote_File ( char const *file_name, bool send_to_all, bool show_progr
 			if (Ipx.Global_Num_Send() == 0) {
 				response_timer = TIMER_SECOND;
 				while (response_timer != 0) {
-					Windows_Message_Handler();
+					OpenTS_Host_Service();
 					Call_Back();
 				}
 			} else {

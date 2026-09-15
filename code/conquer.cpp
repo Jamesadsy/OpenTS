@@ -99,7 +99,7 @@
 #include "movie.h"
 #include "movieskip.h"
 #include "mplayer.h"
-#include "msgloop.h"
+#include "hostruntime.hh"
 #include "netdlg.h"
 #include "netdlg2.h"
 #include "netglobal.h"
@@ -633,7 +633,7 @@ static NetGlobal::ValidationContext Global_Validation_Context(NodeNameType const
 /// </summary>
 void IPX_Call_Back(void)
 {
-	Windows_Message_Handler();
+	OpenTS_Host_Service();
 
 	Ipx.Service();
 
@@ -733,7 +733,7 @@ void IPX_Call_Back(void)
 				}
 			}
 
-			Windows_Message_Handler();
+			OpenTS_Host_Service();
 			Ipx.Service();
 		}
 	}

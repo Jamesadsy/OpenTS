@@ -12,6 +12,8 @@
 #include "hostevent.hh"
 #include "nativewindow.hh"
 
+#include <cstdint>
+
 
 class OpenTSHost
 {
@@ -34,6 +36,88 @@ class OpenTSHost
 		virtual void Request_Quit(void) {}
 		virtual void Destroy_Window(void) {}
 };
+
+
+// The host is borrowed for exactly the duration of OpenTS_Run. Common code can ask the
+// runtime to service that host, but it never receives the host's native window or framework
+// object. Previous is retained only so a nested test scope restores the prior process-local
+// registration deterministically; it does not create another ownership model.
+class OpenTSHostLifetime
+{
+	public:
+		explicit OpenTSHostLifetime(OpenTSHost & host) noexcept : Previous(Current)
+		{
+			Current = &host;
+		}
+
+		~OpenTSHostLifetime(void) noexcept
+		{
+			Current = Previous;
+		}
+
+		OpenTSHostLifetime(OpenTSHostLifetime const &) = delete;
+		OpenTSHostLifetime & operator = (OpenTSHostLifetime const &) = delete;
+
+		static OpenTSHost * Current_Host(void) noexcept
+		{
+			return(Current);
+		}
+
+	private:
+		inline static OpenTSHost * Current = nullptr;
+		OpenTSHost * Previous;
+};
+
+
+// This small callback shape is also the deterministic, no-owner-data seam used by the host
+// service contract tests. Production wiring supplies the already accepted keyboard,
+// tooltip, presentation and monotonic-clock consumers; it carries no native platform type.
+struct OpenTSHostServiceHooks
+{
+	void (*Deliver_Event)(OpenTSHostEvent const &, std::int64_t) = nullptr;
+	void (*Present_If_Dirty)(void) = nullptr;
+	void (*Tick_ToolTips)(std::int64_t) = nullptr;
+	std::int64_t (*Now)(void) = nullptr;
+};
+
+
+// Services one already-active host exactly once. Native collection remains inside host;
+// this helper only expresses the platform-neutral pump -> drain -> presentation/tooltip tail
+// ordering. Poll_Event removes each event from the host queue, so one service call cannot
+// deliver the same queued event twice.
+inline bool OpenTS_Service_Active_Host_Once(OpenTSHost * host, OpenTSHostServiceHooks const & hooks)
+{
+	if (host == nullptr) {
+		return(false);
+	}
+
+	host->Pump_Events();
+	bool quit = false;
+	OpenTSHostEvent event;
+	while (host->Poll_Event(event)) {
+		if (event.Type == OPENTS_HOST_EVENT_QUIT) {
+			quit = true;
+		}
+		if (hooks.Deliver_Event != nullptr) {
+			std::int64_t const now = hooks.Now != nullptr ? hooks.Now() : 0;
+			hooks.Deliver_Event(event, now);
+		}
+	}
+
+	if (hooks.Present_If_Dirty != nullptr) {
+		hooks.Present_If_Dirty();
+	}
+	if (hooks.Tick_ToolTips != nullptr) {
+		std::int64_t const now = hooks.Now != nullptr ? hooks.Now() : 0;
+		hooks.Tick_ToolTips(now);
+	}
+
+	return(!quit && host->Is_Running());
+}
+
+
+// Platform-neutral semantic host service requested by common legacy loops.
+bool OpenTS_Host_Service(void);
 
 
 int OpenTS_Run(int argc, char ** argv, OpenTSHost & host);
