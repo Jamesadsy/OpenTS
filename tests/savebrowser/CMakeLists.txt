@@ -5,5 +5,6 @@ opents_add_test(SaveBrowser
         savebrowser.cpp
         savefileenum.cpp
     INCLUDES ${OPENTS_GENERATED_DIR}
+    DEFINITIONS WIN32 _WINDOWS _MBCS NOMINMAX
     STAMP
 )

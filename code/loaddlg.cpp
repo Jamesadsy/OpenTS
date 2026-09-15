@@ -15,6 +15,8 @@
 
 #include "always.h"
 
+#include "autosave.h"
+
 #include "loaddlg.h"
 
 #include "data.h"

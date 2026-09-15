@@ -9,6 +9,7 @@
 
 #include "always.h"
 
+#include "conquer.h"
 #include "loaddlg.h"
 #include "savebrowser.h"
 
