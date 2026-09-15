@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -310,7 +311,7 @@ void Test_Presenter_Save_New_Overwrite_And_Failure(void)
 		overwrite_service.SaveCount == 0);
 	Check("overwrite reject performs no save", overwrite.Reject() == SaveBrowserResult::PENDING &&
 		overwrite.Pending_Confirmation() == SaveBrowserConfirmation::NONE &&
-		overwrite_service.SaveCount == 0 && overwrite.Entries()[0].Filename == "old.SAV");
+		overwrite_service.SaveCount == 0 && std::strcmp(overwrite.Entries()[0].Filename, "old.SAV") == 0);
 	overwrite.Accept();
 	Check("overwrite confirm performs save once", overwrite.Confirm() == SaveBrowserResult::ACCEPTED &&
 		overwrite_service.SaveCount == 1);
@@ -339,12 +340,12 @@ void Test_Presenter_Delete_Confirmation_Refresh_And_Failure(void)
 		service.DeleteCount == 0);
 	Check("delete reject leaves model unchanged", presenter.Reject() == SaveBrowserResult::PENDING &&
 		service.DeleteCount == 0 && presenter.Entries().size() == 2 &&
-		presenter.Entries()[0].Filename == "first.SAV");
+		std::strcmp(presenter.Entries()[0].Filename, "first.SAV") == 0);
 
 	presenter.Accept();
 	Check("successful delete refreshes model", presenter.Confirm() == SaveBrowserResult::PENDING &&
 		service.DeleteCount == 1 && service.RefreshCount == 1 && presenter.Entries().size() == 1 &&
-		presenter.Entries()[0].Filename == "second.SAV" && presenter.Selected_Index() == 0);
+		std::strcmp(presenter.Entries()[0].Filename, "second.SAV") == 0 && presenter.Selected_Index() == 0);
 
 	RecordingSaveBrowserService failed_service;
 	failed_service.DeleteResult = false;
@@ -352,7 +353,7 @@ void Test_Presenter_Delete_Confirmation_Refresh_And_Failure(void)
 	failed.Accept();
 	Check("failed delete remains pending and truthful", failed.Confirm() == SaveBrowserResult::PENDING &&
 		failed.Failure() == SaveBrowserFailure::DELETE_FILE && failed.Entries().size() == 2 &&
-		failed.Entries()[0].Filename == "first.SAV" && failed_service.RefreshCount == 0);
+		std::strcmp(failed.Entries()[0].Filename, "first.SAV") == 0 && failed_service.RefreshCount == 0);
 
 	RecordingSaveBrowserService final_service;
 	final_service.RefreshedEntries.clear();
