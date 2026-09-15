@@ -57,6 +57,7 @@ else()
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/desyncdlg.cpp")
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/languageprovider_windows.cpp")
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/gamedlg_win32.cpp")
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/loaddlg_win32.cpp")
 endif()
 
 #

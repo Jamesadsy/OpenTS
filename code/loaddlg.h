@@ -113,9 +113,9 @@ class LoadOptionsClass
 		*/
 		void Clear_List (void);                                     // clears the list & game # array
 		void Build_List (void);                                     // builds the model list from saves
-		void Fill_List (HWND window);                               // fills the list & game # array
+		// Native list controls are populated by the Windows view adapter.
 		int Num_From_Ext (char *fname);                             // translates filename to file #
-		static int __cdecl Compare(const void *p1, const void *p2); // for qsort()
+		static int Compare(const void *p1, const void *p2);          // for qsort()
 
 		bool Dialog(void);
 
@@ -124,17 +124,6 @@ class LoadOptionsClass
 
 		// The box a completed save confirms itself with, or TXT_NONE when it reports elsewhere.
 		virtual int Save_Confirmation(void) const;
-
-		/*
-		 * These handlers are members so that they can reach the dialog's protected data.
-		 */
-		static void Load_Dialog_On_WM_COMMAND(HWND window, WPARAM wparam, LPARAM lparam, int id);
-		static void Save_Dialog_On_WM_COMMAND(HWND window, WPARAM wparam, LPARAM lparam, int id);
-		static void Delete_Dialog_On_WM_COMMAND(HWND window, WPARAM wparam, LPARAM lparam, int id);
-
-		static INT_PTR CALLBACK Load_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
-		static INT_PTR CALLBACK Save_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
-		static INT_PTR CALLBACK Delete_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
 
 		/*
 		**	This is the requested style of the dialog
@@ -177,8 +166,8 @@ class LoadOptionsClass
 		 */
 		enum LoadDialogState {
 			STATE_PENDING	= -1,		/// Awaiting input
-			STATE_OK		= IDOK,		// OK pressed (confirmed action)
-			STATE_CLOSE		= IDCANCEL	/// Closed via ESC / system event
+			STATE_OK		= 1,			// Confirmed action
+			STATE_CLOSE		= 0		/// Closed via ESC / system event
 		} State;
 
 		/*
