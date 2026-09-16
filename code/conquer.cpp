@@ -365,7 +365,8 @@ void Main_Game(int argc, char * argv[])
 	*/
 	int ret = Init_Game(argc, argv);
 	if (ret) {
-		if (ret < 0) {
+		if (OpenTS_Init_Game_Failure_Presentation_Requested(ret)) {
+#if defined(_WIN32)
 			MSGBOXPARAMS params;
 			params.cbSize = sizeof(MSGBOXPARAMS);
 			params.hwndOwner = MainWindow;
@@ -378,6 +379,9 @@ void Main_Game(int argc, char * argv[])
 			params.lpfnMsgBoxCallback = NULL;
 			params.dwLanguageId = MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT);
 			MessageBoxIndirect(&params);
+#else
+			fprintf(stderr, "OpenTS Init_Game failed\n");
+#endif
 		}
 		return;
 	}
@@ -544,7 +548,7 @@ void Call_Back(void)
 	/*
 	**	Music and speech maintenance
 	*/
-	if (AudioEngine.Is_Available() && GameInFocus == true) {
+	if (OpenTS_Audio_Focus_Gate(AudioEngine.Is_Available(), OpenTS_Game_Is_Focused())) {
 		AudioEngine.Sound_Callback();
 		Sound_Effect_AI();
 		Theme.AI();
@@ -891,7 +895,7 @@ bool Map_Edit_Loop(void)
 		/*
 		**	Update the display, unless we're inside a dialog.
 		*/
-		if (SpecialDialog == SDLG_NONE && GameInFocus) {
+		if (SpecialDialog == SDLG_NONE && OpenTS_Game_Is_Focused()) {
 
 			Map.Flag_To_Redraw();
 

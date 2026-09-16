@@ -8,11 +8,18 @@
  ******************************************************************************/
 
 #include "hostruntime.hh"
+#include "conquer.h"
 
 #include <cstdint>
 #include <deque>
 #include <iostream>
+#include <type_traits>
 #include <vector>
+
+
+#if defined(_WIN32)
+bool GameInFocus = false;
+#endif
 
 
 namespace
@@ -54,9 +61,11 @@ namespace
 		}
 
 		bool Is_Running(void) const override { return(Running); }
+		bool Is_Focused(void) const override { return(Focused); }
 
 		int PumpCount = 0;
 		bool Running = true;
+		bool Focused = false;
 		std::deque<OpenTSHostEvent> Events;
 	};
 
@@ -67,6 +76,8 @@ namespace
 		std::vector<std::int64_t> EventTimes;
 		std::vector<std::int64_t> TickTimes;
 		int PresentCount = 0;
+		bool Focused = true;
+		int FocusUpdates = 0;
 		std::int64_t Now = 1000;
 	};
 
@@ -75,8 +86,35 @@ namespace
 
 	void Deliver(OpenTSHostEvent const & event, std::int64_t now)
 	{
+		if (event.Type == OPENTS_HOST_EVENT_FOCUS) {
+			ActiveRecording->Focused = event.Focused;
+			ActiveRecording->FocusUpdates++;
+		}
 		ActiveRecording->Events.push_back(event);
 		ActiveRecording->EventTimes.push_back(now);
+	}
+
+
+	struct WaitTrace
+	{
+		std::vector<unsigned int> Delays;
+		std::vector<char> Order;
+	};
+
+	WaitTrace * ActiveWaitTrace = nullptr;
+
+
+	void Record_Wait(unsigned int milliseconds)
+	{
+		ActiveWaitTrace->Delays.push_back(milliseconds);
+		ActiveWaitTrace->Order.push_back('W');
+	}
+
+
+	bool Record_Service(void)
+	{
+		ActiveWaitTrace->Order.push_back('S');
+		return(true);
 	}
 
 
@@ -99,8 +137,75 @@ namespace
 }
 
 
+void Test_Focus_Semantic(void)
+{
+	FakeHost host;
+
+#if defined(_WIN32)
+	host.Focused = true;
+	GameInFocus = false;
+	Check("Windows focus ignores host base/adapter state", !OpenTS_Game_Is_Focused());
+	GameInFocus = true;
+	Check("Windows focus follows GameInFocus", OpenTS_Game_Is_Focused());
+	GameInFocus = false;
+#else
+	Check("non-Windows no active host fails closed", !OpenTS_Game_Is_Focused());
+	host.Focused = true;
+	{
+		OpenTSHostLifetime active(host);
+		Check("active host focus true", OpenTS_Game_Is_Focused());
+		host.Focused = false;
+		Check("active host focus false", !OpenTS_Game_Is_Focused());
+	}
+	Check("non-Windows host focus clears with lifetime", !OpenTS_Game_Is_Focused());
+#endif
+}
+
+
+void Test_Focus_Wait_Contract(void)
+{
+	Check("GAME_NORMAL wait class", OpenTS_Focus_Wait_Milliseconds(true) == 500U);
+	Check("GAME_SKIRMISH wait class", OpenTS_Focus_Wait_Milliseconds(true) == 500U);
+	Check("other session wait class", OpenTS_Focus_Wait_Milliseconds(false) == 10U);
+
+	WaitTrace trace;
+	ActiveWaitTrace = &trace;
+	OpenTSFocusWaitHooks hooks{Record_Wait, Record_Service};
+	OpenTS_Focus_Wait_Step(true, hooks);
+	Check("500 ms wait precedes host service", trace.Delays.size() == 1
+		&& trace.Delays[0] == 500U && trace.Order.size() == 2
+		&& trace.Order[0] == 'W' && trace.Order[1] == 'S');
+	trace.Delays.clear();
+	trace.Order.clear();
+	OpenTS_Focus_Wait_Step(false, hooks);
+	Check("10 ms wait precedes host service", trace.Delays.size() == 1
+		&& trace.Delays[0] == 10U && trace.Order.size() == 2
+		&& trace.Order[0] == 'W' && trace.Order[1] == 'S');
+	ActiveWaitTrace = nullptr;
+}
+
+
+void Test_Bounded_Contracts(void)
+{
+	Check("audio and focus gate opens together", OpenTS_Audio_Focus_Gate(true, true));
+	Check("audio unavailable closes gate", !OpenTS_Audio_Focus_Gate(false, true));
+	Check("unfocused game closes gate", !OpenTS_Audio_Focus_Gate(true, false));
+	Check("audio unavailable and unfocused closes gate", !OpenTS_Audio_Focus_Gate(false, false));
+	Check("zero init result has no failure presentation", !OpenTS_Init_Game_Failure_Presentation_Requested(0));
+	Check("positive init result has no failure presentation", !OpenTS_Init_Game_Failure_Presentation_Requested(1));
+	Check("negative init result requests failure presentation", OpenTS_Init_Game_Failure_Presentation_Requested(-1));
+}
+
+
 int main(void)
 {
+	static_assert(std::is_same_v<decltype(&Main_Game), void (*)(int, char **)>,
+		"Main_Game must remain a void function");
+
+	Test_Focus_Semantic();
+	Test_Focus_Wait_Contract();
+	Test_Bounded_Contracts();
+
 	FakeHost host;
 	OpenTSHostEvent key;
 	key.Type = OPENTS_HOST_EVENT_KEY;
@@ -146,6 +251,7 @@ int main(void)
 		Check("semantic fields preserved", recording.Events[0].Key == (unsigned short)'A'
 			&& recording.Events[0].Shift && recording.Events[1].X == 17
 			&& recording.Events[1].Y == 23 && !recording.Events[2].Focused);
+		Check("focus event updates common state once", recording.FocusUpdates == 1 && !recording.Focused);
 		Check("quit is semantic and stops service result", !alive_after_quit);
 		Check("presentation tail once", recording.PresentCount == 1);
 		Check("tooltip tick once", recording.TickTimes.size() == 1

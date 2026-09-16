@@ -160,13 +160,11 @@ void Motion_Capture(void)
 /// </summary>
 static void Check_For_Focus_Loss(void)
 {
-	while (!GameInFocus) {
-		if (Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH) {
-			Sleep(500);
-			OpenTS_Host_Service();
-		} else {
-			Sleep(10);
-			OpenTS_Host_Service();
+	bool const stay_until_focused = Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH;
+	OpenTSFocusWaitHooks const wait_hooks{OpenTS_Host_Wait_Milliseconds, OpenTS_Host_Service};
+	while (!OpenTS_Game_Is_Focused()) {
+		OpenTS_Focus_Wait_Step(stay_until_focused, wait_hooks);
+		if (!stay_until_focused) {
 			break;
 		}
 	}
@@ -208,13 +206,11 @@ bool Main_Loop(void)
 	#if 0
 	Check_For_Focus_Loss();
 	#else
-	while (!GameInFocus) {
-		if (Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH) {
-			Sleep(500);
-			OpenTS_Host_Service();
-		} else {
-			Sleep(10);
-			OpenTS_Host_Service();
+	bool const stay_until_focused = Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH;
+	OpenTSFocusWaitHooks const wait_hooks{OpenTS_Host_Wait_Milliseconds, OpenTS_Host_Service};
+	while (!OpenTS_Game_Is_Focused()) {
+		OpenTS_Focus_Wait_Step(stay_until_focused, wait_hooks);
+		if (!stay_until_focused) {
 			break;
 		}
 	}
@@ -279,7 +275,7 @@ bool Main_Loop(void)
 	**	Update the display, unless we're inside a dialog.
 	*/
 	if (!Session.Play) {
-		if (SpecialDialog == SDLG_NONE && GameInFocus) {
+		if (SpecialDialog == SDLG_NONE && OpenTS_Game_Is_Focused()) {
 			Map.Input(input, x, y);
 			if (input) {
 				Keyboard_Process(input);
@@ -566,7 +562,7 @@ void Sync_Delay(void)
 	if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH) {
 		while (NetFrameTimer) {
 			Call_Back();
-			if (SpecialDialog == SDLG_NONE && GameInFocus == true) {
+			if (SpecialDialog == SDLG_NONE && OpenTS_Game_Is_Focused()) {
 				KeyNumType input = KN_NONE;
 				int x, y;
 				if (NetFrameTimer > 10) {
@@ -586,7 +582,7 @@ void Sync_Delay(void)
 	} else {
 		while (FrameTimer) {
 			Call_Back();
-			if (SpecialDialog == SDLG_NONE && GameInFocus == true) {
+			if (SpecialDialog == SDLG_NONE && OpenTS_Game_Is_Focused()) {
 				KeyNumType input = KN_NONE;
 				int x, y;
 				Map.Input(input, x, y);
@@ -597,7 +593,7 @@ void Sync_Delay(void)
 					break;
 				}
 			}
-			if (GameInFocus || (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH)) {
+			if (OpenTS_Game_Is_Focused() || (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH)) {
 				Sleep(0);
 			} else {
 				Sleep(16 * FrameTimer);

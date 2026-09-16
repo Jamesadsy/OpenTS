@@ -11,6 +11,13 @@
 
 #include "hostruntime.hh"
 
+#if defined(_WIN32)
+#include "win.h"
+#else
+#include <chrono>
+#include <thread>
+#endif
+
 #include "bgfxbackend.h"
 #include "keyboard.h"
 
@@ -161,6 +168,21 @@ static int Run_Host_Smoke(OpenTSHost & host)
 	fflush(stdout);
 
 	return(frames == framecount ? 0 : 7);
+}
+
+
+void OpenTS_Host_Wait_Milliseconds(unsigned int milliseconds)
+{
+#if defined(_WIN32)
+	Sleep(milliseconds);
+#else
+	OpenTSHost * host = OpenTSHostLifetime::Current_Host();
+	if (host != nullptr) {
+		host->Wait_Milliseconds(milliseconds);
+	} else {
+		std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+	}
+#endif
 }
 
 

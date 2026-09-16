@@ -69,6 +69,22 @@ class OpenTSHostLifetime
 };
 
 
+#if defined(_WIN32)
+extern bool GameInFocus;
+#endif
+
+
+inline bool OpenTS_Game_Is_Focused(void) noexcept
+{
+#if defined(_WIN32)
+	return(GameInFocus);
+#else
+	OpenTSHost * host = OpenTSHostLifetime::Current_Host();
+	return(host != nullptr && host->Is_Focused());
+#endif
+}
+
+
 // This small callback shape is also the deterministic, no-owner-data seam used by the host
 // service contract tests. Production wiring supplies the already accepted keyboard,
 // tooltip, presentation and monotonic-clock consumers; it carries no native platform type.
@@ -118,6 +134,41 @@ inline bool OpenTS_Service_Active_Host_Once(OpenTSHost * host, OpenTSHostService
 
 // Platform-neutral semantic host service requested by common legacy loops.
 bool OpenTS_Host_Service(void);
+
+// The focus-loss loop keeps its existing two timing classes and host-service ordering.
+constexpr unsigned int OpenTS_Focus_Wait_Milliseconds(bool stay_until_focused) noexcept
+{
+	return(stay_until_focused ? 500U : 10U);
+}
+
+
+struct OpenTSFocusWaitHooks
+{
+	void (*Wait_Milliseconds)(unsigned int) = nullptr;
+	bool (*Service_Host)(void) = nullptr;
+};
+
+
+inline void OpenTS_Focus_Wait_Step(bool stay_until_focused, OpenTSFocusWaitHooks const & hooks)
+{
+	hooks.Wait_Milliseconds(OpenTS_Focus_Wait_Milliseconds(stay_until_focused));
+	hooks.Service_Host();
+}
+
+
+constexpr bool OpenTS_Audio_Focus_Gate(bool audio_available, bool focused) noexcept
+{
+	return(audio_available && focused);
+}
+
+
+constexpr bool OpenTS_Init_Game_Failure_Presentation_Requested(int result) noexcept
+{
+	return(result < 0);
+}
+
+
+void OpenTS_Host_Wait_Milliseconds(unsigned int milliseconds);
 
 
 int OpenTS_Run(int argc, char ** argv, OpenTSHost & host);
