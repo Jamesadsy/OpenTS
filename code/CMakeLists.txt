@@ -63,6 +63,15 @@ else()
     list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/sounddlg.cpp")
 endif()
 
+# The Windows logger owns the complete Win32 console, file and debugger implementation.  Apple
+# keeps the public contract but selects its own stderr-only implementation; every other host
+# retains the existing source ownership.
+if(APPLE)
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/dbgprint.cpp")
+else()
+    list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/dbgprint_apple.cpp")
+endif()
+
 # The Apple Single-Player profile owns its deferrals at the target boundary.  These are
 # source-level omissions, not alternate implementations or compatibility identities.
 if(APPLE)
