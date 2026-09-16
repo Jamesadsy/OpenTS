@@ -32,7 +32,11 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <winsock.h>
+#else
+#include <arpa/inet.h>
+#endif
 
 #define FIELD_HEADER_SIZE	(sizeof(FieldClass) - (sizeof(void *) * 2))
 
