@@ -95,6 +95,10 @@ DynamicVectorClass<EgoClass *> EgoList;
 */
 Surface *BackgroundSurface;
 
+// OpenTSHost and the retained Win32 host both publish focus changes through
+// this engine flag.  Credits intentionally remain host-neutral.
+extern bool GameInFocus;
+
 
 /***********************************************************************************************
  * EC::EgoClass -- EgoClass constructor                                                        *

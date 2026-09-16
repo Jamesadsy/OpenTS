@@ -9,8 +9,9 @@
 #include <string_view>
 #include <vector>
 
+#include "rect.h"
+
 class Surface;
-class Rect;
 
 struct PresentationRGB {
 	std::uint8_t Red;
