@@ -87,6 +87,7 @@ void __cdecl Shake_Screen(int shakes);
 //void * Build_Fading_Table(PaletteClass const & palette, void * dest, int color, int frac);
 //void * __cdecl Build_Fading_Table(void const *palette, void const *dest, long int color, long int frac);
 
+#ifdef _WIN32
 extern WORD __cdecl Operating_System(void);
 
 
@@ -96,6 +97,7 @@ extern WORD __cdecl Operating_System(void);
 /*=========================================================================*/
 
 extern WORD OperationgSystem;
+#endif
 
 #ifdef __cplusplus
 }
