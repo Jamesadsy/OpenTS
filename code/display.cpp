@@ -3839,10 +3839,12 @@ char const * DisplayClass::Help_Text(int id)
 /// </summary>
 void DisplayClass::Reposition_Sidebar(void)
 {
+#ifdef _WIN32
 	if (UnusedWindow) {
 		CloseWindow(UnusedWindow);
 		UnusedWindow = 0;
 	}
+#endif
 }
 
 
