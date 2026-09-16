@@ -44,7 +44,10 @@
 #include "priority.h"
 #include "preview.h"
 #include "overtype.h"
+#if defined(_WIN32)
 #include "ownrdraw.h"
+#include "winfix.h"
+#endif
 #include "pcx.h"
 #include "progress.h"
 #include "rules.h"
@@ -61,7 +64,6 @@
 #include "vector.h"
 #include "vein.h"
 #include "wdtnet.h"
-#include "winfix.h"
 #include "worlddom.h"
 
 #include "ramp.hh"
@@ -75,7 +77,9 @@
 
 bool (*RMGCallback)() = MapGen_Call_Back;
 
+#if defined(_WIN32)
 INT_PTR CALLBACK Map_Seed_Dialog_Proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
+#endif
 
 
 double Random_Fraction(void);
@@ -3258,6 +3262,7 @@ MapGeneratorClass::~MapGeneratorClass(void)
 /// <param name="callback">Progress callback to run while the dialog is up.</param>
 /// <returns>Returns with the dialog result -- 1 if the player accepted the map, 2 if the
 /// dialog was canceled, and 0 if it could not be opened at all.</returns>
+#if defined(_WIN32)
 int Do_Random_Map_Dialog(bool (*callback)())
 {
 	WDTTerritory *wdt = NULL;
@@ -3662,6 +3667,9 @@ INT_PTR CALLBACK Map_Seed_Dialog_Proc(HWND window, UINT message, WPARAM wparam, 
 /// reach the generator. The Firestorm settings are cleared away when that addon is absent.
 /// </summary>
 /// <param name="dialog">The map generator dialog to read.</param>
+#endif
+
+#if defined(_WIN32)
 void MapSeedClass::Get_Settings(HWND dialog)
 {
 	WDTTerritory * wdt = NULL;
@@ -3988,6 +3996,8 @@ void MapSeedClass::Set_Checkbox(HWND handle, bool state, bool enable)
 	Button_SetCheck(handle, state != 0);
 	Button_Enable(handle, enable);
 }
+
+#endif
 
 
 /// <summary>
@@ -4698,7 +4708,7 @@ double Sample_Truncated_Normal(double mean, double scale, double lower_bound, do
 /// <param name="full_init">Should the scenario be rebuilt from scratch and the preview redrawn
 /// between phases?</param>
 /// <param name="dialog">The map generator dialog to repaint as the preview is refreshed.</param>
-void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
+void MapGeneratorClass::Generate_Random_Map(bool full_init, void * presentation_context)
 {
 	if (RMGCallback != NULL) RMGCallback();
 
@@ -4725,7 +4735,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4742,7 +4754,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4758,7 +4772,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4785,7 +4801,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4846,7 +4864,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4865,7 +4885,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4889,7 +4911,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	if (RMGCallback != NULL) RMGCallback();
@@ -4912,7 +4936,9 @@ void MapGeneratorClass::Generate_Random_Map(bool full_init, HWND dialog)
 
 	if (full_init) {
 		RandomMapGen.MapPreview->Create_Preview();
-		SendMessage(dialog, WM_PAINT, 0, 0);
+#if defined(_WIN32)
+		if (presentation_context != nullptr) SendMessage(static_cast<HWND>(presentation_context), WM_PAINT, 0, 0);
+#endif
 	}
 
 	ScenarioInit--;

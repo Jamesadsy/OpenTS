@@ -36,7 +36,7 @@
 #include "stats.h"
 #include "surface.h"
 #include "windlg.h"
-#include "winstub.h"
+#include "titlescreen.h"
 
 #include "color.hh"
 

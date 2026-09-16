@@ -350,10 +350,12 @@ class MapSeedClass : public LoadOptionsClass
 		/*
 		 * Dialog interaction.
 		 */
+#if defined(_WIN32)
 		void Get_Settings(HWND dialog);
 		void Set_Settings(HWND dialog);
 		void Set_Scroll_Bar(HWND handle, unsigned int min, unsigned int max, int position, bool enable);
 		void Set_Checkbox(HWND handle, bool state, bool enable);
+#endif
 
 		/*
 		 * Settings adjustment.
@@ -495,7 +497,7 @@ class MapGeneratorClass
 		/*
 		 * Top-level generation and housekeeping.
 		 */
-		void Generate_Random_Map(bool full_init, HWND dialog);
+		void Generate_Random_Map(bool full_init, void * presentation_context = nullptr);
 		void Init_Map(bool full_init);
 		void Cleanup(void);
 		void Update_Progress(int percent_progress);
@@ -681,8 +683,10 @@ inline bool My_In_Radar(Cell const &cell)
 			y + x <= MapRegionClass::MapEndDiagonal) ? true : false;
 }
 
+#if defined(_WIN32)
 void Do_Random_Map(HWND, bool (*callback)());
 int Do_Random_Map_Dialog(bool (*callback)());
+#endif
 
 extern MapRegionClass::CellData *RMGCellData;
 extern unsigned int MapCellStride;

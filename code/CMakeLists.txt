@@ -86,6 +86,10 @@ if(APPLE)
         netshare.cpp
         sendfile.cpp
         skirmish.cpp
+        msgbox.cpp
+        ownrdraw.cpp
+        winfix.cpp
+        winstub.cpp
     )
     foreach(source_name IN LISTS OPENTS_APPLE_DEFERRED_SOURCE_NAMES)
         list(REMOVE_ITEM OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${source_name}")
@@ -96,6 +100,21 @@ if(APPLE)
     endforeach()
     string(JOIN ", " OPENTS_APPLE_DEFERRED_SOURCE_SUMMARY ${OPENTS_APPLE_DEFERRED_SOURCE_NAMES})
     message(STATUS "OpenTS Apple Single-Player target excludes: ${OPENTS_APPLE_DEFERRED_SOURCE_SUMMARY}")
+
+    set(OPENTS_APPLE_PRESENTATION_COMMON_SOURCE_NAMES
+        egos.cpp
+        mapgen.cpp
+        presentationdraw.cpp
+        titlescreen.cpp
+    )
+    foreach(source_name IN LISTS OPENTS_APPLE_PRESENTATION_COMMON_SOURCE_NAMES)
+        list(FIND OPENTS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/${source_name}" presentation_source_index)
+        if(presentation_source_index EQUAL -1)
+            message(FATAL_ERROR "Required Apple presentation source missing from OpenTS target: ${source_name}")
+        endif()
+    endforeach()
+    string(JOIN ", " OPENTS_APPLE_PRESENTATION_COMMON_SOURCE_SUMMARY ${OPENTS_APPLE_PRESENTATION_COMMON_SOURCE_NAMES})
+    message(STATUS "OpenTS Apple presentation sources retained: ${OPENTS_APPLE_PRESENTATION_COMMON_SOURCE_SUMMARY}")
 endif()
 
 #

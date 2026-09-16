@@ -73,7 +73,7 @@
 #include "theme.h"
 #include "utf8.h"
 #include "windlg.h"
-#include "winstub.h"
+#include "titlescreen.h"
 
 #include <algorithm>
 

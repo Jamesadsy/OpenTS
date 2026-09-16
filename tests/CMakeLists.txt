@@ -123,6 +123,7 @@ add_subdirectory(tooltip)
 add_subdirectory(hostservice)
 add_subdirectory(savebrowser)
 add_subdirectory(appleprofile)
+add_subdirectory(presentationboundary)
 
 if(APPLE)
     add_subdirectory(dbgprintapple)

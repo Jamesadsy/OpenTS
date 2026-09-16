@@ -56,12 +56,11 @@
 #include "gscreen.h"
 #include "language/language.h"
 #include "misc.h"
-#include "ownrdraw.h"
+#include "presentationdraw.h"
 #include "scheme.h"
 #include "theme.h"
 #include "utf8.h"
 #include "vector.h"
-#include "windlg.h"
 
 #include "color.hh"
 #include "dialog.hh"
@@ -187,26 +186,9 @@ bool EgoClass::Scroll(int distance)
 void EgoClass::Render(bool fresh)
 {
 	if ((YPos < LogicalSurface->Get_Height() && YPos > LogicalSurface->Get_Height() - 52) || YPos >= -16 && YPos <= 32 || fresh) {
-		static HFONT font;
-		if (font == NULL) {
-			HDC dc = GetDC(MainWindow);
-			font = WS_Get_Font(dc, "Arial", 0, 16, 1);
-			ReleaseDC(MainWindow, dc);
-		}
-
-		Rect textrect(XPos, YPos, VideoModeWidth, 0);
-
-		int alignment = 0;
-		if (Flags & TPF_CENTER) {
-			alignment = OD_TEXT_ALIGN_CENTER;
-		}else{
-			if (Flags & TPF_RIGHT){
-				alignment = OD_TEXT_ALIGN_MAX;
-			}
-		}
-
 		if (GameInFocus) {
-			OD_Draw_Text(RGB(255, 255, 128), font, textrect, Text, strlen(Text), alignment, 0, BackgroundSurface);
+			Fancy_Text_Print(Text, *BackgroundSurface, BackgroundSurface->Get_Rect(), Point2D(XPos, YPos),
+				Fetch_Scheme_By_Name("LightGold"), TBLACK, Flags);
 		}
 	}
 }
@@ -271,8 +253,6 @@ void Show_Who_Was_Responsible (void)
 
 	if (Addon_Enabled(ADDON_FIRESTORM) == true) return;
 
-	LogicalSurface = AlternateSurface;
-
 	/*
 	**	Read in the credits file to be displayed
 	**
@@ -284,8 +264,11 @@ void Show_Who_Was_Responsible (void)
 	*/
 	CCFileClass creditsfile ("TSCREDIT.txt");
 	if ( !creditsfile.Is_Available()) return;
+	Surface * const prior_logical_surface = LogicalSurface;
+	LogicalSurface = AlternateSurface;
 	char *credits = new char [creditsfile.Size()+1];
 	creditsfile.Read (credits, creditsfile.Size());
+	credits[creditsfile.Size()] = '\0';
 
 	/*
 	**	Initialise the text printing system.
@@ -590,8 +573,8 @@ void Show_Who_Was_Responsible (void)
 				xidx = step * fade_y;
 				yidx = step * (VideoModeHeight - fade_y - 1);
 				for (fade_x = 0; fade_x < VideoModeWidth; fade_x++) {
-					(bsurf + xidx)[fade_x] = OD_Blend_Color((bsurf + xidx)[fade_x], 0, alpha);
-					(bsurf + yidx)[fade_x] = OD_Blend_Color((bsurf + yidx)[fade_x], 0, alpha);
+					(bsurf + xidx)[fade_x] = Presentation_Blend_RGB565((bsurf + xidx)[fade_x], 0, static_cast<unsigned char>(alpha));
+					(bsurf + yidx)[fade_x] = Presentation_Blend_RGB565((bsurf + yidx)[fade_x], 0, static_cast<unsigned char>(alpha));
 				}
 				fade_y++;
 			}
@@ -687,8 +670,10 @@ void Show_Who_Was_Responsible (void)
 	Options.Set_Score_Volume(oldvolume, false);
 
 	delete BackgroundSurface;
+	BackgroundSurface = NULL;
 
 	delete [] credits;
+	LogicalSurface = prior_logical_surface;
 
 	while (EgoList.Count() > 0) {
 		delete EgoList[0];

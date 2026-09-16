@@ -10,7 +10,6 @@
  * EA's GPLv3 Section 7 additional terms and supplemental warranty
  * disclaimers apply; see LICENSE.md.
  ******************************************************************************/
-
 /* $Header: /CounterStrike/WINSTUB.CPP 3     3/13/97 2:06p Steve_tall $ */
 /***********************************************************************************************
  ***              C O N F I D E N T I A L  ---  W E S T W O O D  S T U D I O S               ***
@@ -525,36 +524,4 @@ void Create_Main_Window ( HINSTANCE instance , int command_show , int width , in
 	//Misc_Focus_Loss_Function = &Focus_Loss;
 	//Misc_Focus_Restore_Function = &Focus_Restore;
 	//Gbuffer_Focus_Loss_Function = &Focus_Loss;
-}
-
-
-/// <summary>
-/// Loads a title screen picture and centers it on the surface.
-/// This routine is used by the startup and scenario loading sequences to put some
-/// artwork on the screen while the game gets itself ready. A paletted picture is
-/// drawn through a converter built from the palette supplied.
-/// </summary>
-/// <param name="name">The name of the picture file to load.</param>
-/// <param name="surface">The surface to draw the title screen upon.</param>
-/// <param name="palette">The palette to load the picture's colors into.</param>
-void Load_Title_Screen(char const * name, Surface * surface, PaletteClass * palette)
-{
-	Surface *load_buffer;
-	CCFileClass file(name);
-	load_buffer = Read_PCX_File (file, palette);
-
-	if (load_buffer) {
-		Point2D point;
-		int x = (surface->Get_Width() - load_buffer->Get_Width()) / 2;
-		int y = (surface->Get_Height() - load_buffer->Get_Height()) / 2;
-		if (palette && load_buffer->Bytes_Per_Pixel() == 1) {
-			ConvertClass *drawer = new ConvertClass(*palette, *palette, *surface);
-			Blit_Block(*surface, *drawer, *load_buffer, load_buffer->Get_Rect(), Point2D(x, y), surface->Get_Rect());
-			delete drawer;
-		} else {
-
-			surface->Blit_From(surface->Get_Rect(), Rect(x, y, load_buffer->Get_Width(), load_buffer->Get_Height()), *load_buffer, load_buffer->Get_Rect(), load_buffer->Get_Rect());
-		}
-		delete load_buffer;
-	}
 }

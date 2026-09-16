@@ -195,7 +195,7 @@
 #include "vqoption.h"
 #include "wave.h"
 #include "waypoint.h"
-#include "winstub.h"
+#include "titlescreen.h"
 #include "wsproto.h"
 #include "wspudp.h"
 #include "wwfont.h"

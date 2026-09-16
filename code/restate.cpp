@@ -29,7 +29,7 @@
 #include "msanim.h"
 #include "msengine.h"
 #include "msfont.h"
-#include "ownrdraw.h"
+#include "presentationdraw.h"
 #include "rules.h"
 #include "scenario.h"
 #include "srfcache.h"
@@ -37,7 +37,7 @@
 #include "textbtn.h"
 #include "theme.h"
 #include "voc.h"
-#include "winstub.h"
+#include "titlescreen.h"
 
 #include "dialog.hh"
 
@@ -162,7 +162,7 @@ class MyButton : public TextButtonClass {
 				rect.X += 2;
 				rect.Y += 4;
 			}
-			OD_Draw_Text_Remap(*HiddenSurface, text, rect, "dlgsys", ODColorText, 5, 0);
+			Presentation_Draw_Text_Remap(*HiddenSurface, text, rect, "dlgsys", PresentationRGB{255, 255, 128}, 5, 0);
 		}
 
 
