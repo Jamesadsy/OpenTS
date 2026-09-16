@@ -7,6 +7,7 @@
 #include "presentationdraw.h"
 
 #include "dialog.h"
+#include "font.h"
 #include "scheme.h"
 #include "surface.h"
 
