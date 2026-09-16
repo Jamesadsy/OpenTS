@@ -43,7 +43,7 @@ constexpr std::uint16_t Presentation_Blend_RGB565(std::uint16_t source, std::uin
 	const unsigned overlay_alpha = alpha;
 	const std::uint16_t red = static_cast<std::uint16_t>(((((source & 0xF800U) * source_alpha) + ((overlay & 0xF800U) * overlay_alpha)) >> 8) & 0xF800U);
 	const std::uint16_t green = static_cast<std::uint16_t>(((((source & 0x07E0U) * source_alpha) + ((overlay & 0x07E0U) * overlay_alpha)) >> 8) & 0x07E0U);
-	const std::uint16_t blue = static_cast<std::uint16_t>((((source & 0x001FU) * source_alpha) + ((overlay & 0x001FU) * overlay_alpha)) >> 8) & 0x001FU);
+	const std::uint16_t blue = static_cast<std::uint16_t>(((((source & 0x001FU) * source_alpha) + ((overlay & 0x001FU) * overlay_alpha)) >> 8) & 0x001FU);
 	return static_cast<std::uint16_t>(red | green | blue);
 }
 
