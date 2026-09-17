@@ -7,15 +7,17 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
-// Checks the processor detection in getcpu.cpp against CPUID read directly here. The
-// detection used to be hand-written assembly, so the point is to confirm the C++ reports the
-// same family and vendor the instruction does. Needs no game data.
+// Checks Windows CPUID behavior and the Apple ARM64 CPU diagnostic contract. Needs no game
+// data.
 
+#if defined(_WIN32)
 #include <windows.h>
+#include <intrin.h>
+#endif
 
+#include <climits>
 #include <cstdio>
 #include <cstring>
-#include <intrin.h>
 
 #include "getcpu.h"
 #include "mpu.h"
@@ -35,6 +37,7 @@ void Check(bool condition, char const * what)
 }
 
 
+#if defined(_WIN32)
 /*
  * The detection reads the base family field only, as the assembly did. An extended family is
  * deliberately not folded in, so this reference computes the value the same narrow way.
@@ -45,6 +48,22 @@ int Reference_Family(void)
 	__cpuid(regs, 1);
 	return((regs[0] & 0x0F00) >> 8);
 }
+#endif
+
+
+void Check_Timing_Profiles(void)
+{
+	Check(Adjust_To_CPU_Timing_Profile(123, CpuTimingProfile::Neutral, 0, 0) == 123,
+		"Neutral timing preserves positive input");
+	Check(Adjust_To_CPU_Timing_Profile(0, CpuTimingProfile::Neutral, 0, 0) == 0,
+		"Neutral timing preserves zero input");
+	Check(Adjust_To_CPU_Timing_Profile(INT_MIN, CpuTimingProfile::Neutral, 0, 0) == INT_MIN,
+		"Neutral timing preserves boundary input");
+	Check(Adjust_To_CPU_Timing_Profile(333, CpuTimingProfile::LegacyX86PreP6, 20000000, 0) == 3330,
+		"Pre-P6 timing matches legacy formula");
+	Check(Adjust_To_CPU_Timing_Profile(333, CpuTimingProfile::LegacyX86P6OrLater, 20000000, 0) == 2660,
+		"P6 timing preserves legacy truncation");
+}
 
 
 }	// namespace
@@ -52,6 +71,9 @@ int Reference_Family(void)
 
 int main(void)
 {
+	Check_Timing_Profiles();
+
+#if defined(_WIN32)
 	int regs[4];
 	__cpuid(regs, 0);
 
@@ -87,10 +109,29 @@ int main(void)
 	expected[13] = '\0';
 	Check(std::strcmp(reported, expected) == 0, "Vendor string matches CPUID");
 
-	/*
-	 * The clock accumulator only ever counts up, so a later read cannot be the smaller of
-	 * the two once both halves are put back together.
-	 */
+	LARGE_INTEGER frequency = {};
+	bool const has_frequency = QueryPerformanceFrequency(&frequency) != 0;
+	Check(has_frequency, "QueryPerformanceFrequency is available");
+	unsigned int rate_high = 0;
+	unsigned int const rate_low = Get_CPU_Rate(rate_high);
+	unsigned long long const rate = ((unsigned long long)rate_high << 32) | rate_low;
+	if (has_frequency) {
+		Check(rate == (unsigned long long)frequency.QuadPart, "Get_CPU_Rate matches QueryPerformanceFrequency");
+	}
+#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+	int cpu_type = 0;
+	char reported[64];
+	std::memset(reported, 0, sizeof(reported));
+	Get_CPU_Type(cpu_type, reported, sizeof(reported) - 1);
+
+	Check(cpu_type == CPU_UNKNOWN, "Get_CPU_Type reports CPU_UNKNOWN on Apple ARM64");
+	Check((unsigned char)CPUType == 0xFF, "CPUType raw byte is 0xFF on Apple ARM64");
+	Check(std::strcmp(reported, "Apple ARM64") == 0, "Vendor string is Apple ARM64");
+	Check(std::strcmp(VendorID, "Apple ARM64") == 0, "VendorID is Apple ARM64");
+#else
+#error "CpuDetect is only defined for Windows and Apple ARM64 targets."
+#endif
+
 	unsigned int high1 = 0;
 	unsigned int const low1 = Get_CPU_Clock(high1);
 	unsigned int high2 = 0;

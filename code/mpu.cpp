@@ -34,34 +34,37 @@
 
 #include "mpu.h"
 
+#if defined(_WIN32)
 #include "win.h"
 
 #include <intrin.h>
 #include <math.h>
-
-#ifndef _WIN32
-#include <time.h>
-
-/// The monotonic clock stands in for the Windows performance counter. Both are read only as
-/// a difference over a fixed frequency, so a nanosecond tick answers the same question.
-static BOOL QueryPerformanceFrequency(LARGE_INTEGER* result)
-{
-	result->QuadPart = 1000000000LL;
-	return(TRUE);
-}
-
-static BOOL QueryPerformanceCounter(LARGE_INTEGER* result)
-{
-	struct timespec now;
-	if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
-		result->QuadPart = 0;
-		return(FALSE);
-	}
-	result->QuadPart = (LONGLONG)now.tv_sec * 1000000000LL + (LONGLONG)now.tv_nsec;
-	return(TRUE);
-}
+#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+#include <chrono>
 #endif
 
+
+int Adjust_To_CPU_Timing_Profile(int time, CpuTimingProfile profile, unsigned int counter_low,
+	unsigned int counter_high)
+{
+	if (profile == CpuTimingProfile::Neutral) {
+		return(time);
+	}
+
+	if (profile == CpuTimingProfile::LegacyX86P6OrLater) {
+		time = (int)(time * .8);
+	}
+
+	double const hiscale = 4294967296.0;
+	int speed = 0;
+	if (counter_low != 0 || counter_high != 0) {
+		speed = (int)(((double)counter_low + ((double)counter_high * hiscale)) / (double)1000000);
+	}
+
+	return((int)(time * 200.0 / speed));
+}
+
+#if defined(_WIN32)
 typedef union {
 	LARGE_INTEGER LargeInt;
 	struct QuadPart {
@@ -104,23 +107,33 @@ unsigned int Get_CPU_Rate(unsigned int & high)
 	return(0);
 }
 
+#endif
+
 
 /// <summary>
-/// Fetches the processor's time stamp counter, which increments every clock tick. The value
-/// is 64 bits wide; the low half is returned and the high half stored through the reference.
-/// RDTSC is available on every processor the supported minimum hardware covers (SSE2, so a
-/// Pentium 4 or Athlon 64 onward).
+/// Fetches the platform diagnostic counter. The value is 64 bits wide; the low half is
+/// returned and the high half is stored through the reference.
 /// </summary>
 /// <param name="high">Receives the high half of the 64 bit clock value.</param>
-/// <returns>unsigned int; the low half of the clock value.</returns>
+/// <returns>unsigned int; the low half of the diagnostic counter.</returns>
 unsigned int Get_CPU_Clock(unsigned int & high)
 {
+#if defined(_WIN32)
 	unsigned long long const stamp = __rdtsc();
+#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+	static std::chrono::steady_clock::time_point const origin = std::chrono::steady_clock::now();
+	unsigned long long const stamp = (unsigned long long)std::chrono::duration_cast<std::chrono::nanoseconds>(
+		std::chrono::steady_clock::now() - origin).count();
+#else
+#error "CPU clock diagnostics are only defined for Windows and Apple ARM64 targets."
+#endif
 
 	high = (unsigned int)(stamp >> 32);
 	return((unsigned int)stamp);
 }
 
+
+#if defined(_WIN32)
 
 /*
  * Based on code released by Intel
@@ -295,4 +308,4 @@ int Get_RDTSC_CPU_Speed(void)
 
 }
 
-
+#endif

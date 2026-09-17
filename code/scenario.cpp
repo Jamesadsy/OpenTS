@@ -3986,31 +3986,21 @@ bool ScenarioClass::Write_INI(CCINIClass & ini, bool mplayer) const
 /// <returns>Returns with the time value scaled for this machine.</returns>
 int Adjust_To_CPU_Timing(int time)
 {
-	static const double P_SIX_TWEAK = .8;
-	static const double TIME_SCALE = 200;
-
+#if defined(_WIN32)
 	int cpu_type;
-
-	int speed = 0;
-
 	Get_CPU_Type(cpu_type, NULL, 0);
-
-	if (cpu_type > PROC_PENTIUM_PRO) {
-		time = (int)(time * P_SIX_TWEAK);
-	}
-
-	double hiscale = ((__int64)2 << 31);
 
 	unsigned int lo;
 	unsigned int hi;
 	lo = Get_CPU_Rate(hi);
-
-	if (lo != 0 || hi != 0) {
-		speed = (int)(((double)lo + ((double)hi * hiscale)) / (double)1000000);
-	}
-
-	time = (int)(time * TIME_SCALE / speed);
-	return(time);
+	CpuTimingProfile const profile = cpu_type > PROC_PENTIUM_PRO ?
+		CpuTimingProfile::LegacyX86P6OrLater : CpuTimingProfile::LegacyX86PreP6;
+	return(Adjust_To_CPU_Timing_Profile(time, profile, lo, hi));
+#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+	return(Adjust_To_CPU_Timing_Profile(time, CpuTimingProfile::Neutral, 0, 0));
+#else
+	#error "CPU timing is only defined for Windows and Apple ARM64 targets."
+#endif
 }
 
 
