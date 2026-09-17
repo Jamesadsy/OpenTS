@@ -127,7 +127,9 @@
 #include "newmenu.h"
 #include "overlay.h"
 #include "overtype.h"
+#if defined(_WIN32)
 #include "ownrdraw.h"
+#endif
 #include "partsys.h"
 #include "pcx.h"
 #include "preview.h"
@@ -399,7 +401,9 @@ bool Start_Scenario(char const * name, bool briefing, CampaignType campaign)
 
 		// No dialog has been put up in a game a client launched, so the artwork it draws with
 		// is not built yet.
+#if defined(_WIN32)
 		OwnerDraw::Prepare_Resources(MainWindow);
+#endif
 
 		if (Scen->TransitTheme != THEME_NONE) {
 			Theme.Play_Song(Scen->TransitTheme);
