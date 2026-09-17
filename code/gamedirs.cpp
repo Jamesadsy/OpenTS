@@ -13,19 +13,15 @@
 
 #include "cdfile.h"
 #include "dbgprint.h"
-#include "winstub.h"
 
-// Included after the file classes: it defines READ and WRITE as macros that would otherwise
-// swallow the identically named enumerators in wwfile.h.
-#include "file.h"
-
-#include <windows.h>
 #include <algorithm>
-#include <system_error>
-#include <filesystem>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
+#include <system_error>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 /*
  * The directories the command line named. Empty means the game's own directory, so an
@@ -78,7 +74,17 @@ static std::string Terminate_Path(std::string const & path)
 
 static bool Is_Same_Path(std::string const & left, std::string const & right)
 {
-	return(_stricmp(left.c_str(), right.c_str()) == 0);
+	if (left.length() != right.length()) {
+		return(false);
+	}
+
+	for (std::string::size_type index = 0; index < left.length(); index++) {
+		if (std::tolower((unsigned char)left[index]) != std::tolower((unsigned char)right[index])) {
+			return(false);
+		}
+	}
+
+	return(true);
 }
 
 
@@ -112,10 +118,7 @@ static std::string DirectoryError;
 
 static void Report_Directory_Error(char const * what, std::string const & path)
 {
-	char message[MAX_PATH + 128];
-
-	sprintf(message, "The %s directory cannot be used:\n\n%s", what, path.c_str());
-	DirectoryError = message;
+	DirectoryError = std::string("The ") + what + " directory cannot be used:\n\n" + path;
 
 	DebugString("[GameDirs] %s directory unusable: %s.\n", what, path.c_str());
 	printf("The %s directory cannot be used: %s\n", what, path.c_str());
@@ -131,20 +134,7 @@ char const * Game_Directory_Error(void)
 static bool Is_Directory(std::string const & path)
 {
 	std::error_code error;
-
-	return(std::filesystem::is_directory(path, error));
-}
-
-
-/// <summary>
-/// Makes a directory, reporting success when it is already there.
-/// </summary>
-static bool Make_Directory(std::string const & path)
-{
-	std::error_code error;
-	std::filesystem::create_directory(path, error);
-
-	return(!error || Is_Directory(path));
+	return(std::filesystem::is_directory(std::filesystem::path(path), error));
 }
 
 
@@ -242,7 +232,8 @@ std::vector<std::string> Parse_Search_Folders(char const * list)
 bool Apply_Game_Directories(void)
 {
 	if (!UserDirectory.empty()) {
-		if (!Is_Directory(UserDirectory) && !Make_Directory(UserDirectory)) {
+		std::error_code error;
+		if (!Is_Directory(UserDirectory) && !std::filesystem::create_directory(std::filesystem::path(UserDirectory), error)) {
 			Report_Directory_Error("user", UserDirectory);
 			return(false);
 		}
@@ -258,24 +249,6 @@ bool Apply_Game_Directories(void)
 
 		CDFileClass::Add_Search_Drive(DataDirectory.c_str());
 		DebugString("[GameDirs] Data directory is %s.\n", DataDirectory.c_str());
-	}
-
-	// Shipped UI documents, styles, images and fonts sit in ui/ beside the executable.
-	// Adding the directory to the search paths is what lets them resolve by bare name, so
-	// the same file loads from there or from a mix and a mod can override either.
-	std::string const uipath = Terminate_Path(Data_Directory() + "ui");
-	CDFileClass::Add_Search_Drive(uipath.c_str());
-	DebugString("[GameDirs] UI directory is %s.\n", uipath.c_str());
-
-	// A host that keeps the program apart from the player's files ships its own copy of that
-	// directory, and the data directory is then someone else's. Searching it after the data
-	// directory keeps an installed or modded document ahead of the shipped one while letting
-	// the documents a build ships travel with the executable that expects them.
-	char shipped[MAX_PATH];
-	if (Win_Shipped_Data_Directory(shipped, sizeof(shipped))) {
-		std::string const path = Terminate_Path(Terminate_Path(shipped) + "ui");
-		CDFileClass::Add_Search_Drive(path.c_str());
-		DebugString("[GameDirs] Shipped UI directory is %s.\n", path.c_str());
 	}
 
 	return(true);
@@ -317,46 +290,101 @@ std::string Saved_Game_Name(char const * filename)
 {
 	std::string const folder = UserDirectory + SavedGamesFolder;
 
-	Make_Directory(folder);
+	std::error_code error;
+	std::filesystem::create_directory(std::filesystem::path(folder), error);
 
 	return(folder + (char)std::filesystem::path::preferred_separator + filename);
 }
 
 
+static bool Matches_Pattern(char const * pattern, char const * name)
+{
+	while (*pattern != '\0') {
+		if (*pattern == '*') {
+			while (*pattern == '*') {
+				pattern++;
+			}
+			if (*pattern == '\0') {
+				return(true);
+			}
+			while (*name != '\0') {
+				if (Matches_Pattern(pattern, name)) {
+					return(true);
+				}
+				name++;
+			}
+			return(false);
+		}
+
+		if (*name == '\0') {
+			return(false);
+		}
+
+		if (*pattern != '?' && std::tolower((unsigned char)*pattern) != std::tolower((unsigned char)*name)) {
+			return(false);
+		}
+
+		pattern++;
+		name++;
+	}
+
+	return(*name == '\0');
+}
+
+
+static bool Is_Eligible_File(std::filesystem::directory_entry const & entry)
+{
+	std::error_code error;
+	if (!entry.is_regular_file(error) || error) {
+		return(false);
+	}
+
+#ifdef _WIN32
+	DWORD const attributes = GetFileAttributesA(entry.path().string().c_str());
+	if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & (FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM|FILE_ATTRIBUTE_TEMPORARY)) != 0) {
+		return(false);
+	}
+#else
+	if (entry.path().filename().string().front() == '.') {
+		return(false);
+	}
+#endif
+
+	return(true);
+}
+
+
 static void Scan_Folder(char const * prefix, char const * pattern, std::vector<std::string> & names)
 {
-	std::string const search = std::string(prefix) + pattern;
-
-	Find_File_Data * block = NULL;
-	if (!Find_First(search.c_str(), 0, &block)) {
+	if (pattern == NULL) {
 		return;
 	}
 
-	do {
-		char const * found = block->GetName();
-		if (found == NULL) {
+	std::error_code error;
+	std::filesystem::directory_iterator entry(std::filesystem::path(prefix != NULL && *prefix != '\0' ? prefix : "."),
+		std::filesystem::directory_options::skip_permission_denied, error);
+	for (; !error && entry != std::filesystem::directory_iterator(); entry.increment(error)) {
+		if (!Is_Eligible_File(*entry)) {
 			continue;
 		}
 
-		std::error_code error;
-		if (std::filesystem::is_directory(std::string(prefix) + found, error)) {
+		std::string const name = entry->path().filename().string();
+		if (!Matches_Pattern(pattern, name.c_str())) {
 			continue;
 		}
 
 		bool present = false;
 		for (std::string const & existing : names) {
-			if (Is_Same_Path(existing, found)) {
+			if (Is_Same_Path(existing, name)) {
 				present = true;
 				break;
 			}
 		}
 
 		if (!present) {
-			names.push_back(found);
+			names.push_back(name);
 		}
-	} while (Find_Next(block));
-
-	Find_Close(block);
+	}
 }
 
 
@@ -393,7 +421,13 @@ std::vector<std::string> Search_Files(char const * pattern)
 	}
 
 	std::sort(names.begin(), names.end(), [](std::string const & left, std::string const & right) {
-		return(_stricmp(left.c_str(), right.c_str()) < 0);
+		for (std::string::size_type index = 0; index < left.length() && index < right.length(); index++) {
+			int const comparison = std::tolower((unsigned char)left[index]) - std::tolower((unsigned char)right[index]);
+			if (comparison != 0) {
+				return(comparison < 0);
+			}
+		}
+		return(left.length() < right.length());
 	});
 
 	return(names);
