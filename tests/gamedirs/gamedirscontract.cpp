@@ -74,8 +74,9 @@ std::string Default_List(void) { return(DeploymentConfigClass().SearchPaths); }
 void Test_Parsing_And_Folders(void)
 {
 	std::string const sep = Separator();
+	std::string const duplicate = " INI , ini" + sep + ",MIX";
 	Check_List(Parse_Search_Folders("INI,MIX"), {"INI" + sep, "MIX" + sep}, "a plain list keeps its order");
-	Check_List(Parse_Search_Folders(" INI , ini" + sep + ",MIX"), {"INI" + sep, "MIX" + sep}, "folders are trimmed and case-insensitively deduplicated");
+	Check_List(Parse_Search_Folders(duplicate.c_str()), {"INI" + sep, "MIX" + sep}, "folders are trimmed and case-insensitively deduplicated");
 	Check_List(Parse_Search_Folders("INI,,MIX"), {"INI" + sep, "MIX" + sep}, "an empty entry is passed over");
 	Check_List(Parse_Search_Folders("."), {}, "the current directory is not registered twice");
 
