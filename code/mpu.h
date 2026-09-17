@@ -32,14 +32,24 @@
 #pragma once
 
 
-// Get_CPU_Clock reads the time stamp counter via the RDTSC intrinsic, available on every
-// processor the supported minimum hardware covers (SSE2, so a Pentium 4 or Athlon 64
-// onward).
+enum class CpuTimingProfile {
+	Neutral,
+	LegacyX86PreP6,
+	LegacyX86P6OrLater,
+};
+
+// Get_CPU_Clock returns a diagnostic counter. It is RDTSC on Windows and a process-relative
+// steady-clock count on Apple ARM64.
 extern "C" {
 	unsigned int __cdecl Get_CPU_Clock(unsigned int & high);
 }
 
+#if defined(_WIN32)
 unsigned int Get_CPU_Rate(unsigned int & high);
 
 void RDTSC(void);
 int Get_RDTSC_CPU_Speed(void);
+#endif
+
+int Adjust_To_CPU_Timing_Profile(int time, CpuTimingProfile profile, unsigned int counter_low,
+	unsigned int counter_high);

@@ -22,9 +22,9 @@ extern "C" {
 	extern char VendorID[];
 }
 
-// Processor family constants. Get_CPU_Type reports the CPUID base family through its
-// cpu_type parameter; callers compare it against these. PROC_80386 and PROC_80486 are
-// unreachable on the supported minimum hardware, which always carries CPUID.
+// Processor family constants. On Windows, Get_CPU_Type reports the CPUID base family through
+// its cpu_type parameter. Apple ARM64 reports CPU_UNKNOWN because these are x86 families.
+// PROC_80386 and PROC_80486 are unreachable on the supported minimum Windows hardware.
 #define	PROC_80386			0
 #define	PROC_80486			1
 #define	PROC_PENTIUM		2

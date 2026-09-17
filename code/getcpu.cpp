@@ -43,7 +43,9 @@
 #include <cstdio>
 #include <cstring>
 
+#if defined(_WIN32)
 #include <intrin.h>
+#endif
 
 /***********************************************************************************************
  * Get_CPU_Type -- Find out what kind of CPU we are running on                                 *
@@ -81,6 +83,7 @@ char VendorID[20] = "Not available";
 /// </summary>
 void __cdecl CPU_Id(void)
 {
+#if defined(_WIN32)
 	int regs[4];
 
 	char cputype = 4;
@@ -100,6 +103,12 @@ void __cdecl CPU_Id(void)
 	}
 
 	CPUType = cputype;
+#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+	CPUType = (char)0xFF;
+	std::strcpy(VendorID, "Apple ARM64");
+#else
+#error "CPU detection is only defined for Windows and Apple ARM64 targets."
+#endif
 }
 
 
@@ -110,7 +119,11 @@ void Get_CPU_Type(int & cpu_type, char * vendor_id, int vendor_id_length)
 	/*
 	**	Return the promised results
 	*/
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+	cpu_type = CPU_UNKNOWN;
+#else
 	cpu_type = (int)CPUType;
+#endif
 
 	if (vendor_id != NULL) {
 		strncpy(vendor_id, VendorID, vendor_id_length);
