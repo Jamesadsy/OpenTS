@@ -1,6 +1,6 @@
 ---
 title: Veterancy and promotion
-summary: "Promotes an object through veteran and elite rank as it destroys value, unlocking per-type abilities and an elite weapon."
+summary: "How experience, promotion, abilities, and elite weapons work."
 category: combat-targeting
 keys:
   - Armory
@@ -30,7 +30,7 @@ related:
 
 ## Ranks
 
-Each runtime instance carries a single experience figure, and its rank is read directly off that number. The four bands are exclusive:
+Vehicles, infantry, aircraft, and buildings each have their own experience total. That total determines their rank:
 
 | Rank | Experience |
 | --- | --- |
@@ -39,73 +39,90 @@ Each runtime instance carries a single experience figure, and its rank is read d
 | Veteran | `1` up to but not including `2` |
 | Elite | `2` and above |
 
-Every object is created at rookie with an experience of `0`. The thresholds `1` and `2` are fixed in the engine; the rules govern how fast the figure climbs, not where the boundaries lie. The figure belongs to the object and not to its type, so two objects built from the same rules section sit at whatever rank each has earned or been handed.
+Objects start at rookie with `0` experience unless another setting gives them a different rank. Veteran always starts at `1` and elite at `2`. Rules can change how quickly experience is earned, but these thresholds are fixed.
 
-Among the rules and AI settings, [`VeteranLevel=0`](/keys/veteranlevel/) is the only source of negative experience, assigning `-0.25`; a map's placed-object records can also write the experience figure directly, at any value. The state costs the object nothing in combat: a below-rookie object holds no abilities, exactly like the rookie it sits under. The state shows in three places only — the insignia it draws, the veterancy crate that steps it up to rookie, and the armory, which sends it out a veteran where any other occupant would leave elite.
+[`VeteranLevel=0`](/keys/veteranlevel/) gives an object `-0.25` experience, placing it below rookie. A map's [placed-object records](/formats/scenario-objects/) can also set experience directly. Below-rookie objects have no rank abilities, just like rookies. They differ in their insignia and in how crates and armories promote them, as described below.
 
 ## Earning experience
 
-Experience is credited in one place: when an object is destroyed, whatever dealt the fatal damage receives `victim cost / (killer cost * VeteranRatio)`. Reaching veteran therefore means destroying [`VeteranRatio`](/keys/veteranratio/) times the killer's own cost in enemy value, and reaching elite means destroying twice that. The figure taken from each type is its [`Cost`](/keys/cost/#scope-aircrafttype), not its [`Points`](/keys/points/). A structure that hands out a [free unit](/keys/freeunit/) has that unit's price subtracted from its own and then added straight back here, so a kill is still worth the structure's written price — unless the unit is priced at or above the structure, where the subtraction floors at nothing and the structure is worth the unit's price instead. The division has no zero guard: a `VeteranRatio` of `0`, or a killer type whose `Cost` is `0`, divides by zero.
+The object that deals the fatal damage earns experience if its type has [`Trainable=yes`](/keys/trainable/). Each kill adds `victim cost / (killer cost * VeteranRatio)` to its experience. The costs come from [`Cost`](/keys/cost/#scope-aircrafttype); [`Points`](/keys/points/) does not affect experience.
 
-:::caution[Price multipliers change nothing about how fast a unit promotes]
-Both figures in the fraction are priced through the house that lost the object. The victim's value is its own type's price scaled by that house's [multipliers](/keys/cost/#what-a-house-pays), and the killer's cost is its type's price scaled by those same multipliers — the killer's own house is never asked. The two scalings cancel, so what a kill is worth comes out of the two written `Cost` figures alone, and a house paying double for everything it builds promotes its units on exactly the tally a house paying half does.
+Starting from rookie, an object must destroy enemies worth [`VeteranRatio`](/keys/veteranratio/) times its own cost to reach veteran, and twice that to reach elite. A lower `VeteranRatio` means faster promotion. Cheaper types need fewer kills against the same enemies.
+
+```ini title="rules.ini"
+[General]
+VeteranRatio=5
+VeteranCap=2
+```
+
+This example allows promotion through combat up to elite rank. [`VeteranCap`](/keys/veterancap/) sets the experience limit. These are example values; the linked key pages give the defaults.
+
+:::note[Cost multipliers apply to both sides]
+Both costs use the defeated owner's [cost multipliers](/keys/cost/#what-a-house-pays). Applying the same multiplier to both costs leaves their ratio unchanged, except for whole-credit rounding. The attacker's own price multipliers are ignored.
 :::
 
-Only a killer whose type is [`Trainable=yes`](/keys/trainable/) accumulates anything; the check is on the killer's own type, and it gates earning alone. An object that was handed a rank some other way keeps every benefit of that rank whether or not its type is trainable. BuildingTypes start untrainable and must set the key explicitly to earn from their own kills.
+Buildings must explicitly set `Trainable=yes` to earn experience from kills. `Trainable` does not control rank benefits: an untrainable object still benefits from a rank given by an armory, a trigger, or another source that ignores this setting.
 
-The house that lost the object also tests whether it considers the killer allied. An allied killer receives no experience, while the remaining score, loss, and trigger bookkeeping for the destroyed object still runs.
+A building with a [`FreeUnit`](/keys/freeunit/) usually awards experience based on the building's full price, even after the free unit has left. If that unit costs more than the building, its price is used instead. See [structure costs](/keys/cost/#what-a-structure-gives-away) for the calculation.
 
-A killer is credited separately for each occupant that dies with a transport it destroys, and a vehicle that crushes something is credited as that object's killer.
+Keep `VeteranRatio` and the killer's cost above `0`: the formula divides by both. With a positive victim cost, a zero divisor sets experience to `VeteranCap`.
 
-:::caution[Capturing awards no experience]
-A captured object is booked as a kill with no killer attached, and the formula runs only where there is a killer, so nothing gains experience from a capture. The points are a separate step alongside that kill record: the capturing house is credited the captured object's cost. Selling a building and letting a unit sink out of the world are booked as killerless kills in the same way, and those two credit no points to anyone.
+A kill gives no experience if the defeated owner considers the killer an ally. Score, loss counts, and destruction triggers still update.
+
+Destroying a transport also awards experience for each passenger killed inside it. Crushing an object counts as a kill for the vehicle that crushed it.
+
+:::note[Capturing awards no experience]
+Capturing an object gives score points equal to its cost, but no experience. Selling a building or losing an object by sinking gives neither score points nor experience to anyone.
 :::
 
-Nothing decays experience and nothing resets it on ownership change, so a rank is held until something explicitly reassigns it.
+Experience does not decrease over time, and changing owners does not reset it.
 
 ### The experience ceiling
 
-Every credited kill clamps the result to [`VeteranCap`](/keys/veterancap/) after adding to it. The clamp runs only on this path — the promotion sources below write a rank directly and ignore the ceiling.
+After each kill that earns experience, the total is limited to [`VeteranCap`](/keys/veterancap/). Promotions from other sources ignore this limit.
 
-:::caution[The engine default keeps elite out of reach]
-With no `VeteranCap` in the rules the ceiling is `1`, which is exactly the veteran threshold: kills can promote an object to veteran and no further. Raising it to `2` is what makes elite reachable through combat.
+:::caution[Allowing elite rank through combat]
+Set `VeteranCap` to at least `2` to allow elite rank through combat. The default limit is `1`, so kills alone can only produce veterans.
 :::
 
-:::danger[A low ceiling demotes elites that keep fighting]
-The clamp is applied to the total, not to the increment, so an elite object whose experience already sits above the ceiling is pulled back down the moment it earns a credited kill. Under a `VeteranCap` of `1`, an elite trainable object drops to veteran on its next kill, losing its elite weapon and its [`EliteAbilities`](/keys/eliteabilities/) with it.
+:::caution[A low limit can demote an elite]
+An object above the limit drops back to it on its next kill that earns experience. For example, with `VeteranCap=1`, a trainable elite drops to veteran and loses its elite weapon and [`EliteAbilities`](/keys/eliteabilities/).
 :::
 
 ## Promotion without kills
 
-Five settings-driven paths set a rank with no experience earned, and a map's placed-object records can write an experience figure directly besides. None of them consults `VeteranCap` or the kill formula. The veterancy crate alone consults `Trainable`.
+The following sources can give an object a rank without kills. They ignore `VeteranCap`; only the veterancy crate requires `Trainable=yes`. A map's placed-object records can also set experience directly.
 
 | Source | Result |
 | --- | --- |
-| [Veterancy crate](/reference/enums/crate/) | Every `Trainable=yes` object on the ground within [`CrateRadius`](/keys/crateradius/) of the crate rises one rank, repeated as many times as the crate's `[Powerups]` data field says. |
+| [Veterancy crate](/reference/enums/crate/) | Every `Trainable=yes` object on the ground within [`CrateRadius`](/keys/crateradius/) of the crate rises one rank, repeated as many times as the crate's `Data` figure in `[Powerups]` says, which [Crate powerups](/formats/powerups/) covers. |
 | [`Armory=yes`](/keys/armory/) building | The infantry inside is promoted once the building's servicing counter runs out. |
 | [Drop Pods superweapon](/systems/drop-pods/#drop-pods-superweapon) | Each delivered passenger is created elite. |
-| TeamType [`VeteranLevel`](/keys/veteranlevel/) | Every member created for the team takes the rank the value names. |
+| TeamType [`VeteranLevel`](/keys/veteranlevel/) | Every member created for the team takes the rank the value selects. |
 | [`InitialVeteran=yes`](/keys/initialveteran/) | The units and infantry drawn from the random starting selection of a skirmish or multiplayer match are created elite. |
+| [Make Elite trigger action](/mapping/actions/taction-make-elite/) | Every object the trigger is attached to is promoted to elite. |
 
-The crate is the only path that steps a rank rather than assigning one: it lifts a below-rookie object to rookie, a rookie to veteran, and a veteran to elite, and leaves an elite where it is. The other four assign a rank outright — three write a fixed rank over whatever the object was carrying, and the armory picks between veteran and elite by the occupant that walked in.
+A crate promotes each affected object one step at a time: below rookie to rookie, rookie to veteran, then veteran to elite. Elite objects stay elite. The crate's `Data` value in `[Powerups]` sets the number of steps. Fractions round up, so `2.5` gives three steps and `2` gives two. A value of `0` or less gives no promotion.
+
+The other sources set the rank directly. The armory's result depends on the infantry's current rank.
 
 :::caution[A veterancy crate promotes every trainable object nearby]
-The radius sweep tests position and `Trainable`, but not ownership. Enemy and neutral objects with `Trainable=yes` standing inside `CrateRadius` are promoted alongside the collector's own, and trainable buildings within the radius are promoted too.
+Crates also promote enemy and neutral objects within `CrateRadius`, including buildings, if their types have `Trainable=yes`.
 :::
 
 :::caution[An armory skips the veteran rank]
-The armory raises a below-rookie occupant to veteran and everything else straight to elite, so a rookie infantry that walks in comes out elite and a veteran gains nothing it could not have had for free. The enter cursor is offered only while the infantry is not already elite, and each admission spends one point of the building's [`Ammo`](/keys/ammo/) pool, which an armory never restocks.
+Rookie and veteran infantry leave an armory as elite. Below-rookie infantry leave as veteran. Elite infantry do not get an enter cursor. Each admission uses one point of the building's [`Ammo`](/keys/ammo/), which an armory never replenishes.
 :::
 
-The armory delay comes from [`IRepairRate`](/keys/irepairrate/), which the hospital shares.
+The training time is set by [`IRepairRate`](/keys/irepairrate/), which also controls hospital treatment time.
 
 ## What a rank changes
 
-Rank by itself changes almost nothing. Except for the elite weapon and the cell-wide scatter noted below, every benefit is gated on an ability, and the rank only decides which of the type's two ability lists is consulted. A veteran of a type that names no abilities gains a rank insignia and nothing else.
+Promotion bonuses depend on the type's ability lists. A veteran with no abilities gains only a rank insignia. Elite objects can also use an elite weapon and cause other objects in their cell to scatter, as described below.
 
 ### Abilities
 
-Each object type carries two ability sets, [`VeteranAbilities`](/keys/veteranabilities/) and [`EliteAbilities`](/keys/eliteabilities/), each a comma-separated list of tokens. A veteran draws on `VeteranAbilities`. An elite draws on both lists together, so an ability named in `VeteranAbilities` continues to apply after the second promotion. Nothing below veteran holds any ability at all, and `EliteAbilities` is never consulted below elite rank.
+[`VeteranAbilities`](/keys/veteranabilities/) and [`EliteAbilities`](/keys/eliteabilities/) are comma-separated lists on each object type. Veterans use `VeteranAbilities`. Elites use both lists, keeping their veteran abilities after promotion. Rookie and below-rookie objects use neither list.
 
 ```ini title="rules.ini"
 [MYINF] ; example InfantryType
@@ -113,9 +130,9 @@ VeteranAbilities=FIREPOWER,ROF
 EliteAbilities=SELF_HEAL,FEARLESS
 ```
 
-A veteran `MYINF` hits harder and reloads faster. An elite one keeps both of those and adds self-repair and immunity to fear.
+A veteran `MYINF` deals more damage and reloads faster. At elite rank it also heals itself and becomes immune to fear.
 
-The eighteen accepted tokens are matched without regard to letter case, and the table gives each one's effect on an object that holds it. They fall into three kinds: ten hand the object a flag its type could have carried from the start, five scale a figure from the rules, and `SCATTER`, `RADAR_INVISIBLE` and `GUARD_AREA` change behavior with no rules figure behind them.
+Ability names are case-insensitive. The table lists all eighteen abilities and their effects.
 
 | Token | Effect on a qualifying object |
 | --- | --- |
@@ -138,25 +155,21 @@ The eighteen accepted tokens are matched without regard to letter case, and the 
 | `GUARD_AREA` | An idle armed vehicle, and an idle human-owned infantry, takes the Guard Area mission instead of Guard. A member of a team is unaffected, and so is a computer-owned infantry, whose idle handling never reads the ability. |
 | `CRUSHER` | A vehicle crushes crushable objects and overlays, as with [`Crusher=yes`](/keys/crusher/). |
 
-An unrecognized token is discarded without complaint, so a misspelling produces a rank with fewer benefits and no diagnostic.
+Unknown or misspelled ability names are ignored without a warning.
 
-:::caution[A space after a comma silences the token]
-Leading and trailing whitespace is stripped from the value as a whole, not from each token, so `VeteranAbilities=FIREPOWER, ROF` registers `FIREPOWER` alone. Write the list without spaces around the separators.
+:::caution[Write ability lists without spaces]
+Spaces around individual names are not removed. For example, `VeteranAbilities=FIREPOWER, ROF` enables only `FIREPOWER`, because the space before `ROF` makes it an unknown name. Spaces at the start or end of the whole value are removed.
 :::
 
-:::caution[Only the first 127 characters are parsed]
-The remainder of a longer value is discarded, and a token cut in half by that boundary is dropped as unrecognized. All eighteen tokens with their separating commas run to 163 characters, so a complete list cannot be assigned in one setting.
-:::
-
-An ability list replaces rather than merges: a later rules layer that carries the key starts from an empty set and keeps only what it names. Omitting the key in that layer leaves the earlier list in force — as does assigning an empty value, which is discarded when the file is read, so a list cannot be cleared once set.
+Setting an ability list in a later rules file replaces the earlier list. Leaving the key out keeps the earlier list. An empty assignment is ignored, so it cannot clear an existing list.
 
 :::caution[An elite object makes its whole cell scatter]
-When fire comes in at a cell holding an elite object, every occupant of that cell scatters — including objects that are neither elite nor carrying `SCATTER`. This is the one effect that reads rank directly instead of going through an ability.
+Incoming fire at a cell containing an elite object makes all occupants scatter, even those without `SCATTER`. This effect requires no ability.
 :::
 
 ### Rank multipliers
 
-Each figure is fetched at the moment the statistic is needed, and each states a fraction to add rather than a finished multiplier:
+Set the five bonuses below in `rules.ini` under `[General]`. Each applies only when the object has the matching ability:
 
 | Setting | Applied as |
 | --- | --- |
@@ -166,32 +179,36 @@ Each figure is fetched at the moment the statistic is needed, and each states a 
 | [`VeteranArmor`](/keys/veteranarmor/) | Incoming damage is divided by the value plus one. |
 | [`VeteranROF`](/keys/veteranrof/) | Reload delay is divided by the value plus one. |
 
-`VeteranArmor` and `VeteranROF` are divisors, so raising them lowers the number they act on: `1` halves damage taken and halves the reload delay, while `0` leaves both untouched. The other three are multipliers, where `1` doubles the statistic and `0` leaves it untouched. All five default to `1`.
+`VeteranArmor=1` halves incoming damage, and `VeteranROF=1` halves reload delay. For the other three settings, `1` doubles the affected statistic. A value of `0` gives no bonus. All five default to `1`.
 
-A sonic weapon and a weapon that fires through the fire particle system never receive the firepower bonus, because their damage figure is zeroed before the veteran step is reached. The reload bonus is skipped on a sonic weapon, and on a weapon whose spark, fire, or railgun particle system is attached; within a burst it is skipped as well, so only the delay that follows the last shot of a burst is shortened.
+Sonic weapons and weapons using fire particles receive no firepower bonus. Sonic weapons also receive no reload bonus, as do weapons with an attached spark, fire, or railgun particle system. The reload bonus shortens the delay after a burst, not the gaps between its shots.
 
 ### The elite weapon
 
-An elite object fires the WeaponType named by [`Elite`](/keys/elite/) wherever its primary weapon would otherwise be used — target selection, range tests, reload delay, and the shot itself all resolve through the substituted weapon slot. The secondary weapon is never swapped, and a veteran gets no swap at all. A type that leaves `Elite` unset falls back to its primary, so the substitution is invisible on types that do not define one.
+At elite rank, the weapon named by [`Elite`](/keys/elite/) replaces the primary weapon. Target selection, range, reload delay, and firing all use this weapon. The secondary weapon stays unchanged. If `Elite` is unset, the object keeps its primary weapon.
 
-The elite weapon slot reuses the primary's art keys, [`PrimaryFireFLH`](/keys/primaryfireflh/), [`PBarrelLength`](/keys/pbarrellength/), and [`PBarrelThickness`](/keys/pbarrelthickness/), so the elite weapon fires from the same muzzle offset as the weapon it replaces.
+The elite weapon uses the primary weapon's art settings: [`PrimaryFireFLH`](/keys/primaryfireflh/), [`PBarrelLength`](/keys/pbarrellength/), and [`PBarrelThickness`](/keys/pbarrelthickness/). It fires from the same muzzle offset.
 
-:::caution[An upgrade plug outranks the elite weapon]
-A building resolves its weapon through its plugs before its own type — a plug being a structure type carrying [`PowersUpBuilding=`](/keys/powersupbuilding/), installed into one of the host's [upgrade slots](/keys/upgrades/). When a plug supplies a weapon in the weapon slot being asked for, that weapon is used and the elite substitution never runs, so the building fires the plug's primary even at elite rank.
+:::caution[Building upgrades take priority]
+A building upgrade that supplies a weapon takes priority over the building's own weapon in that slot, including its elite weapon. Upgrades are structure types with [`PowersUpBuilding=`](/keys/powersupbuilding/) installed in the host's [upgrade slots](/keys/upgrades/).
 :::
 
 ### When a promotion takes effect
 
-Nothing about a rank is cached. Each multiplier is fetched from the rules and each ability list from the type at the moment it is needed, so a promotion applies from the next shot, the next damage event, or the next movement step.
+Promotion bonuses apply the next time the object fires, takes damage, or moves. The game checks its current rank and abilities whenever it calculates those effects.
 
-Sight is the exception. The wider radius is computed inside the routine that reveals terrain, so a promoted object's revealed area grows only when it next looks, not at the moment of promotion.
+Extra sight reveals more terrain the next time the object reveals its surroundings. Promotion itself does not reveal the larger area.
 
 ## Carrying rank between objects
 
-Deploying carries experience across in both directions: a construction vehicle that deploys hands its experience to the building it becomes, and a building that undeploys hands it back to the vehicle. Change of ownership leaves experience untouched, so a captured building keeps the rank it was carrying, along with the abilities and elite weapon that rank unlocks.
+A vehicle keeps its experience when it deploys into a building, and the building passes that experience back when it undeploys. Capturing an object also preserves its rank and any abilities or elite weapon that rank grants.
 
-Passengers that get clear of a wrecked transport are the same objects they were and keep their own ranks. The crew that escapes a destroyed vehicle or building is a freshly created infantry object and starts at rookie.
+Passengers who survive a destroyed transport keep their ranks. Crew created when a vehicle or building is destroyed start at rookie.
 
 ## Rank display
 
-A veteran and an elite each draw their own insignia from the hard-coded `PIPS.SHP`, placed beside the object and pushed further out for anything that is not infantry. The insignia stands whether or not the object is selected, and only for a viewer allied to its owner, spying on that house, or [given the whole map](/systems/observers/), so an enemy's ranks stay hidden. It goes with the object into shroud, fog, and an unsensed cloak, which hide the insignia along with the object wearing it. The cross worn by a healer keeps the same company. A building that acquired a rank by deploying draws one as well. An object below rookie draws the frame immediately after the last named pip rather than an insignia designed for that state.
+Veteran and elite objects display different rank insignia beside them, even when unselected. Buildings display them too. The insignia sits farther from vehicles, aircraft, and buildings than from infantry.
+
+Ranks are visible to allies, players spying on the owner, and [observers with full map visibility](/systems/observers/). Shroud, fog, or an undetected cloak hides the insignia along with the object. The healer cross follows the same visibility rules.
+
+The insignia uses `PIPS.SHP`. A below-rookie object uses the frame after the last defined pip; there is no dedicated insignia for that rank.

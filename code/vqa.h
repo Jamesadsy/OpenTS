@@ -21,6 +21,7 @@
 
 #include <windows.h>
 #include <vqaplay.h>
+#include <windows.h>
 
 //==========================================================================
 // PUBLIC FUNCTIONS

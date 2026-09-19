@@ -45,7 +45,10 @@ void SendPublicGameopts(char const * options);
 void SendPrivateGameopts(char const * player, char const * options);
 
 
-char * CalcRandomMapDigest(void);
+// Eight hexadecimal digits, a terminator, and slack.
+constexpr int RANDOM_MAP_DIGEST_SIZE = 12;
+
+void CalcRandomMapDigest(char * digest, int bufsize);
 int CreateRandomMap(void);
 
 extern COLORREF PlayerColorTable[MAX_PLAYERS];

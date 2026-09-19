@@ -17,7 +17,7 @@ related:
 
 A message that `thirdparty/bgfx.cmake` is empty means the clone did not fetch the vendored renderer. Run `git submodule update --init --recursive` and configure again.
 
-Use the Visual Studio 2022 generator and `-A Win32`. The build supports no other compilers, Visual Studio versions, or target architectures.
+Use the Visual Studio 2022 generator with `-A Win32` or `-A x64`. The build supports no other compilers, Visual Studio versions, or target architectures. Configuring a platform over a build directory that already holds the other one fails; give each its own directory.
 
 For a Visual Studio installation that CMake cannot discover through the Visual Studio Installer, pass its installation path and product version as described in the repository's `docs/BUILDING.md`.
 
@@ -30,4 +30,4 @@ Builds write their runnable files to `build/bin/<configuration>/` and copy nothi
 
 ## The executable cannot initialize game data
 
-Name the game data directory with `-DATADIR=`, and confirm it holds data from a legitimate Tiberian Sun installation. The repository and CMake build directory do not supply proprietary game assets.
+Name the game data directory with [`-DATADIR=<path>`](/using/command-line/data-directory/). The path is a legitimate Tiberian Sun installation or a copy of its data. The repository and CMake build directory do not supply proprietary game assets.

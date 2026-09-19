@@ -41,6 +41,7 @@
 
 #include "cdfile.h"
 
+#include <filesystem>
 #include <string>
 #include <filesystem>
 
