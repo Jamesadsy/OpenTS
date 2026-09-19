@@ -24,8 +24,27 @@ void Create_Main_Window ( HINSTANCE instance , int command_show , int width , in
 NativeWindow Win_Native_Window(HWND window);
 bool Win_Window_Drawable_Size(HWND window, int & width, int & height);
 bool Win_Preferred_Frame_Size(int & width, int & height);
+#ifdef _WIN32
+// Windows keeps both kinds of data beside the executable.  The false return is
+// therefore the production behavior as well as the lightweight-test behavior.
+inline bool Win_Log_Directory(char * path, int size)
+{
+	(void)path;
+	(void)size;
+	return(false);
+}
+
+
+inline bool Win_Shipped_Data_Directory(char * path, int size)
+{
+	(void)path;
+	(void)size;
+	return(false);
+}
+#else
 bool Win_Log_Directory(char * path, int size);
 bool Win_Shipped_Data_Directory(char * path, int size);
+#endif
 int Win_Window_Refresh_Rate(HWND window);
 bool Win_Set_Window_Fullscreen(HWND window, bool fullscreen);
 bool Win_Pointer_Can_Warp(void);

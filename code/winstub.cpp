@@ -452,15 +452,10 @@ bool Win_Preferred_Frame_Size(int & width, int & height)
 /// <param name="path">Receives the directory, untouched on a false return.</param>
 /// <param name="size">The size of the buffer.</param>
 /// <returns>bool; Did the host name a directory?</returns>
+#ifndef _WIN32
 bool Win_Log_Directory(char * path, int size)
 {
-#ifdef _WIN32
-	(void)path;
-	(void)size;
-	return(false);
-#else
 	return(Win32Compat_Log_Directory(path, size) != FALSE);
-#endif
 }
 
 
@@ -473,14 +468,9 @@ bool Win_Log_Directory(char * path, int size)
 /// </summary>
 bool Win_Shipped_Data_Directory(char * path, int size)
 {
-#ifdef _WIN32
-	(void)path;
-	(void)size;
-	return(false);
-#else
 	return(Win32Compat_Shipped_Data_Directory(path, size) != FALSE);
-#endif
 }
+#endif
 
 
 // A borderless window covering the desktop is all a full screen presentation is on
