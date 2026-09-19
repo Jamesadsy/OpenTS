@@ -42,6 +42,16 @@
 #include <winnt.h>
 #include <winuser.h>
 
+// windowsx.h exposes window-navigation macros with the same names as RmlUi
+// element methods.  The game does not use these macro helpers, and leaving
+// them active corrupts RmlUi's C++ declarations.
+#ifdef GetFirstChild
+#undef GetFirstChild
+#endif
+#ifdef GetNextSibling
+#undef GetNextSibling
+#endif
+
 extern int			ShowCommand;
 extern HINSTANCE	ProgramInstance;
 extern HWND			MainWindow;
