@@ -1,0 +1,164 @@
+name: Second Sun G3 iPhoneOS managed proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-device:
+    name: iPhoneOS arm64 unsigned managed proof
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+
+      - name: Record runner, source and toolchain provenance
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p proof
+          sw_vers | tee proof/sw_vers.log
+          uname -m | tee proof/uname-m.log
+          test "$(uname -m)" = arm64
+          xcodebuild -version | tee proof/xcodebuild-version.log
+          clang --version | tee proof/clang-version.log
+          cmake --version | tee proof/cmake-version.log
+          xcrun --sdk iphoneos --show-sdk-version | tee proof/iphoneos-sdk-version.log
+          git rev-parse --abbrev-ref HEAD | tee proof/ref.log
+          printf '%s\n' "${GITHUB_REF_NAME}" | tee proof/ref-name.log
+          test "${GITHUB_REF_NAME}" = "secondsun/ss-g3-020-ios-arm64"
+          git rev-parse HEAD | tee proof/head.log
+          git rev-parse 'HEAD^{tree}' | tee proof/tree.log
+          git submodule status --recursive | tee proof/submodules.log
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Configure native macOS contract-test harness
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B build/g3-host-tests -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DOPENTS_EXPERIMENTAL_NATIVE=ON 2>&1 | tee proof/host-tests-configure.log
+
+      - name: Build and run bounded local contract tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build/g3-host-tests \
+            --target IOSPathContract IOSTouchContract CpuDetect GameDirs PresentationContract OpenTSDonorHostSmoke \
+            --parallel 3 2>&1 | tee proof/host-tests-build.log
+          ctest --test-dir build/g3-host-tests \
+            -R '^(ios-path-contract|ios-touch-contract|cpudetect|gamedirs|presentation-contract|donor-host-smoke)$' \
+            --output-on-failure 2>&1 | tee proof/host-tests-ctest.log
+
+      - name: Configure unsigned iPhoneOS device route
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --preset ios-device \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
+            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO 2>&1 | tee proof/ios-configure.log
+
+      - name: Build unsigned iPhoneOS arm64 OpenTS
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build --preset ios-device --parallel 3 2>&1 | tee proof/ios-build.log
+
+      - name: Stage unsigned OpenTS.app
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf build/ios-ci-stage
+          cmake --install build/ios-device --config Release \
+            --prefix build/ios-ci-stage --component OpenTS 2>&1 | tee proof/ios-install.log
+          test -d build/ios-ci-stage/OpenTS.app
+
+      - name: Verify staged Mach-O bundle plist resources and unsigned state
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=build/ios-ci-stage/OpenTS.app
+          BINARY="$APP/OpenTS"
+          PLIST="$APP/Info.plist"
+          test -f "$BINARY"
+          test -f "$PLIST"
+
+          file "$BINARY" | tee proof/macho-file.log
+          lipo -archs "$BINARY" | tee proof/macho-archs.log
+          xcrun vtool -show-build "$BINARY" | tee proof/macho-build.log
+          grep -qw arm64 proof/macho-archs.log
+          grep -q 'platform IOS' proof/macho-build.log
+          if grep -q 'platform IOSSIMULATOR' proof/macho-build.log; then
+            echo 'device proof unexpectedly contains simulator platform metadata' >&2
+            exit 1
+          fi
+
+          plutil -lint "$PLIST" | tee proof/plist-lint.log
+          plist_value() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST"; }
+          test "$(plist_value CFBundleExecutable)" = OpenTS
+          test "$(plist_value CFBundleSupportedPlatforms:0)" = iPhoneOS
+          test "$(plist_value LSRequiresIPhoneOS)" = true
+          test "$(plist_value MinimumOSVersion)" = 16.0
+          test "$(plist_value UIDeviceFamily:0)" = 1
+          test "$(plist_value UIDeviceFamily:1)" = 2
+          test "$(plist_value UIRequiredDeviceCapabilities:0)" = arm64
+          test "$(plist_value UISupportedInterfaceOrientations:0)" = UIInterfaceOrientationLandscapeLeft
+          test "$(plist_value UISupportedInterfaceOrientations:1)" = UIInterfaceOrientationLandscapeRight
+          test "$(plist_value UISupportedInterfaceOrientations~ipad:0)" = UIInterfaceOrientationLandscapeLeft
+          test "$(plist_value UISupportedInterfaceOrientations~ipad:1)" = UIInterfaceOrientationLandscapeRight
+
+          test -f "$APP/Language.dat"
+          test -d "$APP/ui"
+          test -f "$APP/ui/mainmenu.rml"
+          test -f "$APP/ui/optionsbase.rcss"
+
+          test ! -e "$APP/embedded.mobileprovision"
+          test ! -d "$APP/_CodeSignature"
+          printf '%s\n' 'unsigned: true' 'signing credentials: none' > proof/unsigned-state.log
+
+      - name: Verify provenance and owner-data absence
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=build/ios-ci-stage/OpenTS.app
+          ARTIFACT=build/g3-proof
+          mkdir -p "$ARTIFACT"
+          find "$APP" -print | LC_ALL=C sort > proof/bundle-inventory.log
+          if find "$APP" -type f \( \
+            -iname '*.mix' -o -iname '*.mpr' -o -iname '*.map' -o -iname '*.shp' \
+            -o -iname '*.vqa' -o -iname '*.aud' -o -iname '*.wsa' -o -iname '*.ini' \
+          \) -print -quit | grep -q .; then
+            echo 'prohibited owner-data payload class found in staged bundle' >&2
+            exit 1
+          fi
+
+          cat > "$ARTIFACT/provenance.txt" <<EOF
+          commit=$(git rev-parse HEAD)
+          tree=$(git rev-parse 'HEAD^{tree}')
+          ref=${GITHUB_REF}
+          profile=ios-device-release-unsigned
+          workflow_run_id=${GITHUB_RUN_ID}
+          runner=${RUNNER_NAME}
+          xcode=$(xcodebuild -version | tr '\n' ' ')
+          sdk=$(xcrun --sdk iphoneos --show-sdk-version)
+          cmake=$(cmake --version | head -n 1)
+          EOF
+          cp proof/*.log "$ARTIFACT/"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARTIFACT/OpenTS-app.zip"
+
+      - name: Upload curated unsigned G3 proof artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: secondsun-g3-ios-${{ github.sha }}
+          path: build/g3-proof
+          if-no-files-found: error
+          retention-days: 90

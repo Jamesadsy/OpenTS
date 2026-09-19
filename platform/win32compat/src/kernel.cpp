@@ -7,6 +7,7 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
+#include "iospaths.h"
 #include "win32compat.h"
 
 #include <mach-o/dyld.h>
@@ -191,37 +192,24 @@ static std::wstring _CommandLine;
 
 #ifdef OPENTS_IOS
 /*
- * The folder the game reads its data from and writes the player's own files into. A host
- * that starts a process from an icon hands it no arguments, so the two directories the game
- * would otherwise be told about are named here in the form the command line carries them
- * and everything downstream of the parser stays identical.
- *
- * Documents/OpenTS is chosen because Documents is the one folder in the container the
- * player can reach, so a Tiberian Sun installation can be dropped in and a saved game
- * copied out without a cable. The container path holds an identifier that changes on every
- * reinstall, which is why it is read at run time rather than built in.
+ * A host that starts a process from an icon hands it no arguments, so the two directories the
+ * game would otherwise be told about are named here in the form the command line carries them
+ * and everything downstream of the parser stays identical. The container prefix is runtime
+ * derived; the helper keeps read/search data and writable player state separate.
  */
-static char const * const _ContainerFolder = "/Documents/OpenTS";
-
-
 static void Append_Container_Directories(std::vector<std::wstring> & arguments)
 {
-	char const * const home = getenv("HOME");
-
-	if (home == NULL || home[0] == '\0') {
+	IOSPaths const paths = Build_IOS_Paths(getenv("HOME"));
+	if (!paths.Valid()) {
 		return;
 	}
 
-	std::string const folder = std::string(home) + _ContainerFolder;
+	// Made here rather than left to the game, which treats a missing data directory as fatal.
+	// If creation fails, the named Data path is still passed through and common GameDirs can
+	// report its normal fail-closed error instead of silently aliasing it to User.
+	Create_IOS_Paths(paths);
 
-	// Made here rather than left to the game, which treats a missing data directory as
-	// fatal. An empty folder lets the game start and say which files it could not find,
-	// and gives the player somewhere to put them.
-	std::error_code error;
-	std::filesystem::create_directories(folder, error);
-
-	for (char const * option : { "-DATADIR=", "-USERDIR=" }) {
-		std::string const argument = std::string(option) + folder;
+	for (std::string const & argument : IOS_Command_Line_Arguments(paths)) {
 		arguments.push_back(std::wstring(argument.begin(), argument.end()));
 	}
 }
@@ -242,14 +230,14 @@ extern "C" BOOL Win32Compat_Log_Directory(char * buffer, int size)
 		return(FALSE);
 	}
 
-	std::string const folder = std::string(home) + _ContainerFolder;
+	IOSPaths const paths = Build_IOS_Paths(home);
+	std::string const folder = IOS_Log_Directory(paths).string();
 
 	if ((int)folder.length() >= size) {
 		return(FALSE);
 	}
 
-	std::error_code error;
-	std::filesystem::create_directories(folder, error);
+	Create_IOS_Paths(paths);
 
 	strcpy(buffer, folder.c_str());
 	return(TRUE);

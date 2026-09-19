@@ -16,6 +16,7 @@ add_library(win32compat STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/entry.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/gdi.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/input.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/iospaths.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/kernel.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/message.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/pointer.cpp"
@@ -25,6 +26,13 @@ add_library(win32compat STATIC
 )
 
 target_compile_features(win32compat PRIVATE cxx_std_20)
+
+# The G3 owner-data-free touch contract drives the real recognizer with deterministic device,
+# time and window inputs. The native host harness needs these hooks; the iOS product does not
+# carry them.
+if(NOT IOS)
+    target_compile_definitions(win32compat PRIVATE OPENTS_TOUCH_TEST)
+endif()
 
 # Consumers include <windows.h> and the rest of the surface by their Windows spellings.
 target_include_directories(win32compat PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/include")

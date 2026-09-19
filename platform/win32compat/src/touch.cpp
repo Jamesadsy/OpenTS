@@ -7,6 +7,7 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
+#include "iospaths.h"
 #include "win32compat.h"
 
 #include <sys/stat.h>
@@ -168,6 +169,16 @@ bool _ParkPending;
 FILE * _Log;
 bool _LogChecked;
 
+#ifdef OPENTS_TOUCH_TEST
+bool _Test_Window_Size_Enabled;
+float _Test_Window_Width;
+float _Test_Window_Height;
+bool _Test_Direct_Device_Override;
+bool _Test_Direct_Device;
+bool _Test_Now_Enabled;
+Uint64 _Test_Now;
+#endif
+
 
 char const * Phase_Name(PhaseType phase)
 {
@@ -194,18 +205,39 @@ bool Directory_Exists(char const * path)
 // The log is turned on by a directory the player can make, and written into it. A device has
 // no command line to pass a flag on and no console to read, so the switch has to be
 // something a person can reach: on iOS the directory is "touchlog" inside the application's
-// Documents folder, which is the folder the Files app shows, and the log can be copied out
-// of the same place. Everywhere else the directory is "touchlog" beside the working
-// directory, and OPENTS_TOUCH_LOG or -TOUCHLOG on the command line will create it.
+// writable Documents/OpenTS/User folder, and the log can be copied out of the same place.
+// Everywhere else the directory is "touchlog" beside the working directory, and
+// OPENTS_TOUCH_LOG or -TOUCHLOG on the command line will create it.
 std::string Log_Directory(void)
 {
 #ifdef OPENTS_IOS
-	char const * home = getenv("HOME");
-	return(std::string(home != NULL ? home : ".") + "/Documents/touchlog");
+	return(IOS_Touch_Log_Directory(Build_IOS_Paths(getenv("HOME"))).string());
 #else
 	char const * named = getenv("OPENTS_TOUCH_LOG_DIR");
 	return(named != NULL && *named != '\0' ? std::string(named) : std::string("touchlog"));
 #endif
+}
+
+
+Uint64 Touch_Now(void)
+{
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Now_Enabled) {
+		return(_Test_Now);
+	}
+#endif
+	return(SDL_GetTicksNS());
+}
+
+
+bool Touch_Device_Is_Direct(SDL_TouchID device)
+{
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Direct_Device_Override) {
+		return(_Test_Direct_Device);
+	}
+#endif
+	return(SDL_GetTouchDeviceType(device) == SDL_TOUCH_DEVICE_DIRECT);
 }
 
 
@@ -317,7 +349,7 @@ void Log(char const * format, ...)
 		return;
 	}
 
-	std::fprintf(file, "%8llu ", (unsigned long long)(SDL_GetTicksNS() / 1000000ULL));
+	std::fprintf(file, "%8llu ", (unsigned long long)(Touch_Now() / 1000000ULL));
 
 	va_list arguments;
 	va_start(arguments, format);
@@ -354,6 +386,14 @@ float Dead_Zone(void)
 
 bool Window_Size(float & width, float & height)
 {
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Window_Size_Enabled) {
+		width = _Test_Window_Width;
+		height = _Test_Window_Height;
+		return(width > 0.0f && height > 0.0f);
+	}
+#endif
+
 	Win32Window * main = Win32_Lookup(Win32_Main_Window());
 
 	if (main == NULL || main->Handle == NULL) {
@@ -446,7 +486,7 @@ void Flush_Press(void)
 
 	_Press.Pending = false;
 	Press(_Press.Button);
-	Defer_Release(_Press.Button, SDL_GetTicksNS());
+	Defer_Release(_Press.Button, Touch_Now());
 }
 
 
@@ -825,7 +865,7 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 	}
 
 	// A trackpad reports fingers as well, and a trackpad already has a pointer of its own.
-	if (SDL_GetTouchDeviceType(event.tfinger.touchID) != SDL_TOUCH_DEVICE_DIRECT) {
+	if (!Touch_Device_Is_Direct(event.tfinger.touchID)) {
 		Log("ignored: touch device %llu is not a screen",
 			(unsigned long long)event.tfinger.touchID);
 		return(false);
@@ -883,7 +923,7 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 // glide advances and where a state that can no longer be true is put right.
 void Win32_Touch_Service(void)
 {
-	Uint64 const now = SDL_GetTicksNS();
+	Uint64 const now = Touch_Now();
 
 	// Opened as soon as there is a window to measure, so the header is written even in a
 	// session that ends before anything is touched.
@@ -968,3 +1008,70 @@ bool Win32_Touch_Take_Scroll(int * x, int * y)
 
 	return(false);
 }
+
+
+#ifdef OPENTS_TOUCH_TEST
+void Win32_Touch_Test_Reset(void)
+{
+	if (_Log != NULL) {
+		std::fclose(_Log);
+		_Log = NULL;
+	}
+
+	_LogChecked = false;
+	_Phase = PHASE_IDLE;
+	_Fingers.clear();
+	_PressX = 0.0f;
+	_PressY = 0.0f;
+	_PressTime = 0;
+	_LastX = 0.0f;
+	_LastY = 0.0f;
+	_PanX = 0.0f;
+	_PanY = 0.0f;
+	_PanEngaged = false;
+	_Samples.clear();
+	_CoastX = 0.0;
+	_CoastY = 0.0;
+	_CoastTime = 0;
+	_Coasting = false;
+	_ScrollX = 0.0;
+	_ScrollY = 0.0;
+	_Press = {};
+	_Release = {};
+	_MovieMode = false;
+	_HeldButton = 0;
+	_ParkPending = false;
+	_Test_Window_Size_Enabled = false;
+	_Test_Window_Width = 0.0f;
+	_Test_Window_Height = 0.0f;
+	_Test_Direct_Device_Override = false;
+	_Test_Direct_Device = true;
+	_Test_Now_Enabled = false;
+	_Test_Now = 0;
+
+	Win32_Pointer_Button(SDL_BUTTON_LEFT, false);
+	Win32_Pointer_Button(SDL_BUTTON_RIGHT, false);
+}
+
+
+void Win32_Touch_Test_Set_Window_Size(float width, float height)
+{
+	_Test_Window_Size_Enabled = true;
+	_Test_Window_Width = width;
+	_Test_Window_Height = height;
+}
+
+
+void Win32_Touch_Test_Set_Direct_Device(bool direct)
+{
+	_Test_Direct_Device_Override = true;
+	_Test_Direct_Device = direct;
+}
+
+
+void Win32_Touch_Test_Set_Now(Uint64 now)
+{
+	_Test_Now_Enabled = true;
+	_Test_Now = now;
+}
+#endif
