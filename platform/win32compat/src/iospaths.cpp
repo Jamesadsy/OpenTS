@@ -61,10 +61,10 @@ std::vector<std::string> IOS_Command_Line_Arguments(IOSPaths const & paths)
 		return(std::vector<std::string>());
 	}
 
-	return({
+	return std::vector<std::string>{
 		std::string("-DATADIR=") + paths.Data.string(),
 		std::string("-USERDIR=") + paths.User.string()
-	});
+	};
 }
 
 
