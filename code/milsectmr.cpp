@@ -36,6 +36,13 @@
 /// </summary>
 MillisecondTimerClass::MillisecondTimerClass(void)
 {
+	// Apple ARM64 exposes a monotonic diagnostic counter, not a CPU-frequency contract.
+	// The timer therefore uses the common host clock instead of pretending that nanoseconds
+	// are processor cycles which can be scaled by QueryPerformanceFrequency.
+#if !defined(_WIN32)
+	Frequency = 1.0;
+	return;
+#else
 	unsigned int high = 0;
 	Frequency = 1.0;
 	unsigned int low = Get_CPU_Rate(high);
@@ -55,6 +62,7 @@ MillisecondTimerClass::MillisecondTimerClass(void)
 		Frequency = LI_TO_DBL(dh, dl) / 1000; // 1000 = rate.
 
 	}
+#endif
 }
 
 
