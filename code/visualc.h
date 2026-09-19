@@ -148,8 +148,6 @@
 #define M_FPI 3.141592654f
 #endif
 
-#endif
-
 // Spellings no C library supplies, so they are needed whatever the compiler.
 #ifndef M_SQRT_2
 #define M_SQRT_2    0.707106781186547524401
