@@ -87,7 +87,7 @@ jobs:
         run: |
           set -o pipefail
           ctest --test-dir build --output-on-failure 2>&1 | tee macos-ctest.log
-          test -f build/Language.dat
+          test -f build/bin/Language.dat
           test -d Run/ui
       - name: Upload no-owner-data proof logs
         if: always()
