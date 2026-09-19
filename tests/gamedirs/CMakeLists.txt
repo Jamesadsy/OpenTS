@@ -2,6 +2,17 @@
 # and the INI reader it stands on. It lives outside code/ so that the recursive glob building
 # OpenTS cannot pick this target's entry point up.
 
+set(GAMEDIRS_INCLUDES ${OPENTS_GENERATED_DIR})
+set(GAMEDIRS_LIBRARIES)
+set(GAMEDIRS_DEFINITIONS)
+if(WIN32)
+    set(GAMEDIRS_DEFINITIONS WIN32 _WINDOWS _MBCS NOMINMAX)
+endif()
+if(NOT WIN32)
+    list(APPEND GAMEDIRS_INCLUDES ${CMAKE_SOURCE_DIR}/platform/win32compat/include)
+    list(APPEND GAMEDIRS_LIBRARIES win32compat)
+endif()
+
 opents_add_test(GameDirs
     NAME gamedirs
     SOURCES gamedirscontract.cpp
@@ -30,8 +41,9 @@ opents_add_test(GameDirs
         trim.cpp
         xpipe.cpp
         xstraw.cpp
-    INCLUDES ${OPENTS_GENERATED_DIR}
-    DEFINITIONS WIN32 _WINDOWS _MBCS NOMINMAX
+    INCLUDES ${GAMEDIRS_INCLUDES}
+    DEFINITIONS ${GAMEDIRS_DEFINITIONS}
     UTF8
     STAMP
+    LIBRARIES ${GAMEDIRS_LIBRARIES}
 )

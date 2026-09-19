@@ -1,0 +1,103 @@
+name: Second Sun donor G2 proof
+
+on:
+  push:
+    branches: [secondsun/ss-g2-donor-001-reconcile]
+    paths:
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "code/**"
+      - "platform/**"
+      - "tests/**"
+      - "thirdparty/**"
+      - ".gitmodules"
+      - ".github/workflows/secondsun-donor-g2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.architecture }} ${{ matrix.configuration }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [Win32, x64]
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+      - name: Configure
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G "Visual Studio 17 2022" -A ${{ matrix.architecture }}
+          ${{ matrix.architecture == 'x64' && '-DOPENTS_EXPERIMENTAL_X64=ON' || '' }}
+      - name: Build complete OpenTS and test targets
+        shell: pwsh
+        run: cmake --build build --config ${{ matrix.configuration }} --parallel
+      - name: Run CTest
+        shell: pwsh
+        run: ctest --test-dir build -C ${{ matrix.configuration }} --output-on-failure
+
+  macos-arm64:
+    name: macOS ARM64 donor SDL Metal proof
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+      - name: Record managed runner and source provenance
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sw_vers | tee macos-provenance.log
+          uname -m | tee -a macos-provenance.log
+          test "$(uname -m)" = arm64
+          xcodebuild -version | tee -a macos-provenance.log
+          clang --version | tee -a macos-provenance.log
+          cmake --version | tee -a macos-provenance.log
+          git rev-parse HEAD | tee -a macos-provenance.log
+          git rev-parse 'HEAD^{tree}' | tee -a macos-provenance.log
+          git submodule status --recursive | tee -a macos-provenance.log
+      - name: Configure donor native ARM64 build
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DOPENTS_EXPERIMENTAL_NATIVE=ON 2>&1 | tee macos-configure.log
+      - name: Compile complete OpenTS
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --target OpenTS --parallel 3 2>&1 | tee macos-compile.log
+      - name: Link and build portable test closure
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --parallel 3 2>&1 | tee macos-link-and-tests-build.log
+      - name: Run portable CTest and donor SDL Metal smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          ctest --test-dir build --output-on-failure 2>&1 | tee macos-ctest.log
+          test -f build/Language.dat
+          test -d Run/ui
+      - name: Upload no-owner-data proof logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: secondsun-donor-g2-macos-arm64-${{ github.sha }}
+          path: |
+            macos-provenance.log
+            macos-configure.log
+            macos-compile.log
+            macos-link-and-tests-build.log
+            macos-ctest.log
+          retention-days: 90

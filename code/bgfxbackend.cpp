@@ -14,8 +14,10 @@
 
 #include "backendviews.hh"
 
+#ifdef _WIN32
 #include "dbgprint.h"
 #include "except.h"
+#endif
 
 #include <bx/allocator.h>
 #include <bgfx/bgfx.h>
@@ -134,13 +136,24 @@ class BackendCallback : public bgfx::CallbackI
 			// or the Direct3D debug layer is free to hold, so ending the process over one would
 			// report somebody else's reference as a crash.
 			if (code == bgfx::Fatal::DebugCheck) {
+				#ifdef _WIN32
 				DebugString("Renderer check failed at %s(%u): %s\n",
 							filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+				#else
+				std::fprintf(stderr, "Renderer check failed at %s(%u): %s\n",
+					filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+				#endif
 				return;
 			}
 
+			#ifdef _WIN32
 			Fatal("Renderer error %d at %s(%u): %s", (int)code,
 						filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+			#else
+				std::fprintf(stderr, "Renderer error %d at %s(%u): %s\n", (int)code,
+					filepath != NULL ? filepath : "", (unsigned)line, str != NULL ? str : "");
+				std::abort();
+			#endif
 		}
 
 		virtual void traceVargs(const char * filepath, uint16_t line, const char * format, va_list argList) override
