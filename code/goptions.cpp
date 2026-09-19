@@ -52,7 +52,16 @@
 
 #include "special.hh"
 
-
+int Network_Quality_Text_ID(NetTiming::ConnectionQuality quality)
+{
+	switch (quality) {
+		case NetTiming::ConnectionQuality::Fast: return(TXT_BEST_CONNECTION);
+		case NetTiming::ConnectionQuality::Normal: return(TXT_GOOD_CONNECTION);
+		case NetTiming::ConnectionQuality::Poor: return(TXT_POOR_CONNECTION);
+		case NetTiming::ConnectionQuality::Bad: return(TXT_WORST_CONNECTION);
+	}
+	return(TXT_WORST_CONNECTION);
+}
 
 // What the driver does on the way out. The briefing is restated after the screen has gone,
 // which is where the dialog driver restated it.
