@@ -7,7 +7,12 @@ target_compile_features(OpenTSDonorHostSmoke PRIVATE cxx_std_20)
 target_include_directories(OpenTSDonorHostSmoke PRIVATE
     ${CMAKE_SOURCE_DIR}/code
     ${OPENTS_GENERATED_DIR}
+    ${CMAKE_SOURCE_DIR}/thirdparty/bgfx.cmake/bgfx/include
+    ${CMAKE_SOURCE_DIR}/thirdparty/bgfx.cmake/bx/include
+    ${CMAKE_SOURCE_DIR}/thirdparty/bgfx.cmake/bimg/include
+    ${CMAKE_SOURCE_DIR}/thirdparty/bgfx.cmake/bgfx/examples/common/imgui
 )
+target_compile_definitions(OpenTSDonorHostSmoke PRIVATE ${OPENTS_BX_CONFIG_DEBUG})
 target_link_libraries(OpenTSDonorHostSmoke PRIVATE
     win32compat
     bgfx
