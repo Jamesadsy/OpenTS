@@ -10,12 +10,12 @@ if(WIN32)
 endif()
 if(NOT WIN32)
     list(APPEND GAMEDIRS_INCLUDES ${CMAKE_SOURCE_DIR}/platform/win32compat/include)
-    list(APPEND GAMEDIRS_LIBRARIES win32compat)
+    list(APPEND GAMEDIRS_LIBRARIES win32compat iconv)
 endif()
 
 opents_add_test(GameDirs
     NAME gamedirs
-    SOURCES gamedirscontract.cpp
+    SOURCES gamedirscontract.cpp dbgprintstub.cpp
     ENGINE
         gamedirs.cpp
         cdfile.cpp
@@ -24,7 +24,6 @@ opents_add_test(GameDirs
         file.cpp
         file_posix.cpp
         file_win.cpp
-        dbgprint.cpp
         ini.cpp
         utf8.cpp
         b64pipe.cpp
