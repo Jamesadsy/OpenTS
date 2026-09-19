@@ -28,6 +28,16 @@ inline constexpr char const * UI_MAINMENU_VERSION = "version";
 inline constexpr char const * UI_MAINMENU_CREDITS = "credits";
 inline constexpr char const * UI_MAINMENU_TYPED = "typed";   // Value: the character typed
 
+enum class UIMainMenuFallbackRoute {
+	DONOR_RMLUI_MAIN_MENU,
+};
+
+// The accepted fallback when NewMenu cannot be used is the donor RmlUi Main_Menu path.
+// Legacy OwnerDraw/winfix presentation is not a fallback route in this contract.
+inline constexpr UIMainMenuFallbackRoute UI_MAINMENU_FALLBACK_ROUTE =
+	UIMainMenuFallbackRoute::DONOR_RMLUI_MAIN_MENU;
+inline constexpr bool UI_MAINMENU_LEGACY_OWNERDRAW_FALLBACK = false;
+
 
 class UIMainMenuPresenterClass : public UIPresenterClass
 {
@@ -68,6 +78,6 @@ class UIMainMenuPresenterClass : public UIPresenterClass
 };
 
 
-// Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
-// caller falls through to the legacy dialog.
+// Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown to the
+// caller, which retains the donor fallback contract at the menu-selection boundary.
 UIResult UI_Main_Menu_Screen(UIMainMenuPresenterClass & presenter);

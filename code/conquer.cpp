@@ -88,6 +88,7 @@
 #include "desyncdlg.h"
 #include "gamedirs.h"
 #include "gamedlg.h"
+#include "goptions.h"
 #include "globals.h"
 #include "houstype.h"
 #include "incdec.h"
@@ -280,27 +281,32 @@ void Ingame_Menu_Dialog(void)
 				case SDLG_ABORT:
 					switch (Abort_Dialog()) {
 
-						/// cancel
-						case 1:
+						case UIAbortDialogOutcome::QUIT:
 							Queue_Exit();
 							SpecialDialog = SDLG_NONE;
 							break;
 
-						case 2:
+						case UIAbortDialogOutcome::CANCEL:
+							SpecialDialog = SDLG_NONE;
 							break;
 
-						// abort
-						case 3:
+						case UIAbortDialogOutcome::RESTART_OR_SURRENDER:
 							if (Session.Type == GAME_NORMAL) {
 								PlayerRestarts = true;
 							} else {
 								OutList.push_back(EventClass(PlayerPtr->HeapID, EventClass::DESTRUCT));
 								_special_dialog_flag = false;
 							}
+							SpecialDialog = SDLG_NONE;
 							break;
 
+						case UIAbortDialogOutcome::PRESENTATION_FAILURE:
+							// Keep the player in the options flow. No gameplay consequence is queued,
+							// and the failed abort is not consumed as a cancel/no-action result.
+							DebugString("[UI] Abort presentation failed to open; returning to options.\n");
+							SpecialDialog = SDLG_OPTIONS;
+							break;
 					}
-					SpecialDialog = SDLG_NONE;
 					break;
 
 				case SDLG_SURRENDER:

@@ -68,6 +68,49 @@ class UICampaignPresenterClass : public UIPresenterClass
 };
 
 
+enum class UICampaignSelectionOutcome {
+	ACCEPTED,
+	CANCELLED,
+	PRESENTATION_FAILURE,
+};
+
+struct UICampaignSelectionResult
+{
+	UICampaignSelectionOutcome Outcome = UICampaignSelectionOutcome::PRESENTATION_FAILURE;
+	int Campaign = -1;
+	int Difficulty = 0;
+};
+
+
+// Resolve the presenter result before the caller changes gameplay state. A valid campaign
+// identity is part of acceptance; a failed or incomplete presentation is never cancellation.
+inline UICampaignSelectionResult UI_Campaign_Selection_Result(
+	UIResult const & presentation, int campaign, int difficulty)
+{
+	if (presentation.Outcome == UIResult::OUTCOME_ACCEPTED) {
+		if (campaign >= 0) {
+			return {UICampaignSelectionOutcome::ACCEPTED, campaign, difficulty};
+		}
+		return {};
+	}
+
+	if (presentation.Outcome == UIResult::OUTCOME_CANCELLED) {
+		return {UICampaignSelectionOutcome::CANCELLED, -1, 0};
+	}
+
+	return {};
+}
+
+
+// Difficulty is a selection result, not a live option. Only an accepted result may commit it.
+inline void UI_Campaign_Commit_Difficulty(UICampaignSelectionResult const & result, int & difficulty)
+{
+	if (result.Outcome == UICampaignSelectionOutcome::ACCEPTED) {
+		difficulty = result.Difficulty;
+	}
+}
+
+
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
-// caller falls through to the legacy dialog.
+// caller receives an explicit presentation failure.
 UIResult UI_Campaign_Screen(UICampaignPresenterClass & presenter);

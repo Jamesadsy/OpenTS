@@ -250,7 +250,7 @@ static bool Init_Bulk_Data(void);
 static void Init_Keys(void);
 static bool Init_Rules(void);
 static void Init_Commands(void);
-static CampaignType Choose_Campaign(void);
+static UICampaignSelectionResult Choose_Campaign(void);
 static void Init_Threads(void);
 void Draw_Version_Text(Surface * surface);
 void Version_Dialog(void);
@@ -730,23 +730,24 @@ void Prepare_Side_Roster(void)
 /// This routine reads the campaign list first if that has not already happened, and then
 /// runs the campaign dialog until the player either commits or backs out.
 /// </summary>
-/// <returns>Returns with the campaign chosen, or CAMPAIGN_NONE if the player backed out.</returns>
-static CampaignType Choose_Campaign(void)
+/// <returns>Returns an explicit accepted, cancelled, or presentation-failure result.</returns>
+static UICampaignSelectionResult Choose_Campaign(void)
 {
 	if (Campaigns.Count() == 0) {
 		Init_Campaigns();
 
 		if (Campaigns.Count() == 0) {
-			return(CAMPAIGN_NONE);
+			DebugString("[UI] Campaign selection unavailable: no campaigns were loaded.\n");
+			return(UICampaignSelectionResult{});
 		}
 	}
 
 	UICampaignPresenterClass screen;
 	screen.Refresh();
 
-	UI_Campaign_Screen(screen);
+	UIResult const result = UI_Campaign_Screen(screen);
 
-	return((CampaignType)screen.Chosen());
+	return(UI_Campaign_Selection_Result(result, screen.Chosen(), screen.Difficulty));
 }
 
 
@@ -1048,10 +1049,27 @@ restart:
 				case SEL_CAMPAIGN_GAME: {
 					new (&Environment) EnvironmentClass;
 
-					Scen->Campaign = Choose_Campaign();
-					if (Scen->Campaign == CAMPAIGN_NONE) {
-						process = true;
-						selection = SEL_NONE;
+					UICampaignSelectionResult const campaign = Choose_Campaign();
+					switch (campaign.Outcome) {
+						case UICampaignSelectionOutcome::CANCELLED:
+							process = true;
+							selection = SEL_NONE;
+							break;
+
+						case UICampaignSelectionOutcome::PRESENTATION_FAILURE:
+							// This is an explicit failed selection attempt, not a menu cancel and
+							// not SEL_EXIT. Do not start a scenario or spin back through SEL_NONE.
+							DebugString("[UI] Campaign presentation failed to open; ending selection attempt.\n");
+							Theme.Stop(true);
+							return(false);
+
+						case UICampaignSelectionOutcome::ACCEPTED:
+							Scen->Campaign = (CampaignType)campaign.Campaign;
+							UI_Campaign_Commit_Difficulty(campaign, Options.Difficulty);
+							break;
+					}
+
+					if (campaign.Outcome != UICampaignSelectionOutcome::ACCEPTED) {
 						break;
 					}
 
@@ -6263,6 +6281,8 @@ int New_Main_Menu(void)
 	int selection = newmenu->Process_Game_Select();
 
 	if (selection == NSEL_OLD_MENU) {
+		static_assert(UI_MAINMENU_FALLBACK_ROUTE ==
+			UIMainMenuFallbackRoute::DONOR_RMLUI_MAIN_MENU);
 		return(Main_Menu(TIMER_MINUTE));
 	}
 

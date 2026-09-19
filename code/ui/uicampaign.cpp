@@ -142,7 +142,6 @@ void UICampaignPresenterClass::Execute(UIIntent const & intent)
 	UIResult result;
 
 	if (intent.Action == UI_CAMPAIGN_ACCEPT) {
-		Options.Difficulty = Difficulty;
 		Choice = CHOICE_ACCEPT;
 		result.Outcome = UIResult::OUTCOME_ACCEPTED;
 

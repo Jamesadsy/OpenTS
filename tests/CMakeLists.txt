@@ -69,6 +69,7 @@ endfunction()
 
 add_subdirectory(cpudetect)
 add_subdirectory(gamedirs)
+add_subdirectory(presentationcontract)
 if(NOT WIN32)
     add_subdirectory(hostsmoke)
 endif()

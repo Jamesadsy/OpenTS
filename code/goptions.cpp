@@ -108,39 +108,19 @@ void Game_Options_Dialog(void)
 }
 
 
-// Maps the screen's choice onto the value the special dialog handler expects. A screen that
-// never opened answers zero, which is what the driver's own result was left at.
-static int Abort_Choice_Result(UIAbortPresenterClass const & screen)
-{
-	switch (screen.Choice) {
-		case UIAbortPresenterClass::CHOICE_QUIT:
-			return(IDOK);
-
-		case UIAbortPresenterClass::CHOICE_RESTART:
-			return(IDABORT);
-
-		case UIAbortPresenterClass::CHOICE_CANCEL:
-			return(IDCANCEL);
-
-		default:
-			return(0);
-	}
-}
-
-
 /// <summary>
 /// Displays the abort mission dialog and waits for an answer.
 /// This routine is used by the special dialog handler when the player asks to abandon or
 /// surrender the mission. It does not return until the player has settled on one of the
 /// choices offered.
 /// </summary>
-/// <returns>Returns with IDOK to quit the mission, IDABORT to restart or surrender it, or
-/// IDCANCEL to carry on playing.</returns>
-int Abort_Dialog(void)
+/// <returns>Returns an explicit quit, restart/surrender, cancel, or presentation-failure
+/// outcome.</returns>
+UIAbortDialogOutcome Abort_Dialog(void)
 {
 	UIAbortPresenterClass screen;
 	screen.Refresh();
-	UI_Abort_Screen(screen);
+	UIResult const result = UI_Abort_Screen(screen);
 
-	return(Abort_Choice_Result(screen));
+	return(UI_Abort_Dialog_Result(result, screen.Choice));
 }

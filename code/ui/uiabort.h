@@ -55,6 +55,46 @@ class UIAbortPresenterClass : public UIPresenterClass
 };
 
 
+enum class UIAbortDialogOutcome {
+	QUIT,
+	RESTART_OR_SURRENDER,
+	CANCEL,
+	PRESENTATION_FAILURE,
+};
+
+
+// Resolve both the presenter's choice and the view result. A missing or failed view is an
+// explicit non-success, never the old default-zero/no-action answer.
+inline UIAbortDialogOutcome UI_Abort_Dialog_Result(
+	UIResult const & presentation, UIAbortPresenterClass::ChoiceType choice)
+{
+	if (presentation.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN ||
+		presentation.Outcome == UIResult::OUTCOME_SESSION_ENDED) {
+		return(UIAbortDialogOutcome::PRESENTATION_FAILURE);
+	}
+
+	switch (choice) {
+		case UIAbortPresenterClass::CHOICE_QUIT:
+			return(presentation.Outcome == UIResult::OUTCOME_ACCEPTED
+				? UIAbortDialogOutcome::QUIT
+				: UIAbortDialogOutcome::PRESENTATION_FAILURE);
+
+		case UIAbortPresenterClass::CHOICE_RESTART:
+			return(presentation.Outcome == UIResult::OUTCOME_ACCEPTED
+				? UIAbortDialogOutcome::RESTART_OR_SURRENDER
+				: UIAbortDialogOutcome::PRESENTATION_FAILURE);
+
+		case UIAbortPresenterClass::CHOICE_CANCEL:
+			return(presentation.Outcome == UIResult::OUTCOME_CANCELLED
+				? UIAbortDialogOutcome::CANCEL
+				: UIAbortDialogOutcome::PRESENTATION_FAILURE);
+
+		default:
+			return(UIAbortDialogOutcome::PRESENTATION_FAILURE);
+	}
+}
+
+
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
-// caller falls through to the legacy dialog.
+// caller receives an explicit presentation failure.
 UIResult UI_Abort_Screen(UIAbortPresenterClass & presenter);

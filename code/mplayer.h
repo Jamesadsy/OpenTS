@@ -22,4 +22,3 @@ GameType Select_MPlayer_Game (void);
 void Clear_Vector(DynamicVectorClass <NodeNameType *> *vector);
 //void Computer_Message(void);
 int Surrender_Dialog(int text);
-int Abort_Dialog(void);
