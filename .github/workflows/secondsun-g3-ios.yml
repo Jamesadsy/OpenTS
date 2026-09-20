@@ -30,7 +30,7 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version | tee proof/iphoneos-sdk-version.log
           git rev-parse --abbrev-ref HEAD | tee proof/ref.log
           printf '%s\n' "${GITHUB_REF_NAME}" | tee proof/ref-name.log
-          test "${GITHUB_REF_NAME}" = "secondsun/ss-g3-020-ios-arm64"
+          test "${GITHUB_REF_NAME}" = "secondsun/ss-g4-028-ui-resource-repair"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -117,8 +117,14 @@ jobs:
 
           test -f "$APP/Language.dat"
           test -d "$APP/ui"
-          test -f "$APP/ui/mainmenu.rml"
-          test -f "$APP/ui/optionsbase.rcss"
+          for required in \
+            ui/LatoLatin-Regular.ttf \
+            ui/options.rml \
+            ui/campaign.rml \
+            ui/mainmenu.rml \
+            ui/optionsbase.rcss; do
+            test -f "$APP/$required"
+          done
 
           test ! -e "$APP/embedded.mobileprovision"
           test ! -d "$APP/_CodeSignature"

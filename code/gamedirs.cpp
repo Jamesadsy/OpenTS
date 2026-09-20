@@ -270,6 +270,18 @@ void Init_Search_Folders(char const * list)
 }
 
 
+void Init_Bundle_UI_Search_Path(void)
+{
+	std::string const path = Terminate_Path("ui");
+
+	if (!Is_Registered(path)) {
+		CDFileClass::Add_Search_Drive(path.c_str());
+	}
+
+	DebugString("[GameDirs] iOS bundle UI search path registered: %s\n", path.c_str());
+}
+
+
 std::string User_File_Write_Name(char const * filename)
 {
 	if (UserDirectory.empty()) {

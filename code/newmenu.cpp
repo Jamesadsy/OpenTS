@@ -142,6 +142,12 @@ __forceinline int NewMenuClass::Game_Select_Loop(NewMenuClass * menu)
 					menu->GameMode = -1;
 					continue;
 				}
+#ifdef OPENTS_IOS
+				if (item == NSEL_EXIT) {
+					menu->GameMode = -1;
+					continue;
+				}
+#endif
 				return(item);
 
 			case 1:
@@ -150,6 +156,12 @@ __forceinline int NewMenuClass::Game_Select_Loop(NewMenuClass * menu)
 					menu->GameMode = -1;
 					continue;
 				}
+#ifdef OPENTS_IOS
+				if (item == NSEL_EXIT) {
+					menu->GameMode = -1;
+					continue;
+				}
+#endif
 				return(item);
 		}
 	}

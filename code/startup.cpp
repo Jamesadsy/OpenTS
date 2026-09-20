@@ -503,6 +503,10 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 		 */
 		DeploymentConfig.Read_File(Data_Directory().c_str());
 		Init_Search_Folders(DeploymentConfig.SearchPaths.c_str());
+#ifdef OPENTS_IOS
+		// Keep external data overrides ahead of the read-only resources in the app bundle.
+		Init_Bundle_UI_Search_Path();
+#endif
 
 		// The recording's name was settled during static initialization, before there was
 		// anywhere for a player's files to go. Naming it again settles it where it belongs.

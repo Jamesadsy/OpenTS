@@ -103,6 +103,43 @@ void Test_Parsing_And_Folders(void)
 		"a missing data directory fails closed with an error");
 }
 
+
+void Test_Bundle_UI_Search_Path(void)
+{
+	std::string const sep = Separator();
+	Reset();
+	Set_Data_Directory(Name(Root / "Data").c_str());
+	Check(Apply_Game_Directories(), "bundle UI proof accepts a separate external data directory");
+
+	Write_File(Root / "ui" / "LatoLatin-Regular.ttf", "font");
+	Write_File(Root / "ui" / "options.rml", "options");
+	Write_File(Root / "ui" / "campaign.rml", "campaign");
+	Write_File(Root / "ui" / "mainmenu.rml", "main menu");
+	Write_File(Root / "ui" / "optionsbase.rcss", "styles");
+	Init_Bundle_UI_Search_Path();
+
+	std::string const data = Name(Root / "Data") + sep;
+	std::string const ui = "ui" + sep;
+	Check(CDFileClass::Search_Path(0) != NULL && std::string(CDFileClass::Search_Path(0)) == data,
+		"bundle UI registration leaves DATADIR as the first external search path");
+	Check(CDFileClass::Search_Path(1) != NULL && std::string(CDFileClass::Search_Path(1)) == ui,
+		"bundle UI registration keeps the required trailing separator");
+
+	for (char const * name : {
+		"LatoLatin-Regular.ttf", "options.rml", "campaign.rml", "mainmenu.rml", "optionsbase.rcss"}) {
+		CDFileClass file(name);
+		Check(file.Is_Available() && std::string(file.File_Name()) == ui + name,
+			"bare-name shipped UI resource resolves from bundle ui/");
+	}
+
+	Init_Bundle_UI_Search_Path();
+	int registrations = 0;
+	for (int index = 0; CDFileClass::Search_Path(index) != NULL; index++) {
+		if (std::string(CDFileClass::Search_Path(index)) == ui) registrations++;
+	}
+	Check(registrations == 1, "bundle UI search registration is idempotent");
+}
+
 void Test_User_Files(void)
 {
 	std::string const sep = Separator();
@@ -189,7 +226,7 @@ bool Make_Root(void)
 	OriginalDirectory = std::filesystem::current_path();
 	Root = std::filesystem::temp_directory_path() / ("opents-gamedirs-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 	std::error_code error;
-	for (char const * folder : {"INI", "MIX", "Maps", "Data", "User"}) std::filesystem::create_directories(Root / folder, error);
+	for (char const * folder : {"INI", "MIX", "Maps", "Data", "User", "ui"}) std::filesystem::create_directories(Root / folder, error);
 	std::filesystem::current_path(Root, error);
 	return(!error);
 }
@@ -207,6 +244,7 @@ int main(void)
 {
 	if (!Make_Root()) return(1);
 	Test_Parsing_And_Folders();
+	Test_Bundle_UI_Search_Path();
 	Test_User_Files();
 	Test_Enumeration();
 	Test_Saved_Games_And_Repeatability();

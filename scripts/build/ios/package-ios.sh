@@ -47,7 +47,7 @@ usage: scripts/build/ios/package-ios.sh [options]
                      the documentation, and adding the bundle's own ui tree and
                      Language.dat. About 2 GB, most of it the movie archives, which the
                      game refuses to start without.
-  --touch-log        Create Documents/touchlog on the device, which is what turns the
+  --touch-log        Create Documents/OpenTS/User/touchlog on the device, which is what turns the
                      touch recognizer's log on.
   -h, --help         This message.
 
@@ -217,6 +217,7 @@ cp "$XCODE_APP/embedded.mobileprovision" "$APP/embedded.mobileprovision"
 missing=0
 for required in OpenTS Info.plist embedded.mobileprovision Assets.car Language.dat ui \
                 "AppIcon60x60@2x.png" "AppIcon76x76@2x.png" "AppIcon83.5x83.5@2x.png" \
+                ui/LatoLatin-Regular.ttf ui/options.rml ui/campaign.rml \
                 ui/mainmenu.rml ui/optionsbase.rcss; do
   if [[ ! -e $APP/$required ]]; then
     echo "package-ios: staged bundle is missing $required" >&2
@@ -317,7 +318,7 @@ fi
 
 if [[ $DO_TOUCH_LOG -eq 1 ]]; then
   need_device
-  echo "==> creating Documents/touchlog"
+  echo "==> creating Documents/OpenTS/User/touchlog"
   marker=$(mktemp -d)/touchlog
   mkdir -p "$marker"
   # An empty directory has no file node for devicectl to copy, so the folder carries a note
@@ -328,7 +329,7 @@ Deleting the folder turns the logging off. Copy the files out with the Files app
 NOTE
   devicectl_retry device copy to --device "$DEVICE" \
     --domain-type appDataContainer --domain-identifier "$BUNDLE_ID" \
-    --source "$marker" --destination "Documents/touchlog"
+    --source "$marker" --destination "Documents/OpenTS/User/touchlog"
 fi
 
 if [[ $DO_LAUNCH -eq 1 ]]; then
