@@ -8,6 +8,7 @@
 #include "keyboard.h"
 
 #include <cstdio>
+#include <initializer_list>
 
 
 void Windows_Message_Handler(void)
