@@ -147,6 +147,7 @@ static void Translate_Event(SDL_Event const & event)
 	if (main == NULL) {
 		return;
 	}
+	Win32Window * const main_window = Win32_Lookup(main);
 
 	switch (event.type) {
 		case SDL_EVENT_QUIT:
@@ -256,7 +257,8 @@ static void Translate_Event(SDL_Event const & event)
 		case SDL_EVENT_KEY_DOWN:
 		case SDL_EVENT_KEY_UP: {
 #ifdef OPENTS_IOS
-			if (SDL_TextInputActive(main->Handle) && Is_Printable_Text_Key(event.key)) {
+			if (main_window != NULL && SDL_TextInputActive(main_window->Handle)
+				&& Is_Printable_Text_Key(event.key)) {
 				return;
 			}
 #endif
