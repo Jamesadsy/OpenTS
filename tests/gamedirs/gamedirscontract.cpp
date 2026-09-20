@@ -128,7 +128,10 @@ void Test_Bundle_UI_Search_Path(void)
 	for (char const * name : {
 		"LatoLatin-Regular.ttf", "options.rml", "campaign.rml", "mainmenu.rml", "optionsbase.rcss"}) {
 		CDFileClass file(name);
-		Check(file.Is_Available() && std::string(file.File_Name()) == ui + name,
+		std::error_code error;
+		bool const resolves_to_bundle_ui = file.Is_Available() &&
+			std::filesystem::equivalent(file.File_Name(), Root / "ui" / name, error);
+		Check(resolves_to_bundle_ui && !error,
 			"bare-name shipped UI resource resolves from bundle ui/");
 	}
 
