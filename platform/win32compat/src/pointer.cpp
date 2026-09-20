@@ -79,11 +79,7 @@ bool Win32_Pointer_Can_Warp(void)
 // what lets the game decide.
 bool Win32_Pointer_Is_Drawn(void)
 {
-#ifdef OPENTS_IOS
-	return(false);
-#else
 	return(true);
-#endif
 }
 
 

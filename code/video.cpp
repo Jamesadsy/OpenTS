@@ -319,7 +319,12 @@ void Video_Present(void)
 	_Presenting = true;
 	Backend_Present(pixels, surface->Stride(), _ScaleInfo.DestX, _ScaleInfo.DestY, _ScaleInfo.DestWidth, _ScaleInfo.DestHeight, Backend_Scale_Mode(), _FrameIsDirty);
 	UI_Render_Overlay();
+	WinCursorOverlay cursor;
+	if (Win_Cursor_Get_Overlay(&cursor)) {
+		Backend_Present_Cursor(cursor.Pixels, cursor.Width, cursor.Height, cursor.X, cursor.Y);
+	}
 	Backend_End_Frame();
+	Win_Cursor_Acknowledge_Present();
 	_Presenting = false;
 
 	_FrameIsDirty = false;
@@ -335,7 +340,7 @@ void Video_Present(void)
 /// </summary>
 void Video_Present_If_Dirty(void)
 {
-	if (!_FrameIsDirty && !UI_Overlay_Is_Dirty()) {
+	if (!_FrameIsDirty && !UI_Overlay_Is_Dirty() && !Win_Cursor_Is_Dirty()) {
 		return;
 	}
 
@@ -367,7 +372,7 @@ unsigned int Video_Milliseconds_Until_Present(void)
 	 */
 	unsigned int const interval = Present_Interval();
 
-	if (!_FrameIsDirty && !UI_Overlay_Is_Dirty()) {
+	if (!_FrameIsDirty && !UI_Overlay_Is_Dirty() && !Win_Cursor_Is_Dirty()) {
 		return(interval);
 	}
 

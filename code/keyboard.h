@@ -40,7 +40,9 @@ enum WWKey_Type {
 	WWKEY_ALT_BIT		= 0x400,
 	WWKEY_RLS_BIT		= 0x800,
 	WWKEY_VK_BIT		= 0x1000,
-	WWKEY_DBL_BIT		= 0x2000,
+	// A literal character from the host text-input stream. The 0x4000 slot is
+	// still WWKEY_UNK_BIT: button-release handling uses it in live code.
+	WWKEY_TEXT_BIT		= 0x2000,
 	WWKEY_UNK_BIT		= 0x4000,
 	WWKEY_BTN_BIT		= 0x8000,
 };
@@ -640,6 +642,7 @@ enum KeyNumType {
 	KN_CTRL_BIT = WWKEY_CTRL_BIT,
 	KN_ALT_BIT = WWKEY_ALT_BIT,
 	KN_RLSE_BIT = WWKEY_RLS_BIT,
+	KN_TEXT = WWKEY_TEXT_BIT,
 	KN_UNK = WWKEY_UNK_BIT,
 	KN_BUTTON = WWKEY_BTN_BIT,
 };

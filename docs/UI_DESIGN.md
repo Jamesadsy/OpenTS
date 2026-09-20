@@ -121,9 +121,11 @@ embedded `vs_ocornut_imgui` program on view `VIEW_PRESENT` (with a
 bgfx runs single-threaded because presents happen from inside dialog paint
 handlers; `_Presenting` guards the recursion. Presents are paced to the refresh
 interval and happen only when the frame is dirty. The mouse pointer is a
-hardware Win32 cursor built from the game's shapes, so it never touches a
-surface. The window is per-monitor DPI aware, and `VideoScaleInfo` records
-where the logical frame lands in the physical client area.
+hardware Win32 cursor on Windows, built from the game's shapes, so it never touches a
+surface. On iOS the same shape data is decoded once into an RGBA software-cursor cache and
+submitted in a final cursor view after the UI views; pointer-only presents reuse the last
+frame texture. The window is per-monitor DPI aware, and `VideoScaleInfo` records where the
+logical frame lands in the physical client area.
 
 Input reaches a control by one of two routes. Windows delivers a mouse message
 to the visible child window under the cursor, so a legacy dialog receives its
@@ -297,7 +299,7 @@ on the order. The overlay views use the frame destination rectangle from
 destination size, so UI coordinates are physical pixels relative to the
 frame's top-left corner. Draw order is the software frame and its scaling
 passes, RmlUi documents in the context's document order, ImGui, then the
-hardware cursor.
+cursor (hardware on Windows, software on iOS).
 
 Every overlay texture is point sampled. The documents draw the game's own
 640x400-era artwork and its bitmap font magnified by the frame scale, which at
@@ -450,11 +452,11 @@ focus return does not replay held keys as presses. Cursor requests from RmlUi
 (`pointer`, `text`) map to `Win_Cursor_Set` and the previous request is
 restored on close. The clipboard interface uses the Win32 clipboard.
 
-Text input arrives as `WM_CHAR` with surrogate pairs joined. Consuming a
-physical key never suppresses the text message it generates. Editable
-screens ship only after Tab and Shift+Tab, Enter and Escape, repeat,
-modifiers, paste, dead keys, and IME composition have been exercised for the
-supported languages; the read-only pilot proves none of that.
+On iOS G5, SDL text input reaches the legacy path as one ASCII `WM_CHAR`
+literal per character after RmlUi has had first refusal; printable keydown/keyup
+messages are suppressed while text input is active, while Return, Backspace/Delete,
+and navigation keys remain ordinary controls. Unicode and IME composition are outside
+this slice. Consuming a physical key never suppresses the RmlUi text message it generates.
 
 ## Screens
 

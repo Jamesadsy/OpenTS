@@ -12,8 +12,8 @@
 // the present pass for the present to sample this frame's output rather than the last
 // one's, and both have to precede the overlays for the overlays to land on top.
 //
-// bgfxbackend.cpp owns the first two and code/ui the last two. They share this header so
-// that neither can renumber a view the other draws through.
+// bgfxbackend.cpp owns the frame and cursor views, while code/ui owns the two middle overlay
+// views. They share this header so that neither can renumber a view the other draws through.
 
 #pragma once
 
@@ -23,4 +23,5 @@ enum BackendViewType {
 	BACKEND_VIEW_PRESENT = 1,
 	BACKEND_VIEW_UI = 2,
 	BACKEND_VIEW_DEV = 3,
+	BACKEND_VIEW_CURSOR = 4,
 };

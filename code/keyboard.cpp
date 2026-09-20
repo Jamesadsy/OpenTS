@@ -311,6 +311,15 @@ int WWKeyboardClass::To_ASCII(unsigned short key)
 	}
 
 	/*
+	**	SDL text input has already performed the host's layout and modifier
+	**	translation. Keep its literal byte intact instead of asking the
+	**	Windows compatibility layer to translate the virtual key a second time.
+	*/
+	if (key & WWKEY_TEXT_BIT) {
+		return(key & 0xFF);
+	}
+
+	/*
 	**	Set the KeyState buffer to reflect the shift bits stored in the key value.
 	*/
 	if (key & WWKEY_SHIFT_BIT) {
@@ -654,6 +663,20 @@ int WWKeyboardClass::Message_Handler(HWND window, UINT message, WPARAM wParam, L
 			Put_Key_Message((unsigned short)wParam, true);
 			processed = true;
 			break;
+
+#ifdef OPENTS_IOS
+		/*
+		**	RmlUi receives WM_CHAR first. A character that reaches this class is
+		**	therefore a legacy-field character and is queued once with its
+		**	literal text marker; no virtual-key translation is repeated.
+		*/
+		case WM_CHAR:
+			if (wParam >= 0x20 && wParam <= 0x7E) {
+				Put((unsigned short)wParam | WWKEY_TEXT_BIT);
+			}
+			processed = true;
+			break;
+#endif
 
 		/*
 		**	Press of the left mouse button.

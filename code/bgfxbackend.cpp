@@ -43,11 +43,13 @@ static const bgfx::EmbeddedShader _EmbeddedShaders[] = {
 
 static const bgfx::ViewId VIEW_PRESCALE = BACKEND_VIEW_PRESCALE;
 static const bgfx::ViewId VIEW_PRESENT = BACKEND_VIEW_PRESENT;
+static const bgfx::ViewId VIEW_CURSOR = BACKEND_VIEW_CURSOR;
 
 
 static bool _Initialized = false;
 
 static bgfx::TextureHandle _FrameTexture = BGFX_INVALID_HANDLE;
+static bgfx::TextureHandle _CursorTexture = BGFX_INVALID_HANDLE;
 static bgfx::ProgramHandle _Program = BGFX_INVALID_HANDLE;
 static bgfx::UniformHandle _TextureSampler = BGFX_INVALID_HANDLE;
 static bgfx::FrameBufferHandle _PrescaleTarget = BGFX_INVALID_HANDLE;
@@ -55,6 +57,9 @@ static bgfx::VertexLayout _VertexLayout;
 
 static int _FrameWidth = 0;
 static int _FrameHeight = 0;
+static int _CursorWidth = 0;
+static int _CursorHeight = 0;
+static void const * _CursorPixels = NULL;
 static int _PrescaleWidth = 0;
 static int _PrescaleHeight = 0;
 static int _DrawableWidth = 0;
@@ -220,7 +225,7 @@ static void Build_Convert_Table(void)
 /// <summary>
 /// Submits one textured rectangle covering the given destination.
 /// </summary>
-static void Submit_Quad(bgfx::ViewId view, bgfx::TextureHandle texture, float x, float y, float width, float height, unsigned int samplerflags, bool flipv = false)
+static void Submit_Quad(bgfx::ViewId view, bgfx::TextureHandle texture, float x, float y, float width, float height, uint64_t samplerflags, bool flipv = false, uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A)
 {
 	bgfx::TransientVertexBuffer buffer;
 
@@ -245,7 +250,7 @@ static void Submit_Quad(bgfx::ViewId view, bgfx::TextureHandle texture, float x,
 
 	bgfx::setVertexBuffer(0, &buffer);
 	bgfx::setTexture(0, _TextureSampler, texture, samplerflags);
-	bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A);
+	bgfx::setState(state);
 	bgfx::submit(view, _Program);
 }
 
@@ -431,6 +436,10 @@ void Backend_Shutdown(void)
 		bgfx::destroy(_FrameTexture);
 		_FrameTexture = BGFX_INVALID_HANDLE;
 	}
+	if (bgfx::isValid(_CursorTexture)) {
+		bgfx::destroy(_CursorTexture);
+		_CursorTexture = BGFX_INVALID_HANDLE;
+	}
 	if (bgfx::isValid(_TextureSampler)) {
 		bgfx::destroy(_TextureSampler);
 		_TextureSampler = BGFX_INVALID_HANDLE;
@@ -447,6 +456,9 @@ void Backend_Shutdown(void)
 
 	_FrameWidth = 0;
 	_FrameHeight = 0;
+	_CursorWidth = 0;
+	_CursorHeight = 0;
+	_CursorPixels = NULL;
 	_Initialized = false;
 }
 
@@ -595,6 +607,49 @@ void Backend_Present(void const * pixels, int pitch, int destx, int desty, int d
 
 	bool flipv = from_prescale && bgfx::getCaps()->originBottomLeft;
 	Submit_Quad(VIEW_PRESENT, source, (float)destx, (float)desty, (float)destwidth, (float)destheight, samplerflags, flipv);
+}
+
+
+void Backend_Present_Cursor(void const * pixels, int width, int height, int destx, int desty)
+{
+	if (!_Initialized || pixels == NULL || width <= 0 || height <= 0
+		|| _DrawableWidth <= 0 || _DrawableHeight <= 0) {
+		return;
+	}
+
+	uint64_t const samplerflags = BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
+		| BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT | BGFX_SAMPLER_MIP_POINT;
+
+	if (!bgfx::isValid(_CursorTexture) || _CursorWidth != width || _CursorHeight != height) {
+		if (bgfx::isValid(_CursorTexture)) {
+			bgfx::destroy(_CursorTexture);
+		}
+
+		_CursorTexture = bgfx::createTexture2D((uint16_t)width, (uint16_t)height, false, 1,
+			bgfx::TextureFormat::RGBA8, samplerflags,
+			bgfx::copy(pixels, (uint32_t)(width * height * 4)));
+		_CursorWidth = width;
+		_CursorHeight = height;
+		_CursorPixels = pixels;
+	} else if (_CursorPixels != pixels) {
+		bgfx::updateTexture2D(_CursorTexture, 0, 0, 0, 0, (uint16_t)width, (uint16_t)height,
+			bgfx::copy(pixels, (uint32_t)(width * height * 4)), (uint16_t)(width * 4));
+		_CursorPixels = pixels;
+	}
+
+	if (!bgfx::isValid(_CursorTexture)) {
+		return;
+	}
+
+	bgfx::setViewFrameBuffer(VIEW_CURSOR, BGFX_INVALID_HANDLE);
+	bgfx::setViewClear(VIEW_CURSOR, BGFX_CLEAR_NONE);
+	bgfx::setViewMode(VIEW_CURSOR, bgfx::ViewMode::Sequential);
+	Set_View_Transform(VIEW_CURSOR, _DrawableWidth, _DrawableHeight);
+
+	Submit_Quad(VIEW_CURSOR, _CursorTexture, (float)destx, (float)desty,
+		(float)width, (float)height, samplerflags, false,
+		BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+		| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE, BGFX_STATE_BLEND_INV_SRC_ALPHA));
 }
 
 

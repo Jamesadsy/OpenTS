@@ -7,10 +7,8 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
-// The mouse pointer, as a real Windows cursor built from the game's own shapes.
-//
-// Windows composites it over the presented frame, so pointing the mouse costs nothing:
-// the cursor never touches a game surface and moving it needs no new frame.
+// The mouse pointer, built from the game's own shapes. Windows composites its hardware
+// cursor, while iOS receives an RGBA overlay from the same cached shape image.
 
 #pragma once
 
@@ -19,8 +17,23 @@
 class ShapeSet;
 
 
+struct WinCursorOverlay
+{
+	unsigned char const * Pixels;
+	int Width;
+	int Height;
+	int HotX;
+	int HotY;
+	int X;
+	int Y;
+};
+
+
 void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool apply);
 void Win_Cursor_Set_Visible(bool visible);
 bool Win_Cursor_Handle_Set_Cursor(void);
 void Win_Cursor_Refresh(void);
+bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay);
+bool Win_Cursor_Is_Dirty(void);
+void Win_Cursor_Acknowledge_Present(void);
 void Win_Cursor_Shutdown(void);

@@ -126,6 +126,20 @@ void Win32_Post_Key_Message(int virtualkey, bool down)
 extern int Win32_Virtual_Key(SDL_Scancode scancode, SDL_Keycode keycode);
 
 
+#ifdef OPENTS_IOS
+static bool Is_Printable_Text_Key(SDL_KeyboardEvent const & key)
+{
+	// Control combinations are commands, not text. Keep their ordinary key
+	// messages even while a legacy field owns SDL text input.
+	if ((key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) != 0) {
+		return(false);
+	}
+
+	return(key.key >= 0x20 && key.key <= 0x7E);
+}
+#endif
+
+
 static void Translate_Event(SDL_Event const & event)
 {
 	HWND const main = Win32_Main_Window();
@@ -241,6 +255,12 @@ static void Translate_Event(SDL_Event const & event)
 
 		case SDL_EVENT_KEY_DOWN:
 		case SDL_EVENT_KEY_UP: {
+#ifdef OPENTS_IOS
+			if (SDL_TextInputActive(main->Handle) && Is_Printable_Text_Key(event.key)) {
+				return;
+			}
+#endif
+
 			int const key = Win32_Virtual_Key(event.key.scancode, event.key.key);
 			if (key == 0) {
 				return;

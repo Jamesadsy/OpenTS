@@ -17,12 +17,25 @@
 #include "globals.h"
 #include "goptions.h"
 #include "shapeset.h"
+#include "vidscale.h"
 #include "video.h"
 #include "win.h"
 #include "xmouse.h"
 
 #include <cstdint>
 #include <cstring>
+#include <utility>
+#include <vector>
+
+
+struct CursorImage
+{
+	int Width = 0;
+	int Height = 0;
+	int HotX = 0;
+	int HotY = 0;
+	std::vector<unsigned char> Pixels;
+};
 
 
 struct CursorCacheEntry
@@ -32,6 +45,7 @@ struct CursorCacheEntry
 	int HotX;
 	int HotY;
 	HCURSOR Cursor;
+	CursorImage Image;
 };
 
 // One cursor per shape frame the game actually asks for. MOUSE.SHP holds a few hundred
@@ -45,7 +59,12 @@ static int _CurrentFrame = 0;
 static int _CurrentHotX = 0;
 static int _CurrentHotY = 0;
 static HCURSOR _CurrentCursor = NULL;
+static CursorImage const * _CurrentImage = NULL;
 static bool _CursorVisible = true;
+static bool _OverlayDirty = true;
+static int _PresentedX = 0;
+static int _PresentedY = 0;
+static bool _PresentedPositionValid = false;
 
 
 /// <summary>
@@ -79,25 +98,86 @@ static int Cursor_Scale(void)
 /// right place. Palette entry zero is the transparent one.
 /// </summary>
 /// <returns>The cursor, or NULL if it could not be built.</returns>
-static HCURSOR Build_Cursor(ShapeSet const * shape, int frame, int hotx, int hoty, int scale)
+static bool Build_Cursor_Image(ShapeSet const * shape, int frame, int hotx, int hoty, int scale, CursorImage & image)
 {
+	image = CursorImage();
+
 	if (shape == NULL || MouseDrawer == NULL) {
-		return(NULL);
+		return(false);
 	}
 
 	Rect rect = shape->Get_Rect(frame);
 	unsigned char const * data = (unsigned char const *)shape->Get_Data(frame);
 
 	if (!rect.Is_Valid() || data == NULL) {
-		return(NULL);
+		return(false);
 	}
 
 	int width = shape->Get_Width() * scale;
 	int height = shape->Get_Height() * scale;
 
 	if (width <= 0 || height <= 0) {
+		return(false);
+	}
+
+	image.Width = width;
+	image.Height = height;
+	image.HotX = hotx * scale;
+	image.HotY = hoty * scale;
+	image.Pixels.assign((std::size_t)width * height * 4, 0);
+
+	unsigned short const * table = (unsigned short const *)MouseDrawer->Get_Translate_Table();
+	bool const compressed = shape->Is_RLE_Compressed(frame);
+	unsigned char const * line = data;
+
+	for (int y = 0; y < rect.Height; y++) {
+		unsigned char const * source = compressed ? line + sizeof(unsigned short) : data + y * rect.Width;
+		int x = 0;
+
+		while (x < rect.Width) {
+			unsigned char index = *source++;
+
+			if (index == 0) {
+				x += compressed ? *source++ : 1;
+				continue;
+			}
+
+			unsigned short pixel = table[index];
+			unsigned char red = (unsigned char)(((pixel >> 11) & 0x1F) << 3);
+			unsigned char green = (unsigned char)(((pixel >> 5) & 0x3F) << 2);
+			unsigned char blue = (unsigned char)((pixel & 0x1F) << 3);
+
+			for (int suby = 0; suby < scale; suby++) {
+				unsigned char * row = image.Pixels.data()
+					+ ((std::size_t)((rect.Y + y) * scale + suby) * width + (std::size_t)(rect.X + x) * scale) * 4;
+				for (int subx = 0; subx < scale; subx++) {
+					row[subx * 4 + 0] = red;
+					row[subx * 4 + 1] = green;
+					row[subx * 4 + 2] = blue;
+					row[subx * 4 + 3] = 255;
+				}
+			}
+
+			x++;
+		}
+
+		if (compressed) {
+			line += *(unsigned short const *)line;
+		}
+	}
+
+	return(true);
+}
+
+
+static HCURSOR Build_Cursor(CursorImage const & image)
+{
+	if (image.Pixels.empty() || image.Width <= 0 || image.Height <= 0) {
 		return(NULL);
 	}
+
+	int width = image.Width;
+	int height = image.Height;
 
 	BITMAPINFO info;
 	memset(&info, '\0', sizeof(info));
@@ -116,48 +196,14 @@ static HCURSOR Build_Cursor(ShapeSet const * shape, int frame, int hotx, int hot
 	}
 
 	memset(bits, '\0', width * height * 4);
-
-	// The shapes are palette indices and the primary is 565, so the drawer's table is
-	// what turns one into the other.
-	unsigned short const * table = (unsigned short const *)MouseDrawer->Get_Translate_Table();
-
-	bool const compressed = shape->Is_RLE_Compressed(frame);
-	unsigned char const * line = data;
-
-	for (int y = 0; y < rect.Height; y++) {
-
-		// A compressed line starts with its own byte length and then runs of pixels, where
-		// a zero introduces a count of transparent ones.
-		unsigned char const * source = compressed ? line + sizeof(unsigned short) : data + y * rect.Width;
-		int x = 0;
-
-		while (x < rect.Width) {
-
-			unsigned char index = *source++;
-
-			if (index == 0) {
-				x += compressed ? *source++ : 1;
-				continue;
-			}
-
-			unsigned short pixel = table[index];
-			std::uint32_t red = ((pixel >> 11) & 0x1F) << 3;
-			std::uint32_t green = ((pixel >> 5) & 0x3F) << 2;
-			std::uint32_t blue = (pixel & 0x1F) << 3;
-			std::uint32_t argb = 0xFF000000U | (red << 16) | (green << 8) | blue;
-
-			for (int suby = 0; suby < scale; suby++) {
-				std::uint32_t * row = (std::uint32_t *)bits + ((rect.Y + y) * scale + suby) * width + (rect.X + x) * scale;
-				for (int subx = 0; subx < scale; subx++) {
-					row[subx] = argb;
-				}
-			}
-
-			x++;
-		}
-
-		if (compressed) {
-			line += *(unsigned short const *)line;
+	for (int y = 0; y < height; y++) {
+		unsigned char const * source = image.Pixels.data() + (std::size_t)y * width * 4;
+		unsigned char * target = (unsigned char *)bits + (std::size_t)y * width * 4;
+		for (int x = 0; x < width; x++) {
+			target[x * 4 + 0] = source[x * 4 + 2];
+			target[x * 4 + 1] = source[x * 4 + 1];
+			target[x * 4 + 2] = source[x * 4 + 0];
+			target[x * 4 + 3] = source[x * 4 + 3];
 		}
 	}
 
@@ -169,8 +215,8 @@ static HCURSOR Build_Cursor(ShapeSet const * shape, int frame, int hotx, int hot
 	HBITMAP mask = CreateBitmap(width, height, 1, 1, mask_bits);
 	delete [] mask_bits;
 
-	int cursor_hotx = hotx * scale;
-	int cursor_hoty = hoty * scale;
+	int cursor_hotx = image.HotX;
+	int cursor_hoty = image.HotY;
 	if (cursor_hotx < 0) cursor_hotx = 0;
 	if (cursor_hoty < 0) cursor_hoty = 0;
 	if (cursor_hotx >= width) cursor_hotx = width - 1;
@@ -200,6 +246,9 @@ static void Flush_Cursor_Cache(void)
 
 	_CursorCacheCount = 0;
 	_CurrentCursor = NULL;
+	_CurrentImage = NULL;
+	_OverlayDirty = true;
+	_PresentedPositionValid = false;
 }
 
 
@@ -226,41 +275,54 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 	_CurrentHotY = hoty;
 
 	HCURSOR cursor = NULL;
+	bool selected = false;
 
 	for (int index = 0; index < _CursorCacheCount; index++) {
 		CursorCacheEntry & entry = _CursorCache[index];
 		if (entry.Shape == shape && entry.Frame == frame) {
-			if (entry.HotX != hotx || entry.HotY != hoty) {
+			if (entry.HotX != hotx || entry.HotY != hoty || entry.Image.Pixels.empty()) {
 				if (entry.Cursor != NULL) {
 					DestroyCursor(entry.Cursor);
 				}
-				entry.Cursor = Build_Cursor(shape, frame, hotx, hoty, scale);
+				CursorImage image;
+				Build_Cursor_Image(shape, frame, hotx, hoty, scale, image);
+				entry.Cursor = Build_Cursor(image);
+				entry.Image = std::move(image);
 				entry.HotX = hotx;
 				entry.HotY = hoty;
 			}
 			cursor = entry.Cursor;
+			_CurrentImage = entry.Image.Pixels.empty() ? NULL : &entry.Image;
+			selected = true;
 			break;
 		}
 	}
 
-	if (cursor == NULL) {
+	if (!selected) {
 		if (_CursorCacheCount >= (int)(sizeof(_CursorCache) / sizeof(_CursorCache[0]))) {
 			Flush_Cursor_Cache();
 		}
 
-		cursor = Build_Cursor(shape, frame, hotx, hoty, scale);
+		CursorImage image;
+		Build_Cursor_Image(shape, frame, hotx, hoty, scale, image);
+		cursor = Build_Cursor(image);
 
-		if (cursor != NULL) {
+		if (!image.Pixels.empty()) {
 			CursorCacheEntry & entry = _CursorCache[_CursorCacheCount++];
 			entry.Shape = shape;
 			entry.Frame = frame;
 			entry.HotX = hotx;
 			entry.HotY = hoty;
 			entry.Cursor = cursor;
+			entry.Image = std::move(image);
+			_CurrentImage = &entry.Image;
+		} else {
+			_CurrentImage = NULL;
 		}
 	}
 
 	_CurrentCursor = cursor;
+	_OverlayDirty = true;
 
 	if (apply) {
 		SetCursor(_CursorVisible ? _CurrentCursor : NULL);
@@ -273,6 +335,9 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 /// </summary>
 void Win_Cursor_Set_Visible(bool visible)
 {
+	if (_CursorVisible != visible) {
+		_OverlayDirty = true;
+	}
 	_CursorVisible = visible;
 
 	if (MouseCursor != NULL && MouseCursor->Is_Captured()) {
@@ -309,6 +374,95 @@ void Win_Cursor_Refresh(void)
 }
 
 
+static bool Current_Overlay_Position(int * x, int * y)
+{
+#ifdef OPENTS_IOS
+	if (x == NULL || y == NULL || MouseCursor == NULL || !MouseCursor->Is_Captured()) {
+		return(false);
+	}
+
+	Point2D const game_point = MouseCursor->Get_Mouse_Point();
+	POINT window_point;
+	window_point.x = game_point.X;
+	window_point.y = game_point.Y;
+	Game_Point_To_Window(window_point);
+	*x = window_point.x;
+	*y = window_point.y;
+	return(true);
+#else
+	(void)x;
+	(void)y;
+	return(false);
+#endif
+}
+
+
+bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
+{
+#ifdef OPENTS_IOS
+	if (overlay == NULL || !_CursorVisible || _CurrentImage == NULL
+		|| _CurrentImage->Pixels.empty()) {
+		return(false);
+	}
+
+	int x = 0;
+	int y = 0;
+	if (!Current_Overlay_Position(&x, &y)) {
+		return(false);
+	}
+
+	overlay->Pixels = _CurrentImage->Pixels.data();
+	overlay->Width = _CurrentImage->Width;
+	overlay->Height = _CurrentImage->Height;
+	overlay->HotX = _CurrentImage->HotX;
+	overlay->HotY = _CurrentImage->HotY;
+	overlay->X = x - overlay->HotX;
+	overlay->Y = y - overlay->HotY;
+	return(true);
+#else
+	(void)overlay;
+	return(false);
+#endif
+}
+
+
+bool Win_Cursor_Is_Dirty(void)
+{
+#ifdef OPENTS_IOS
+	if (_OverlayDirty) {
+		return(true);
+	}
+
+	WinCursorOverlay overlay;
+	if (!Win_Cursor_Get_Overlay(&overlay)) {
+		return(false);
+	}
+
+	return(!_PresentedPositionValid
+		|| overlay.X + overlay.HotX != _PresentedX
+		|| overlay.Y + overlay.HotY != _PresentedY);
+#else
+	return(false);
+#endif
+}
+
+
+void Win_Cursor_Acknowledge_Present(void)
+{
+#ifdef OPENTS_IOS
+	WinCursorOverlay overlay;
+	if (Win_Cursor_Get_Overlay(&overlay)) {
+		_PresentedX = overlay.X + overlay.HotX;
+		_PresentedY = overlay.Y + overlay.HotY;
+		_PresentedPositionValid = true;
+	} else {
+		_PresentedPositionValid = false;
+	}
+	_OverlayDirty = false;
+#endif
+}
+
+
 /// <summary>
 /// Releases every cursor the game built.
 /// </summary>
@@ -317,4 +471,5 @@ void Win_Cursor_Shutdown(void)
 	SetCursor(NULL);
 	Flush_Cursor_Cache();
 	_CurrentShape = NULL;
+	_CurrentImage = NULL;
 }
