@@ -870,6 +870,7 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 			(unsigned long long)event.tfinger.touchID);
 		return(false);
 	}
+	Win32_Pointer_Set_Direct_Touch(true);
 
 	float width = 0.0f;
 	float height = 0.0f;
@@ -1048,6 +1049,7 @@ void Win32_Touch_Test_Reset(void)
 	_Test_Direct_Device = true;
 	_Test_Now_Enabled = false;
 	_Test_Now = 0;
+	Win32_Pointer_Set_Direct_Touch(false);
 
 	Win32_Pointer_Button(SDL_BUTTON_LEFT, false);
 	Win32_Pointer_Button(SDL_BUTTON_RIGHT, false);

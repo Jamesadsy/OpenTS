@@ -20,6 +20,7 @@
 #include "vidscale.h"
 #include "video.h"
 #include "win.h"
+#include "winstub.h"
 #include "xmouse.h"
 
 #include <cstdint>
@@ -400,7 +401,8 @@ static bool Current_Overlay_Position(int * x, int * y)
 bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 {
 #ifdef OPENTS_IOS
-	if (overlay == NULL || !_CursorVisible || _CurrentImage == NULL
+	if (overlay == NULL || !_CursorVisible || Win_Pointer_Is_Direct_Touch()
+		|| _CurrentImage == NULL
 		|| _CurrentImage->Pixels.empty()) {
 		return(false);
 	}
@@ -435,7 +437,7 @@ bool Win_Cursor_Is_Dirty(void)
 
 	WinCursorOverlay overlay;
 	if (!Win_Cursor_Get_Overlay(&overlay)) {
-		return(false);
+		return(_PresentedPositionValid);
 	}
 
 	return(!_PresentedPositionValid

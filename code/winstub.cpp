@@ -385,6 +385,8 @@ extern "C" BOOL Win32Compat_Shipped_Data_Directory(char * buffer, int size);
 extern "C" BOOL Win32Compat_Window_Safe_Area(HWND window, LPRECT rect);
 bool Win32_Pointer_Can_Warp(void);
 bool Win32_Pointer_Is_Drawn(void);
+bool Win32_Pointer_Is_Direct_Touch(void);
+void Win32_Pointer_Set_Direct_Touch(bool direct);
 bool Win32_Touch_Take_Scroll(int * x, int * y);
 void Win32_Touch_Set_Movie_Mode(bool playing);
 #endif
@@ -500,6 +502,26 @@ bool Win_Pointer_Can_Warp(void)
 	return(true);
 #else
 	return(Win32_Pointer_Can_Warp());
+#endif
+}
+
+
+bool Win_Pointer_Is_Direct_Touch(void)
+{
+#ifdef _WIN32
+	return(false);
+#else
+	return(Win32_Pointer_Is_Direct_Touch());
+#endif
+}
+
+
+void Win_Pointer_Set_Direct_Touch(bool direct)
+{
+#ifdef _WIN32
+	(void)direct;
+#else
+	Win32_Pointer_Set_Direct_Touch(direct);
 #endif
 }
 

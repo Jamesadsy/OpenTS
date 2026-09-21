@@ -21,6 +21,7 @@
 #include "drawhelp.h"
 
 #include "uiinternal.h"
+#include "uimodalinput.h"
 #include "uirmlview.h"
 
 #include "_keyboar.h"
@@ -785,7 +786,8 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 				return(_ModalDepth > 0);
 			}
 
-			return(_ModalDepth > 0 || !_Context->ProcessKeyDown(identifier, modifiers));
+			return(UI_Modal_Input::Key_Down_Consumed(*_Context, identifier, modifiers,
+				_ModalDepth > 0, false));
 		}
 
 		case WM_KEYUP:
@@ -795,8 +797,8 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 				return(_ModalDepth > 0);
 			}
 
-			bool const consumed = !_Context->ProcessKeyUp(identifier, modifiers);
-			return(_ModalDepth > 0 || UI_Dev_Wants_Keyboard() || consumed);
+			return(UI_Modal_Input::Key_Up_Consumed(*_Context, identifier, modifiers,
+				_ModalDepth > 0, UI_Dev_Wants_Keyboard()));
 		}
 
 		case WM_CHAR: {
@@ -810,7 +812,8 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 				return(_ModalDepth > 0);
 			}
 
-			return(_ModalDepth > 0 || !_Context->ProcessTextInput((Rml::Character)wparam));
+			return(UI_Modal_Input::Text_Consumed(*_Context, (Rml::Character)wparam,
+				_ModalDepth > 0, false));
 		}
 
 		default:

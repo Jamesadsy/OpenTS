@@ -48,6 +48,8 @@ bool Win_Shipped_Data_Directory(char * path, int size);
 int Win_Window_Refresh_Rate(HWND window);
 bool Win_Set_Window_Fullscreen(HWND window, bool fullscreen);
 bool Win_Pointer_Can_Warp(void);
+bool Win_Pointer_Is_Direct_Touch(void);
+void Win_Pointer_Set_Direct_Touch(bool direct);
 void Win_Text_Input_Begin(void);
 void Win_Text_Input_End(void);
 bool Win_Pointer_Is_Drawn(void);

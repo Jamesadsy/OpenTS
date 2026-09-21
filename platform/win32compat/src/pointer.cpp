@@ -19,6 +19,7 @@ static float _PointerX;
 static float _PointerY;
 static SDL_MouseButtonFlags _PointerButtons;
 static bool _PointerStarted;
+static bool _DirectTouch;
 
 
 void Win32_Pointer_Move(float x, float y)
@@ -118,4 +119,16 @@ void Win32_Pointer_Follow_Host_Mouse(void)
 		_PointerStarted = true;
 	}
 #endif
+}
+
+
+bool Win32_Pointer_Is_Direct_Touch(void)
+{
+	return(_DirectTouch);
+}
+
+
+void Win32_Pointer_Set_Direct_Touch(bool direct)
+{
+	_DirectTouch = direct;
 }

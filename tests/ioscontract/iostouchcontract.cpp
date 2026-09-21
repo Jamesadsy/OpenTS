@@ -61,6 +61,8 @@ void Test_Tap(void)
 	Setup();
 	Check(Send(Finger(SDL_EVENT_FINGER_DOWN, 1, 0.25f, 0.25f, 0)),
 		"production recognizer accepts a direct finger down");
+	Check(Win32_Pointer_Is_Direct_Touch(),
+		"direct touch selects cursor-housekeeping presentation mode");
 	Check(!Left_Down(), "pending first finger emits no click");
 	Check(Send(Finger(SDL_EVENT_FINGER_UP, 1, 0.25f, 0.25f, 10 * MS)),
 		"production recognizer accepts a direct finger up");
@@ -71,6 +73,16 @@ void Test_Tap(void)
 	Win32_Touch_Test_Set_Now(100 * MS);
 	Win32_Touch_Service();
 	Check(!Left_Down(), "simple tap releases its primary button");
+	float x = 0.0f;
+	float y = 0.0f;
+	Win32_Pointer_Position(&x, &y);
+	Check(x == 320.0f && y == 240.0f,
+		"direct touch parks the internal pointer at the window centre");
+	Check(Win32_Pointer_Is_Direct_Touch(),
+		"centre parking keeps direct-touch cursor presentation suppressed");
+	Win32_Pointer_Set_Direct_Touch(false);
+	Check(!Win32_Pointer_Is_Direct_Touch(),
+		"explicit virtual-pointer mode leaves cursor presentation available");
 }
 
 

@@ -65,6 +65,8 @@ void Win32_Pointer_Button(Uint8 button, bool down);
 void Win32_Pointer_Position(float * x, float * y);
 SDL_MouseButtonFlags Win32_Pointer_Buttons(void);
 void Win32_Pointer_Follow_Host_Mouse(void);
+bool Win32_Pointer_Is_Direct_Touch(void);
+void Win32_Pointer_Set_Direct_Touch(bool direct);
 
 // Whether the host has a pointer this layer can move. A warp is what the tactical map's
 // dragging scroll methods are built on, so a host that answers no cannot offer them.
