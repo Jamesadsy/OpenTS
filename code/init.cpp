@@ -2584,8 +2584,9 @@ void Init_Mouse(void)
 	*/
 	//ShowCursor(false);
 
-	/// The menus run on the Windows cursor. The real game cursor is not loaded and assigned
-	/// until play begins -- see MouseClass::One_Time, where these shapes are loaded again.
+	/// The menu and front-end pointer uses the same game-owned shape pipeline as play. On
+	/// hosts with a software cursor overlay this keeps the contextual shape visible while
+	/// the mouse is released to the front end.
 	ShapeSet const * temp_mouse_shapes = (ShapeSet const *)MFCD::Retrieve("MOUSE.SHP");
 
 	if (temp_mouse_shapes) {

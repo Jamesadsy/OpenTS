@@ -406,6 +406,10 @@ ActionType ScrollClass::What_Action(Cell const & cell, ObjectClass * object, boo
 /// <param name="point">The current mouse position, relative to the tactical view.</param>
 void ScrollClass::Scroll_Edge(Point2D const & point)
 {
+	if (Win_Pointer_Should_Suppress_Edge_Scroll()) {
+		return;
+	}
+
 	/*
 	 * If mouse is down, then don't allow edge scrolling of the tactical map.
 	 */

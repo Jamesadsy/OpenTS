@@ -45,13 +45,15 @@ int main(int argc, char ** argv)
 	SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
 #endif
 
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD)) {
 		SDL_Log("SDL could not start: %s", SDL_GetError());
 		return(1);
 	}
 
+	Win32_Gamepad_Initialize();
 	int const result = WinMain((HINSTANCE)(ULONG_PTR)1, NULL, NULL, 1);
 
+	Win32_Gamepad_Shutdown();
 	SDL_Quit();
 	return(result);
 }

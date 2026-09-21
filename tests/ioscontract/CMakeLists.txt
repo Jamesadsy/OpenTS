@@ -21,3 +21,16 @@ target_include_directories(IOSTouchContract PRIVATE
 )
 target_link_libraries(IOSTouchContract PRIVATE win32compat)
 add_test(NAME ios-touch-contract COMMAND IOSTouchContract)
+
+add_executable(IOSControllerContract
+    ioscontrollercontract.cpp
+)
+
+target_compile_features(IOSControllerContract PRIVATE cxx_std_20)
+target_compile_definitions(IOSControllerContract PRIVATE OPENTS_GAMEPAD_TEST)
+target_include_directories(IOSControllerContract PRIVATE
+    ${CMAKE_SOURCE_DIR}/platform/win32compat/src
+    ${CMAKE_SOURCE_DIR}/platform/win32compat/include
+)
+target_link_libraries(IOSControllerContract PRIVATE win32compat)
+add_test(NAME ios-controller-contract COMMAND IOSControllerContract)

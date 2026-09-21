@@ -387,7 +387,9 @@ bool Win32_Pointer_Can_Warp(void);
 bool Win32_Pointer_Is_Drawn(void);
 bool Win32_Pointer_Is_Direct_Touch(void);
 void Win32_Pointer_Set_Direct_Touch(bool direct);
+bool Win32_Pointer_Should_Suppress_Edge_Scroll(void);
 bool Win32_Touch_Take_Scroll(int * x, int * y);
+bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
 void Win32_Touch_Set_Movie_Mode(bool playing);
 #endif
 
@@ -526,6 +528,16 @@ void Win_Pointer_Set_Direct_Touch(bool direct)
 }
 
 
+bool Win_Pointer_Should_Suppress_Edge_Scroll(void)
+{
+#ifdef _WIN32
+	return(false);
+#else
+	return(Win32_Pointer_Should_Suppress_Edge_Scroll());
+#endif
+}
+
+
 /// <summary>
 /// Answers whether the host draws a pointer on the display.
 /// The shape of the pointer is where the game says what a click would do, so a display that
@@ -593,7 +605,15 @@ bool Win_Pointer_Take_Scroll(int & x, int & y)
 	(void)y;
 	return(false);
 #else
-	return(Win32_Touch_Take_Scroll(&x, &y));
+	int touchx = 0;
+	int touchy = 0;
+	int controllerx = 0;
+	int controllery = 0;
+	bool const touch = Win32_Touch_Take_Scroll(&touchx, &touchy);
+	bool const controller = Win32_Gamepad_Take_Camera_Pan(&controllerx, &controllery);
+	x = touchx + controllerx;
+	y = touchy + controllery;
+	return(touch || controller);
 #endif
 }
 

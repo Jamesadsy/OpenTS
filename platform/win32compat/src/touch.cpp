@@ -37,13 +37,10 @@
 //   two fingers, dragged             a scroll offset the tactical view consumes, with inertia
 //   any tap while a movie plays      the ESC the movie skip already waits for
 //
-// Where the pointer rests between gestures is part of the design rather than an accident. A
-// finger that leaves the glass sends no motion away from where it was, so a press near an
-// edge would leave the engine believing the pointer still rested there: the hover would
-// never retire and the edge scroll, which is armed by entering the band and disarmed by
-// leaving it, would scroll for ever. The pointer is parked at the middle of the window when
-// no gesture is running, which retires the hover, keeps the edge scroll disarmed, and puts
-// a placement ghost in the middle of the view rather than under the last thing tapped.
+// The pointer follows the effective touch position, including the first down and motion
+// inside the pending dead zone. When the gesture ends the pointer stays where the gesture
+// left it; only the edge-scroll state is retired, so a touch near an edge cannot keep the
+// tactical view moving forever and the visible cursor never jumps to a park point.
 //
 // Nobody driving this can watch what the recognizer decided, so it writes down every finger
 // it is given, every phase it moves through and every message it posts. See Log_Open below
@@ -162,9 +159,10 @@ float Dead_Zone(void);
 bool Window_Size(float & width, float & height);
 void Log_Display(void);
 
-// The pointer is parked once the gesture's own messages are all out. Parking ahead of a
-// deferred release would deliver that release at the middle of the window.
-bool _ParkPending;
+// Edge scrolling is suppressed once the gesture's own messages are all out. Suppression
+// is intentionally separate from the pointer position, and the next real pointer movement
+// clears it.
+bool _EdgeScrollSuppressionPending;
 
 FILE * _Log;
 bool _LogChecked;
@@ -423,18 +421,6 @@ void Move_To(float x, float y)
 }
 
 
-void Park(void)
-{
-	float width = 0.0f;
-	float height = 0.0f;
-
-	if (Window_Size(width, height)) {
-		Log("park");
-		Move_To(width * 0.5f, height * 0.5f);
-	}
-}
-
-
 void Press(Uint8 button)
 {
 	_HeldButton = button;
@@ -637,7 +623,8 @@ void End_Gesture(void)
 {
 	if (_Fingers.empty()) {
 		Set_Phase(PHASE_IDLE, "every finger has left");
-		_ParkPending = true;
+		_EdgeScrollSuppressionPending = true;
+		Win32_Pointer_Set_Direct_Touch(false);
 	} else {
 		Set_Phase(PHASE_SPENT, "gesture decided, fingers still down");
 	}
@@ -658,7 +645,6 @@ void Begin_Pan(Uint64 now)
 	Centroid(_PanX, _PanY);
 	Sample_Velocity(now, _PanX, _PanY);
 	Set_Phase(PHASE_PAN, "a second finger arrived");
-	_ParkPending = true;
 }
 
 
@@ -704,6 +690,7 @@ void Finger_Down(SDL_FingerID id, float x, float y, Uint64 now)
 	_PressY = y;
 	_PressTime = now;
 	Set_Phase(_MovieMode ? PHASE_MOVIE : PHASE_PENDING, "first finger down");
+	Move_To(x, y);
 }
 
 
@@ -746,6 +733,7 @@ void Finger_Motion(SDL_FingerID id, float x, float y, Uint64 now)
 	}
 
 	if (_Phase == PHASE_PENDING) {
+		Move_To(x, y);
 		if (std::hypot(x - _PressX, y - _PressY) < Dead_Zone()) {
 			return;
 		}
@@ -847,7 +835,8 @@ void Win32_Touch_Cancel(void)
 	Stop_Coast();
 	_PanEngaged = false;
 	Set_Phase(PHASE_IDLE, "cancelled");
-	_ParkPending = true;
+	_EdgeScrollSuppressionPending = true;
+	Win32_Pointer_Set_Direct_Touch(false);
 }
 
 
@@ -870,14 +859,16 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 			(unsigned long long)event.tfinger.touchID);
 		return(false);
 	}
-	Win32_Pointer_Set_Direct_Touch(true);
-
 	float width = 0.0f;
 	float height = 0.0f;
 
 	if (!Window_Size(width, height)) {
 		Log("ignored: no window to measure the finger against");
 		return(true);
+	}
+
+	if (event.type == SDL_EVENT_FINGER_DOWN) {
+		Win32_Pointer_Set_Direct_Touch(true);
 	}
 
 	// Finger positions arrive as a fraction of the window, and the pointer is kept in the
@@ -940,9 +931,10 @@ void Win32_Touch_Service(void)
 		Flush_Release();
 	}
 
-	if (_ParkPending && !_Press.Pending && !_Release.Pending && _HeldButton == 0) {
-		_ParkPending = false;
-		Park();
+	if (_EdgeScrollSuppressionPending && !_Press.Pending && !_Release.Pending && _HeldButton == 0) {
+		_EdgeScrollSuppressionPending = false;
+		Win32_Pointer_Suppress_Edge_Scroll();
+		Log("suppress edge scroll");
 	}
 
 	if (_Phase == PHASE_PENDING
@@ -964,6 +956,8 @@ void Win32_Touch_Service(void)
 	// would drag a selection from wherever the last one was.
 	if (_Fingers.empty() && _Phase != PHASE_IDLE) {
 		Set_Phase(PHASE_IDLE, "no fingers are down");
+		_EdgeScrollSuppressionPending = true;
+		Win32_Pointer_Set_Direct_Touch(false);
 	}
 
 	if (_Fingers.empty() && !_Release.Pending && _HeldButton != 0) {
@@ -1041,7 +1035,7 @@ void Win32_Touch_Test_Reset(void)
 	_Release = {};
 	_MovieMode = false;
 	_HeldButton = 0;
-	_ParkPending = false;
+	_EdgeScrollSuppressionPending = false;
 	_Test_Window_Size_Enabled = false;
 	_Test_Window_Width = 0.0f;
 	_Test_Window_Height = 0.0f;
@@ -1050,6 +1044,7 @@ void Win32_Touch_Test_Reset(void)
 	_Test_Now_Enabled = false;
 	_Test_Now = 0;
 	Win32_Pointer_Set_Direct_Touch(false);
+	Win32_Pointer_Move(0.0f, 0.0f);
 
 	Win32_Pointer_Button(SDL_BUTTON_LEFT, false);
 	Win32_Pointer_Button(SDL_BUTTON_RIGHT, false);

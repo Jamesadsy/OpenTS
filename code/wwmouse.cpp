@@ -183,6 +183,9 @@ void WWMouseClass::Show_Mouse(void)
 {
 	if (!Is_Captured()) {
 		ShowCursor(TRUE);
+#ifndef _WIN32
+		Win_Cursor_Set_Visible(true);
+#endif
 	} else {
 		MouseState++;
 		if (MouseState > 0) MouseState = 0;
@@ -210,6 +213,9 @@ void WWMouseClass::Hide_Mouse(void)
 {
 	if (!Is_Captured()) {
 		ShowCursor(FALSE);
+#ifndef _WIN32
+		Win_Cursor_Set_Visible(false);
+#endif
 	} else {
 		MouseState--;
 		Win_Cursor_Set_Visible(!Is_Hidden());

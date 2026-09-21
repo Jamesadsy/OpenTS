@@ -13,6 +13,7 @@
 # than ports: those entry points report failure so a caller takes its own no-dialog path.
 add_library(win32compat STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/dialog.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/controller.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/entry.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/gdi.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/src/input.cpp"
@@ -31,7 +32,7 @@ target_compile_features(win32compat PRIVATE cxx_std_20)
 # time and window inputs. The native host harness needs these hooks; the iOS product does not
 # carry them.
 if(NOT IOS)
-    target_compile_definitions(win32compat PRIVATE OPENTS_TOUCH_TEST)
+    target_compile_definitions(win32compat PRIVATE OPENTS_TOUCH_TEST OPENTS_GAMEPAD_TEST)
 endif()
 
 # Consumers include <windows.h> and the rest of the surface by their Windows spellings.

@@ -18,33 +18,61 @@
 static float _PointerX;
 static float _PointerY;
 static SDL_MouseButtonFlags _PointerButtons;
+static SDL_MouseButtonFlags _HostButtons;
+static SDL_MouseButtonFlags _ControllerButtons;
 static bool _PointerStarted;
 static bool _DirectTouch;
+static bool _SuppressEdgeScroll;
+
+
+static SDL_MouseButtonFlags Button_Mask(Uint8 button)
+{
+	switch (button) {
+		case SDL_BUTTON_LEFT: return(SDL_BUTTON_LMASK);
+		case SDL_BUTTON_RIGHT: return(SDL_BUTTON_RMASK);
+		case SDL_BUTTON_MIDDLE: return(SDL_BUTTON_MMASK);
+		default: return(0);
+	}
+}
+
+
+static void Set_Source_Button(SDL_MouseButtonFlags & source, Uint8 button, bool down)
+{
+	SDL_MouseButtonFlags const mask = Button_Mask(button);
+
+	if (mask == 0) {
+		return;
+	}
+
+	if (down) {
+		source |= mask;
+	} else {
+		source &= ~mask;
+	}
+
+	_PointerButtons = _HostButtons | _ControllerButtons;
+}
 
 
 void Win32_Pointer_Move(float x, float y)
 {
 	_PointerX = x;
 	_PointerY = y;
+	_SuppressEdgeScroll = false;
 }
 
 
 void Win32_Pointer_Button(Uint8 button, bool down)
 {
-	SDL_MouseButtonFlags mask = 0;
+	Set_Source_Button(_HostButtons, button, down);
+}
 
-	switch (button) {
-		case SDL_BUTTON_LEFT: mask = SDL_BUTTON_LMASK; break;
-		case SDL_BUTTON_RIGHT: mask = SDL_BUTTON_RMASK; break;
-		case SDL_BUTTON_MIDDLE: mask = SDL_BUTTON_MMASK; break;
-		default: return;
-	}
 
-	if (down) {
-		_PointerButtons |= mask;
-	} else {
-		_PointerButtons &= ~mask;
-	}
+bool Win32_Pointer_Controller_Button(Uint8 button, bool down)
+{
+	SDL_MouseButtonFlags const before = _PointerButtons;
+	Set_Source_Button(_ControllerButtons, button, down);
+	return(before != _PointerButtons);
 }
 
 
@@ -111,11 +139,12 @@ void Win32_Pointer_Follow_Host_Mouse(void)
 	int wy = 0;
 	SDL_GetWindowPosition(main->Handle, &wx, &wy);
 
-	_PointerX = x - (float)wx;
-	_PointerY = y - (float)wy;
+	Win32_Pointer_Move(x - (float)wx, y - (float)wy);
 
 	if (!_PointerStarted) {
-		_PointerButtons = SDL_GetMouseState(NULL, NULL);
+		_HostButtons = SDL_GetMouseState(NULL, NULL)
+			& (SDL_BUTTON_LMASK | SDL_BUTTON_RMASK | SDL_BUTTON_MMASK);
+		_PointerButtons = _HostButtons | _ControllerButtons;
 		_PointerStarted = true;
 	}
 #endif
@@ -131,4 +160,16 @@ bool Win32_Pointer_Is_Direct_Touch(void)
 void Win32_Pointer_Set_Direct_Touch(bool direct)
 {
 	_DirectTouch = direct;
+}
+
+
+void Win32_Pointer_Suppress_Edge_Scroll(void)
+{
+	_SuppressEdgeScroll = true;
+}
+
+
+bool Win32_Pointer_Should_Suppress_Edge_Scroll(void)
+{
+	return(_SuppressEdgeScroll);
 }

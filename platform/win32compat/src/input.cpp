@@ -20,6 +20,8 @@
 static int const VK_LBUTTON_CODE = 0x01;
 static int const VK_RBUTTON_CODE = 0x02;
 static int const VK_MBUTTON_CODE = 0x04;
+static bool _ControllerControl;
+static bool _ControllerAlt;
 
 struct KeyMapping
 {
@@ -128,6 +130,14 @@ extern "C" SHORT GetAsyncKeyState(int key)
 		default: break;
 	}
 
+	if (key == WIN32_VK_CONTROL && _ControllerControl) {
+		return((SHORT)0x8000);
+	}
+
+	if (key == WIN32_VK_MENU && _ControllerAlt) {
+		return((SHORT)0x8000);
+	}
+
 	SDL_Scancode const scancode = Scancode_For_Virtual_Key(key);
 
 	if (scancode == SDL_SCANCODE_UNKNOWN) {
@@ -142,6 +152,16 @@ extern "C" SHORT GetAsyncKeyState(int key)
 	}
 
 	return(state[scancode] ? (SHORT)0x8000 : 0);
+}
+
+
+void Win32_Controller_Key(int virtualkey, bool down)
+{
+	if (virtualkey == WIN32_VK_CONTROL) {
+		_ControllerControl = down;
+	} else if (virtualkey == WIN32_VK_MENU) {
+		_ControllerAlt = down;
+	}
 }
 
 

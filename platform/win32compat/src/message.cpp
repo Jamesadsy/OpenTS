@@ -142,6 +142,19 @@ static bool Is_Printable_Text_Key(SDL_KeyboardEvent const & key)
 
 static void Translate_Event(SDL_Event const & event)
 {
+	switch (event.type) {
+		case SDL_EVENT_GAMEPAD_ADDED:
+		case SDL_EVENT_GAMEPAD_REMOVED:
+		case SDL_EVENT_GAMEPAD_REMAPPED:
+		case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+		case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+		case SDL_EVENT_GAMEPAD_BUTTON_UP:
+			Win32_Gamepad_Handle_Event(event);
+			return;
+		default:
+			break;
+	}
+
 	HWND const main = Win32_Main_Window();
 
 	if (main == NULL) {
@@ -159,28 +172,34 @@ static void Translate_Event(SDL_Event const & event)
 			break;
 
 		case SDL_EVENT_WINDOW_FOCUS_GAINED:
+			Win32_Gamepad_Set_Focus(true);
 			Win32_Post_Message(main, WM_ACTIVATEAPP, 1, 0);
 			Win32_Post_Message(main, WM_SETFOCUS, 0, 0);
 			break;
 
 		case SDL_EVENT_WINDOW_FOCUS_LOST:
+			Win32_Gamepad_Set_Focus(false);
 			Win32_Post_Message(main, WM_ACTIVATEAPP, 0, 0);
 			Win32_Post_Message(main, WM_KILLFOCUS, 0, 0);
 			break;
 
 		case SDL_EVENT_WINDOW_SHOWN:
+			Win32_Gamepad_Set_Focus(true);
 			Win32_Post_Message(main, WM_SHOWWINDOW, 1, 0);
 			break;
 
 		case SDL_EVENT_WINDOW_HIDDEN:
+			Win32_Gamepad_Set_Focus(false);
 			Win32_Post_Message(main, WM_SHOWWINDOW, 0, 0);
 			break;
 
 		case SDL_EVENT_WINDOW_MINIMIZED:
+			Win32_Gamepad_Set_Focus(false);
 			Win32_Post_Message(main, WM_SIZE, SIZE_MINIMIZED, 0);
 			break;
 
 		case SDL_EVENT_WINDOW_RESTORED:
+			Win32_Gamepad_Set_Focus(true);
 			Win32_Post_Message(main, WM_SIZE, SIZE_RESTORED, 0);
 			break;
 
@@ -206,6 +225,7 @@ static void Translate_Event(SDL_Event const & event)
 				return;
 			}
 #endif
+			Win32_Pointer_Set_Direct_Touch(false);
 			Win32_Pointer_Move(event.motion.x, event.motion.y);
 			Win32_Post_Message(main, WM_MOUSEMOVE, Mouse_Key_State(), Pointer_To_LParam());
 			break;
@@ -236,6 +256,7 @@ static void Translate_Event(SDL_Event const & event)
 					return;
 			}
 
+			Win32_Pointer_Set_Direct_Touch(false);
 			Win32_Pointer_Move(event.button.x, event.button.y);
 			Win32_Pointer_Button(event.button.button, down);
 			Win32_Post_Message(main, message, Mouse_Key_State(), Pointer_To_LParam());
@@ -328,6 +349,7 @@ void Win32_Pump_Host_Events(void)
 		Translate_Event(event);
 	}
 
+	Win32_Gamepad_Service();
 	Win32_Touch_Service();
 	Service_Timers();
 }

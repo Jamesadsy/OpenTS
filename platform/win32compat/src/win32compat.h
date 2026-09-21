@@ -13,6 +13,14 @@
 
 #include <SDL3/SDL.h>
 
+constexpr int WIN32_VK_ESCAPE = 0x1B;
+constexpr int WIN32_VK_LEFT = 0x25;
+constexpr int WIN32_VK_UP = 0x26;
+constexpr int WIN32_VK_RIGHT = 0x27;
+constexpr int WIN32_VK_DOWN = 0x28;
+constexpr int WIN32_VK_CONTROL = 0x11;
+constexpr int WIN32_VK_MENU = 0x12;
+
 // One window record per HWND the engine asks for. Only the main window is backed by an
 // SDL window; everything the legacy dialog layer would have created is refused, so a
 // record without a Handle never exists.
@@ -62,11 +70,14 @@ float Win32_Pixel_Density(void);
 // and the polled state cannot disagree.
 void Win32_Pointer_Move(float x, float y);
 void Win32_Pointer_Button(Uint8 button, bool down);
+bool Win32_Pointer_Controller_Button(Uint8 button, bool down);
 void Win32_Pointer_Position(float * x, float * y);
 SDL_MouseButtonFlags Win32_Pointer_Buttons(void);
 void Win32_Pointer_Follow_Host_Mouse(void);
 bool Win32_Pointer_Is_Direct_Touch(void);
 void Win32_Pointer_Set_Direct_Touch(bool direct);
+void Win32_Pointer_Suppress_Edge_Scroll(void);
+bool Win32_Pointer_Should_Suppress_Edge_Scroll(void);
 
 // Whether the host has a pointer this layer can move. A warp is what the tactical map's
 // dragging scroll methods are built on, so a host that answers no cannot offer them.
@@ -80,6 +91,17 @@ bool Win32_Pointer_Is_Drawn(void);
 // the same shape the host's own keys arrive in.
 void Win32_Post_Pointer_Message(UINT message);
 void Win32_Post_Key_Message(int virtualkey, bool down);
+
+// The SDL gamepad layer keeps controller input in the same pointer, key and scroll seams
+// the game already consumes. Its lifecycle is owned by the host event pump.
+void Win32_Gamepad_Initialize(void);
+void Win32_Gamepad_Handle_Event(SDL_Event const & event);
+void Win32_Gamepad_Service(void);
+void Win32_Gamepad_Set_Focus(bool focused);
+void Win32_Gamepad_Release_All(void);
+bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
+void Win32_Gamepad_Shutdown(void);
+void Win32_Controller_Key(int virtualkey, bool down);
 
 // The touch recognizer. It writes the pointer above, so everything the engine already reads
 // about the pointer answers for a finger as well. Handle_Event takes the finger events out

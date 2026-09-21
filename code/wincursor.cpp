@@ -378,7 +378,7 @@ void Win_Cursor_Refresh(void)
 static bool Current_Overlay_Position(int * x, int * y)
 {
 #ifdef OPENTS_IOS
-	if (x == NULL || y == NULL || MouseCursor == NULL || !MouseCursor->Is_Captured()) {
+	if (x == NULL || y == NULL || MouseCursor == NULL) {
 		return(false);
 	}
 
@@ -401,7 +401,7 @@ static bool Current_Overlay_Position(int * x, int * y)
 bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 {
 #ifdef OPENTS_IOS
-	if (overlay == NULL || !_CursorVisible || Win_Pointer_Is_Direct_Touch()
+	if (overlay == NULL || !_CursorVisible
 		|| _CurrentImage == NULL
 		|| _CurrentImage->Pixels.empty()) {
 		return(false);

@@ -62,7 +62,12 @@ void Test_Tap(void)
 	Check(Send(Finger(SDL_EVENT_FINGER_DOWN, 1, 0.25f, 0.25f, 0)),
 		"production recognizer accepts a direct finger down");
 	Check(Win32_Pointer_Is_Direct_Touch(),
-		"direct touch selects cursor-housekeeping presentation mode");
+		"direct touch owns the presentation pointer while the gesture is active");
+	float x = 0.0f;
+	float y = 0.0f;
+	Win32_Pointer_Position(&x, &y);
+	Check(x == 160.0f && y == 120.0f,
+		"direct touch down moves the effective pointer to the finger");
 	Check(!Left_Down(), "pending first finger emits no click");
 	Check(Send(Finger(SDL_EVENT_FINGER_UP, 1, 0.25f, 0.25f, 10 * MS)),
 		"production recognizer accepts a direct finger up");
@@ -73,16 +78,13 @@ void Test_Tap(void)
 	Win32_Touch_Test_Set_Now(100 * MS);
 	Win32_Touch_Service();
 	Check(!Left_Down(), "simple tap releases its primary button");
-	float x = 0.0f;
-	float y = 0.0f;
 	Win32_Pointer_Position(&x, &y);
-	Check(x == 320.0f && y == 240.0f,
-		"direct touch parks the internal pointer at the window centre");
-	Check(Win32_Pointer_Is_Direct_Touch(),
-		"centre parking keeps direct-touch cursor presentation suppressed");
-	Win32_Pointer_Set_Direct_Touch(false);
+	Check(x == 160.0f && y == 120.0f,
+		"completed touch leaves the effective pointer at the last touch target");
 	Check(!Win32_Pointer_Is_Direct_Touch(),
-		"explicit virtual-pointer mode leaves cursor presentation available");
+		"completed touch releases direct-touch ownership");
+	Check(Win32_Pointer_Should_Suppress_Edge_Scroll(),
+		"completed touch suppresses edge scrolling without moving the pointer");
 }
 
 
@@ -123,6 +125,11 @@ void Test_Drag_Cancel(void)
 	Setup();
 	Send(Finger(SDL_EVENT_FINGER_DOWN, 1, 0.20f, 0.20f, 0));
 	Send(Finger(SDL_EVENT_FINGER_MOTION, 1, 0.40f, 0.20f, 1 * MS));
+	float x = 0.0f;
+	float y = 0.0f;
+	Win32_Pointer_Position(&x, &y);
+	Check(x == 256.0f && y == 96.0f,
+		"one-finger motion tracks the actual effective pointer position");
 	Check(Left_Down(), "one-finger drag holds the primary button");
 	Win32_Touch_Cancel();
 	Check(!Left_Down(), "cancelling a recognizer-owned drag releases its button");
