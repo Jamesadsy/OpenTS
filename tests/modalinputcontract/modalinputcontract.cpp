@@ -163,6 +163,9 @@ int main(void)
 	Check(return_listener.ReturnDown == 1, "modal Return reaches the document once");
 	Check(UI_Modal_Input::Key_Up_Consumed(*context, Rml::Input::KI_RETURN, 0, true, false),
 		"modal Return key-up is dispatched before modal consumption");
+	Check(UI_Modal_Input::Key_Down_Consumed(*context, Rml::Input::KI_RETURN, 0, false, false),
+		"nonmodal RmlUi-consumed Return remains shell-consumed");
+	Check(return_listener.ReturnDown == 2, "nonmodal RmlUi-consumed Return reaches the document once");
 
 	Rml::String const before_capture = field->GetValue();
 	Check(UI_Modal_Input::Text_Consumed(*context, Rml::Character('Z'), true, true),
@@ -170,8 +173,20 @@ int main(void)
 	Check(field->GetValue() == before_capture,
 		"developer keyboard capture does not mutate the modal field");
 
-	Check(!UI_Modal_Input::Key_Down_Consumed(*context, Rml::Input::KI_F1, 0, false, false),
-		"nonmodal unconsumed key keeps the legacy propagation result");
+	Rml::Context * unconsumed_context = Rml::CreateContext(
+		"modal-input-contract-unconsumed", Rml::Vector2i(640, 480));
+	Check(unconsumed_context != NULL, "modal input contract creates the unconsumed RmlUi fixture");
+	if (unconsumed_context != NULL) {
+		Check(unconsumed_context->ProcessKeyDown(Rml::Input::KI_F1, 0),
+			"empty RmlUi context leaves KI_F1 genuinely unconsumed");
+		Check(!UI_Modal_Input::Key_Down_Consumed(
+			*unconsumed_context, Rml::Input::KI_F1, 0, false, false),
+			"nonmodal genuinely unconsumed key keeps the legacy propagation result");
+		Check(UI_Modal_Input::Key_Down_Consumed(
+			*unconsumed_context, Rml::Input::KI_F1, 0, true, false),
+			"modal override consumes after RmlUi receives an unconsumed key");
+		Rml::RemoveContext("modal-input-contract-unconsumed");
+	}
 
 	Rml::RemoveContext("modal-input-contract");
 	Rml::Shutdown();
