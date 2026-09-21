@@ -165,7 +165,7 @@ int main(void)
 		"modal Return key-up is dispatched before modal consumption");
 
 	Rml::String const before_capture = field->GetValue();
-	Check(UI_Modal_Input::Text_Consumed(*context, 'Z', true, true),
+	Check(UI_Modal_Input::Text_Consumed(*context, Rml::Character('Z'), true, true),
 		"developer keyboard capture still consumes text before RmlUi");
 	Check(field->GetValue() == before_capture,
 		"developer keyboard capture does not mutate the modal field");
