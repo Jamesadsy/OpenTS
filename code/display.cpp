@@ -2701,10 +2701,28 @@ void DisplayClass::Sell_Mode_Control(int control)
 		if (mode && PlayerPtr->CurBuildings > 0) {
 			IsSellMode = true;
 			Unselect_All();
+			Set_Default_Mouse(MOUSE_SELL_BACK, false);
 		} else {
 			IsSellMode = false;
 			Revert_Mouse_Shape();
 		}
+	}
+}
+
+
+/// <summary>
+/// Advances the controller's accepted Square action through the native mutually-exclusive
+/// repair and sell modes. The mode flags remain the only authority; no controller-side mode
+/// state is consulted or maintained.
+/// </summary>
+void DisplayClass::Controller_Repair_Sell_Cycle(void)
+{
+	if (IsRepairMode) {
+		Sell_Mode_Control(1);
+	} else if (IsSellMode) {
+		Sell_Mode_Control(0);
+	} else {
+		Repair_Mode_Control(1);
 	}
 }
 
@@ -2850,6 +2868,7 @@ void DisplayClass::Repair_Mode_Control(int control)
 		if (mode && PlayerPtr->CurBuildings > 0) {
 			IsRepairMode = true;
 			Unselect_All();
+			Set_Default_Mouse(MOUSE_REPAIR, false);
 		} else {
 			IsRepairMode = false;
 			Revert_Mouse_Shape();

@@ -1036,6 +1036,9 @@ UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view)
 	_RunningModal++;
 
 	while (!presenter.Result.has_value() && !presenter.Suspends()) {
+		// Service the shared virtual pointer once per modal/front-end cycle, before the
+		// message drain can dispatch its WM_MOUSEMOVE to RmlUi.
+		Win_Gamepad_Service();
 		Windows_Message_Handler();
 
 		if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && !Session.NetOpen && !Session.Suspended) {
@@ -1052,6 +1055,9 @@ UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view)
 				}
 			}
 		} else {
+			// Square/Triangle are gameplay actions. A frontend or modal surface consumes
+			// their edges without letting them leak into the next scenario.
+			Win_Gamepad_Discard_Actions();
 			Call_Back();
 		}
 

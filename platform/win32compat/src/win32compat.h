@@ -92,16 +92,22 @@ bool Win32_Pointer_Is_Drawn(void);
 void Win32_Post_Pointer_Message(UINT message);
 void Win32_Post_Key_Message(int virtualkey, bool down);
 
-// The SDL gamepad layer keeps controller input in the same pointer, key and scroll seams
-// the game already consumes. Its lifecycle is owned by the host event pump.
+// The SDL gamepad layer keeps controller input in the same pointer, key, action and scroll
+// seams the game already consumes. SDL events are ingested by the host pump; continuous
+// service is owned by the outer game/UI update seam.
 void Win32_Gamepad_Initialize(void);
 void Win32_Gamepad_Handle_Event(SDL_Event const & event);
 void Win32_Gamepad_Service(void);
 void Win32_Gamepad_Set_Focus(bool focused);
 void Win32_Gamepad_Release_All(void);
 bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
+bool Win32_Gamepad_Take_Action(int * action);
+void Win32_Gamepad_Discard_Actions(void);
 void Win32_Gamepad_Shutdown(void);
 void Win32_Controller_Key(int virtualkey, bool down);
+
+constexpr int WIN32_GAMEPAD_ACTION_SQUARE = 1;
+constexpr int WIN32_GAMEPAD_ACTION_TRIANGLE = 2;
 
 // The touch recognizer. It writes the pointer above, so everything the engine already reads
 // about the pointer answers for a finger as well. Handle_Event takes the finger events out

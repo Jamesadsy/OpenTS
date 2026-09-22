@@ -20,9 +20,10 @@ namespace
 constexpr Sint16 GAMEPAD_AXIS_MAX = 32767;
 constexpr Sint16 GAMEPAD_DEAD_ZONE = 4000;
 constexpr double GAMEPAD_AXIS_EXPONENT = 1.03;
-constexpr double GAMEPAD_CURSOR_SPEED = 480.0;
+constexpr double GAMEPAD_CURSOR_SPEED = 240.0;
 constexpr double GAMEPAD_CAMERA_SPEED = 480.0;
 constexpr double GAMEPAD_TRIGGER_MAX = 32767.0;
+constexpr double GAMEPAD_STALL_RESET_SECONDS = 0.1;
 
 SDL_Gamepad * _Gamepad;
 SDL_JoystickID _GamepadId;
@@ -52,6 +53,8 @@ float _TestWindowHeight;
 Uint64 _TestNow;
 std::deque<TestKeyEvent> _TestKeyEvents;
 #endif
+
+std::deque<int> _Actions;
 
 
 double Axis_Value(Sint16 value)
@@ -167,6 +170,21 @@ void Apply_Button(SDL_GamepadButton button, bool down)
 	_Buttons[index] = down;
 
 	if (down) {
+		switch (button) {
+			case SDL_GAMEPAD_BUTTON_WEST:
+				_Actions.push_back(WIN32_GAMEPAD_ACTION_SQUARE);
+				break;
+
+			case SDL_GAMEPAD_BUTTON_NORTH:
+				_Actions.push_back(WIN32_GAMEPAD_ACTION_TRIANGLE);
+				break;
+
+			default:
+				break;
+		}
+	}
+
+	if (down) {
 		Win32_Pointer_Set_Direct_Touch(false);
 	}
 
@@ -229,6 +247,7 @@ void Reset_Device_State(void)
 	_CameraPanY = 0.0;
 	_HaveServiceTime = false;
 	_LastService = 0;
+	_Actions.clear();
 }
 
 
@@ -388,8 +407,10 @@ void Win32_Gamepad_Service(void)
 	if (elapsed <= 0.0) {
 		return;
 	}
-	if (elapsed > 0.25) {
-		elapsed = 0.25;
+	if (elapsed > GAMEPAD_STALL_RESET_SECONDS) {
+		// A service gap means the host was not presenting. Do not turn the whole gap into
+		// one visible teleport when the next outer frame arrives.
+		elapsed = 0.0;
 	}
 
 	if (_Gamepad != NULL) {
@@ -402,7 +423,7 @@ void Win32_Gamepad_Service(void)
 		}
 	}
 
-	double const boost = 1.0 + 2.0 * Trigger_Value(_Axes[SDL_GAMEPAD_AXIS_RIGHT_TRIGGER]);
+	double const pointer_boost = 1.0 + 2.0 * Trigger_Value(_Axes[SDL_GAMEPAD_AXIS_RIGHT_TRIGGER]);
 	double const leftx = Axis_Value(_Axes[SDL_GAMEPAD_AXIS_LEFTX]);
 	double const lefty = Axis_Value(_Axes[SDL_GAMEPAD_AXIS_LEFTY]);
 	double const rightx = Axis_Value(_Axes[SDL_GAMEPAD_AXIS_RIGHTX]);
@@ -414,9 +435,9 @@ void Win32_Gamepad_Service(void)
 		float x = 0.0f;
 		float y = 0.0f;
 		Win32_Pointer_Position(&x, &y);
-		x = std::clamp((double)x + leftx * GAMEPAD_CURSOR_SPEED * elapsed * boost,
+		x = std::clamp((double)x + leftx * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost,
 			0.0, (double)width - 1.0);
-		y = std::clamp((double)y + lefty * GAMEPAD_CURSOR_SPEED * elapsed * boost,
+		y = std::clamp((double)y + lefty * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost,
 			0.0, (double)height - 1.0);
 		Win32_Pointer_Set_Direct_Touch(false);
 		Win32_Pointer_Move((float)x, (float)y);
@@ -425,8 +446,8 @@ void Win32_Gamepad_Service(void)
 
 	if (rightx != 0.0 || righty != 0.0) {
 		Win32_Pointer_Set_Direct_Touch(false);
-		_CameraPanX += rightx * GAMEPAD_CAMERA_SPEED * elapsed * boost;
-		_CameraPanY += righty * GAMEPAD_CAMERA_SPEED * elapsed * boost;
+		_CameraPanX += rightx * GAMEPAD_CAMERA_SPEED * elapsed;
+		_CameraPanY += righty * GAMEPAD_CAMERA_SPEED * elapsed;
 	}
 }
 
@@ -466,6 +487,27 @@ bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y)
 	if (x != NULL) *x = dx;
 	if (y != NULL) *y = dy;
 	return(dx != 0 || dy != 0);
+}
+
+
+bool Win32_Gamepad_Take_Action(int * action)
+{
+	if (_Actions.empty()) {
+		return(false);
+	}
+
+	int const next = _Actions.front();
+	_Actions.pop_front();
+	if (action != NULL) {
+		*action = next;
+	}
+	return(true);
+}
+
+
+void Win32_Gamepad_Discard_Actions(void)
+{
+	_Actions.clear();
 }
 
 

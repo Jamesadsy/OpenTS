@@ -118,6 +118,7 @@
 #include "voc.h"
 #include "utf8.h"
 #include "vox.h"
+#include "winstub.h"
 
 #include "bench.hh"
 #include "color.hh"
@@ -305,6 +306,7 @@ SidebarClass::SidebarClass(void) :
 	BASECLASS(),
 	IsCameoText(false),
 	IsSidebarActive(false),
+	IsMobileUserCollapsed(false),
 	IsToRedrawCredits(false),
 	IsToRedraw(true),
 	IsRepairActive(false),
@@ -388,6 +390,7 @@ void SidebarClass::Init_Clear(void)
 	BASECLASS::Init_Clear();
 
 	IsToRedraw = true;
+	IsMobileUserCollapsed = false;
 	IsRepairActive = false;
 	IsUpgradeActive = false;
 	IsDemolishActive = false;
@@ -1073,7 +1076,27 @@ void SidebarClass::AI(KeyNumType & input, Point2D const & xy)
 {
 	Point2D xy_rel = xy - Point2D(480, 0);
 
-	if (!Debug_Map) {
+	if (!Debug_Map && GameActive && ScenarioActive && TacticalActive) {
+		WinGamepadAction action = WIN_GAMEPAD_ACTION_NONE;
+		while (Win_Gamepad_Take_Action(action)) {
+			switch (action) {
+				case WIN_GAMEPAD_ACTION_SQUARE:
+					Controller_Repair_Sell_Cycle();
+					break;
+
+				case WIN_GAMEPAD_ACTION_TRIANGLE:
+					Controller_Toggle_Sidebar();
+					break;
+
+				default:
+					break;
+			}
+		}
+	} else {
+		Win_Gamepad_Discard_Actions();
+	}
+
+	if (!Debug_Map && !IsMobileUserCollapsed) {
 		Activate(1);	// Force the sidebar always on in Win95 mode
 	}
 
@@ -1257,6 +1280,25 @@ bool SidebarClass::Activate(int control)
 	}
 
 	return(old);
+}
+
+
+/// <summary>
+/// Toggles the sidebar for the deliberate controller/mobile user action. The native Activate
+/// path owns gadget membership, redraw and hit testing; this flag only prevents the normal
+/// desktop force-on policy from undoing an explicit hide on the next AI tick.
+/// </summary>
+void SidebarClass::Controller_Toggle_Sidebar(void)
+{
+	if (Debug_Map || !GameActive || !ScenarioActive) {
+		return;
+	}
+
+	bool const old = IsSidebarActive;
+	Activate(-1);
+	if (IsSidebarActive != old) {
+		IsMobileUserCollapsed = !IsSidebarActive;
+	}
 }
 
 

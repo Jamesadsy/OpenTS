@@ -30,7 +30,7 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version | tee proof/iphoneos-sdk-version.log
           git rev-parse --abbrev-ref HEAD | tee proof/ref.log
           printf '%s\n' "${GITHUB_REF_NAME}" | tee proof/ref-name.log
-          test "${GITHUB_REF_NAME}" = "secondsun/ss-g5-035-touch-controller-parity"
+          test "${GITHUB_REF_NAME}" = "secondsun/ss-g5-036-action-cursor-controller-refine"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log

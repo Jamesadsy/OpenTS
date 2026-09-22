@@ -178,6 +178,7 @@ class DisplayClass: public MapClass
 		bool Is_Spot_Free(Coord const & coord, bool bridge=false) const;
 		Coord Closest_Free_Spot(Coord const & coord, bool any=false) const;
 		void Sell_Mode_Control(int control);
+		void Controller_Repair_Sell_Cycle(void);
 		void Waypoint_Mode_Control(int control, bool edit_selected_path=false);
 		void Power_Mode_Control(int control);
 		void Repair_Mode_Control(int control);

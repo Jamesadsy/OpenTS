@@ -349,7 +349,6 @@ void Win32_Pump_Host_Events(void)
 		Translate_Event(event);
 	}
 
-	Win32_Gamepad_Service();
 	Win32_Touch_Service();
 	Service_Timers();
 }

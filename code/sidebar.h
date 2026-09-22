@@ -118,6 +118,7 @@ class SidebarClass : public PowerClass
 		void Zoom_Mode_Control(void);
 		bool Abandon_Production(RTTIType type, FactoryClass * factory);
 		bool Activate(int control);
+		void Controller_Toggle_Sidebar(void);
 		bool Add(RTTIType type, int ID);
 		bool Sidebar_Click(KeyNumType & input, int x, int y);
 		void Recalc(void);
@@ -368,6 +369,13 @@ class SidebarClass : public PowerClass
 		**	If the sidebar is active then this flag is true.
 		*/
 		bool IsSidebarActive;
+
+		/*
+		 * A deliberate controller/mobile hide survives SidebarClass::AI's normal
+		 * desktop force-on policy. This runtime seam is reset with the scenario and
+		 * is intentionally not serialized into save data.
+		 */
+		bool IsMobileUserCollapsed;
 
 		/*
 		**	This flag tells the rendering system that the sidebar needs to be redrawn.

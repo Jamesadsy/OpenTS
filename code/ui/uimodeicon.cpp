@@ -210,6 +210,26 @@ static MouseType Armed_Shape(void)
 }
 
 
+/// <summary>
+/// Seeds the real native pointer with the same armed-state answer used by the no-hover icon.
+/// The tactical hover pass runs afterwards and replaces this seed with the higher-priority
+/// target-specific action cursor. This keeps touch/controller movement readable before that
+/// pass has a target to evaluate without inventing a second cursor rule.
+/// </summary>
+static void Apply_Armed_Pointer_Fallback(void)
+{
+	if (!GameActive || !ScenarioActive || UI_Modal_Is_Shown() || !Win_Pointer_Is_Drawn()
+		|| MouseClass::MouseShapes == NULL) {
+		return;
+	}
+
+	MouseType const shape = Armed_Shape();
+	if (shape != MOUSE_COUNT && Map.Get_Mouse_Shape() != shape) {
+		Map.Set_Default_Mouse(shape, Map.IsSmall);
+	}
+}
+
+
 static void Hide(void)
 {
 	if (_Document != nullptr && _Document->IsVisible()) {
@@ -319,6 +339,8 @@ static void Place(void)
 /// </summary>
 void UI_Mode_Icon_Service(void)
 {
+	Apply_Armed_Pointer_Fallback();
+
 	MouseType const shape = Belongs_On_Screen() ? Armed_Shape() : MOUSE_COUNT;
 
 	if (shape == MOUSE_COUNT) {

@@ -390,6 +390,9 @@ void Win32_Pointer_Set_Direct_Touch(bool direct);
 bool Win32_Pointer_Should_Suppress_Edge_Scroll(void);
 bool Win32_Touch_Take_Scroll(int * x, int * y);
 bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
+void Win32_Gamepad_Service(void);
+bool Win32_Gamepad_Take_Action(int * action);
+void Win32_Gamepad_Discard_Actions(void);
 void Win32_Touch_Set_Movie_Mode(bool playing);
 #endif
 
@@ -534,6 +537,50 @@ bool Win_Pointer_Should_Suppress_Edge_Scroll(void)
 	return(false);
 #else
 	return(Win32_Pointer_Should_Suppress_Edge_Scroll());
+#endif
+}
+
+
+void Win_Gamepad_Service(void)
+{
+#ifndef _WIN32
+	Win32_Gamepad_Service();
+#endif
+}
+
+
+bool Win_Gamepad_Take_Action(WinGamepadAction & action)
+{
+#ifdef _WIN32
+	(void)action;
+	return(false);
+#else
+	int raw = 0;
+	if (!Win32_Gamepad_Take_Action(&raw)) {
+		return(false);
+	}
+
+	switch (raw) {
+		case 1:
+			action = WIN_GAMEPAD_ACTION_SQUARE;
+			return(true);
+
+		case 2:
+			action = WIN_GAMEPAD_ACTION_TRIANGLE;
+			return(true);
+
+		default:
+			action = WIN_GAMEPAD_ACTION_NONE;
+			return(false);
+	}
+#endif
+}
+
+
+void Win_Gamepad_Discard_Actions(void)
+{
+#ifndef _WIN32
+	Win32_Gamepad_Discard_Actions();
 #endif
 }
 

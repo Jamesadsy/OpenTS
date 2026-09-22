@@ -56,6 +56,19 @@ void Win_Text_Input_End(void);
 bool Win_Pointer_Is_Drawn(void);
 bool Win_Window_Safe_Area(HWND window, RECT & area);
 bool Win_Pointer_Take_Scroll(int & x, int & y);
+
+enum WinGamepadAction {
+	WIN_GAMEPAD_ACTION_NONE = 0,
+	WIN_GAMEPAD_ACTION_SQUARE,
+	WIN_GAMEPAD_ACTION_TRIANGLE
+};
+
+// The host services the controller once per outer frame. Gameplay consumes the two
+// action edges through native engine endpoints; frontend/modal surfaces discard them.
+void Win_Gamepad_Service(void);
+bool Win_Gamepad_Take_Action(WinGamepadAction & action);
+void Win_Gamepad_Discard_Actions(void);
+
 void Win_Set_Movie_Playing(bool playing);
 void Set_Window_Fullscreen(bool fullscreen);
 

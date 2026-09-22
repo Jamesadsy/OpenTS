@@ -8,6 +8,7 @@
  ******************************************************************************/
 
 #include <cstdio>
+#include <cmath>
 
 #include "controller_test.h"
 #include "win32compat.h"
@@ -16,6 +17,8 @@ namespace
 {
 
 constexpr Uint64 SECOND = 1000000000ULL;
+constexpr Uint64 FRAME_60 = SECOND / 60;
+constexpr Uint64 FRAME_30 = SECOND / 30;
 int Failures = 0;
 
 
@@ -65,28 +68,28 @@ void Test_Stick_Dead_Zone_And_Bounds(void)
 {
 	Setup();
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 3999);
-	Service(SECOND);
+	Service(FRAME_60);
 	float x = 0.0f;
 	float y = 0.0f;
 	Win32_Pointer_Position(&x, &y);
 	Check(x == 320.0f && y == 240.0f, "left-stick dead zone leaves the effective pointer still");
 
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 10000);
-	Service(2 * SECOND);
+	Service(2 * FRAME_60);
 	Win32_Pointer_Position(&x, &y);
 	Check(x > 320.0f && y == 240.0f, "left stick moves the actual pointer with shaped response");
 
 	Win32_Pointer_Move(639.0f, 479.0f);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 32767);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTY, 32767);
-	Service(3 * SECOND);
+	Service(3 * FRAME_60);
 	Win32_Pointer_Position(&x, &y);
 	Check(x == 639.0f && y == 479.0f, "left stick clamps at the lower-right window bounds");
 
 	Win32_Pointer_Move(0.0f, 0.0f);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, -32768);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTY, -32768);
-	Service(4 * SECOND);
+	Service(4 * FRAME_60);
 	Win32_Pointer_Position(&x, &y);
 	Check(x == 0.0f && y == 0.0f, "left stick clamps at the upper-left window bounds");
 }
@@ -98,7 +101,7 @@ void Test_Speed_Boost(void)
 	Win32_Pointer_Move(100.0f, 100.0f);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 16000);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0);
-	Service(SECOND);
+	Service(FRAME_60);
 	float normal_x = 0.0f;
 	float ignored = 0.0f;
 	Win32_Pointer_Position(&normal_x, &ignored);
@@ -107,10 +110,75 @@ void Test_Speed_Boost(void)
 	Win32_Pointer_Move(100.0f, 100.0f);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 16000);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 32767);
-	Service(SECOND);
+	Service(FRAME_60);
 	float boosted_x = 0.0f;
 	Win32_Pointer_Position(&boosted_x, &ignored);
 	Check(boosted_x > normal_x, "R2 trigger increases virtual-cursor travel");
+}
+
+
+float One_Second_Travel(Uint64 frame)
+{
+	Setup();
+	Win32_Pointer_Move(100.0f, 100.0f);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 32767);
+	Service(frame);
+	for (int index = 2; index <= (int)(SECOND / frame); index++) {
+		Service((Uint64)index * frame);
+	}
+
+	float x = 0.0f;
+	float y = 0.0f;
+	Win32_Pointer_Position(&x, &y);
+	return(x - 100.0f);
+}
+
+
+void Test_Cadence_And_Stall(void)
+{
+	float const travel_60 = One_Second_Travel(FRAME_60);
+	float const travel_30 = One_Second_Travel(FRAME_30);
+	Check(travel_60 > 200.0f && travel_30 > 200.0f
+		&& std::abs(travel_60 - travel_30) < 2.0f,
+		"60 Hz and 30 Hz service cadences integrate comparable one-second travel");
+
+	Setup();
+	Win32_Pointer_Move(100.0f, 100.0f);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 32767);
+	Service(FRAME_60);
+	float before = 0.0f;
+	float ignored = 0.0f;
+	Win32_Pointer_Position(&before, &ignored);
+	Service(FRAME_60 + SECOND / 4);
+	float after = 0.0f;
+	Win32_Pointer_Position(&after, &ignored);
+	Check(after - before < 2.0f,
+		"a delayed controller service interval is discarded instead of becoming a catch-up teleport");
+}
+
+
+void Test_Action_Edges(void)
+{
+	Setup();
+	int action = 0;
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, true);
+	Check(Win32_Gamepad_Take_Action(&action) && action == WIN32_GAMEPAD_ACTION_SQUARE,
+		"Square produces one explicit game action edge");
+	Check(!Win32_Gamepad_Take_Action(&action),
+		"holding Square does not auto-repeat the game action");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, false);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, true);
+	Check(Win32_Gamepad_Take_Action(&action) && action == WIN32_GAMEPAD_ACTION_SQUARE,
+		"a second Square press produces the next action edge");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, false);
+
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_NORTH, true);
+	Check(Win32_Gamepad_Take_Action(&action) && action == WIN32_GAMEPAD_ACTION_TRIANGLE,
+		"Triangle produces one explicit game action edge");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_NORTH, false);
+	Win32_Gamepad_Discard_Actions();
+	Check(!Win32_Gamepad_Take_Action(&action),
+		"frontend/action teardown can discard pending gameplay edges");
 }
 
 
@@ -184,7 +252,7 @@ void Test_Right_Stick_Camera_Pan(void)
 	Win32_Pointer_Move(250.0f, 200.0f);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, 32767);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTY, 32767);
-	Service(SECOND);
+	Service(FRAME_60);
 	float x = 0.0f;
 	float y = 0.0f;
 	Win32_Pointer_Position(&x, &y);
@@ -196,15 +264,39 @@ void Test_Right_Stick_Camera_Pan(void)
 
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, -32768);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTY, 32767);
-	Service(2 * SECOND);
+	Service(2 * FRAME_60);
 	Check(Win32_Gamepad_Take_Camera_Pan(&panx, &pany) && panx < 0 && pany > 0,
 		"right-stick direction changes preserve independent x and y pan");
 
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, 0);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTY, 0);
-	Service(3 * SECOND);
+	Service(3 * FRAME_60);
 	Check(!Win32_Gamepad_Take_Camera_Pan(&panx, &pany),
 		"neutral right stick produces no further camera movement");
+}
+
+
+void Test_Right_Stick_R2_Independence(void)
+{
+	Setup();
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, 20000);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTY, -20000);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0);
+	Service(FRAME_60);
+	int normal_x = 0;
+	int normal_y = 0;
+	Win32_Gamepad_Take_Camera_Pan(&normal_x, &normal_y);
+
+	Setup();
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, 20000);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTY, -20000);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 32767);
+	Service(FRAME_60);
+	int boosted_x = 0;
+	int boosted_y = 0;
+	Win32_Gamepad_Take_Camera_Pan(&boosted_x, &boosted_y);
+	Check(normal_x == boosted_x && normal_y == boosted_y,
+		"R2 does not alter native right-stick camera-pan amount");
 }
 
 
@@ -244,9 +336,12 @@ int main(void)
 {
 	Test_Stick_Dead_Zone_And_Bounds();
 	Test_Speed_Boost();
+	Test_Cadence_And_Stall();
+	Test_Action_Edges();
 	Test_Face_Buttons_And_Modifiers();
 	Test_Start_And_Dpad();
 	Test_Right_Stick_Camera_Pan();
+	Test_Right_Stick_R2_Independence();
 	Test_Lifecycle_Release_And_Reconnect();
 	std::printf("%s\n", Failures == 0 ? "All checks passed." : "There were failures.");
 	return(Failures == 0 ? 0 : 1);

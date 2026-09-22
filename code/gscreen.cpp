@@ -53,6 +53,7 @@
 #include "_surface.h"
 #include "_tactica.h"
 #include "_tooltip.h"
+#include "winstub.h"
 #include "_xmouse.h"
 #include "bench.h"
 #include "cctooltip.h"
@@ -270,6 +271,10 @@ void GScreenClass::Flag_To_Redraw(GScreenRedrawFlags flags)
  *=============================================================================================*/
 void GScreenClass::Input(KeyNumType & key, int & x, int & y)
 {
+	// The outer tactical/UI update owns one controller service opportunity. This is outside
+	// PeekMessage's queue drain, so a held stick cannot replenish the queue being drained.
+	Win_Gamepad_Service();
+
 	x = Get_Mouse_X();
 	y = Get_Mouse_Y();
 
