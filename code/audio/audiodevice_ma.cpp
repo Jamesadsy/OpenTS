@@ -86,6 +86,9 @@ bool MiniaudioDeviceClass::Open(unsigned rate, unsigned channels, RenderCallback
 	}
 
 	ma_context_config contextconfig = ma_context_config_init();
+#ifdef OPENTS_IOS
+	contextconfig.coreaudio.sessionCategory = ma_ios_session_category_playback;
+#endif
 	if (ma_context_init(backends, count, &contextconfig, &Context) != MA_SUCCESS) {
 		return(false);
 	}
