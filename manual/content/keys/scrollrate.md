@@ -11,6 +11,8 @@ Resting the pointer against the edge of the screen scrolls the map unless [`Auto
 
 The figure also divides the coast-scroll distance described by [`ScrollMethod`](/keys/scrollmethod/): the further the pointer is dragged from the point where the right button went down, the further the map moves. This figure plus one is the divisor.
 
+A gamepad's right stick also pans the tactical view at a speed set by `ScrollRate`. Lower values move the view faster, and higher values move it more slowly. Touch pan is not scaled by this setting.
+
 The in-game game controls dialog offers seven positions and writes the choice back to `sun.ini`. Its slider runs the other way around, so dragging it toward the fast end stores a smaller figure.
 
 :::danger[A figure of eight or more reads past the scroll table]

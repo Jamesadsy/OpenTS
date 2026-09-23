@@ -111,6 +111,7 @@
 #include "cctooltip.h"
 #include "cell.h"
 #include "conquer.h"
+#include "cursorstate.hh"
 #include "convert.h"
 #include "data.h"
 #include "dbgprint.h"
@@ -1963,299 +1964,19 @@ void DisplayClass::Mouse_Left_Up(Cell const & cell, bool shadow, ObjectClass * o
 		}
 	}
 
-	/*
-	**	Don't allow selection of an object that is located in shadowed terrain.
-	**	In fact, just show the normal move cursor in order to keep the shadowed
-	**	terrain a mystery.
-	*/
-	if (shadow) {
-		switch (waypoint_action) {
-			case ACTION_TOTE:
-				Set_Default_Mouse(MOUSE_NO_TOTE, wsmall);
-				break;
-
-			case ACTION_NO_ENTER:
-			case ACTION_NO_ENTER_TUNNEL:
-				Set_Default_Mouse(MOUSE_NO_ENTER, wsmall);
-				break;
-
-			case ACTION_DAMAGE:
-				Set_Default_Mouse(MOUSE_NORMAL, wsmall);
-				break;
-
-			case ACTION_GREPAIR:
-				Set_Default_Mouse(MOUSE_NORMAL, wsmall);
-				break;
-
-			case ACTION_NO_DEPLOY:
-				Set_Default_Mouse(MOUSE_NO_DEPLOY, wsmall);
-				break;
-
-			case ACTION_GUARD_AREA:
-				Set_Default_Mouse(MOUSE_AREA_GUARD, wsmall);
-				break;
-
-			case ACTION_CHEM_BOMB:
-				Set_Default_Mouse(MOUSE_CHEMBOMB, wsmall);
-				break;
-
-			case ACTION_NONE:
-				Set_Default_Mouse(MOUSE_NORMAL, wsmall);
-				break;
-
-			case ACTION_NO_SELL:
-			case ACTION_SELL:
-			case ACTION_SELL_UNIT:
-				Set_Default_Mouse(MOUSE_NO_SELL_BACK, wsmall);
-				break;
-
-			case ACTION_NO_GREPAIR:
-			case ACTION_NO_REPAIR:
-			case ACTION_REPAIR:
-				Set_Default_Mouse(MOUSE_NO_REPAIR, wsmall);
-				break;
-
-			case ACTION_NUKE_BOMB:
-				Set_Default_Mouse(MOUSE_NUCLEAR_BOMB, wsmall);
-				break;
-
-			case ACTION_TOGGLE_POWER:
-			case ACTION_NO_TOGGLE_POWER:
-				Set_Default_Mouse(MOUSE_NO_TOGGLE_POWER, wsmall);
-				break;
-
-			case ACTION_EMPULSE:
-				Set_Default_Mouse(MOUSE_EM_PULSE, wsmall);
-				break;
-
-			case ACTION_ION_CANNON:
-			case ACTION_DROP_POD:
-				Set_Default_Mouse(MOUSE_AIR_STRIKE, wsmall);
-				break;
-
-			case ACTION_EMPULSE_RANGE:
-				Set_Default_Mouse(MOUSE_EM_PULSE_RANGE, wsmall);
-				break;
-
-			case ACTION_HEAL:
-				Set_Default_Mouse(MOUSE_HEAL, wsmall);
-				break;
-
-			case ACTION_NOMOVE:
-				if (CurrentObject.Count() && CurrentObject[0]->Is_Techno() && ((TechnoClass *)CurrentObject[0])->TClass->IsMoveToShroud) {
-					Set_Default_Mouse(MOUSE_CAN_MOVE, wsmall);
-					break;
-				}
-				Set_Default_Mouse(MOUSE_NO_MOVE, wsmall);
-				break;
-				// Fall into next case for non aircraft object types.
-
-			case ACTION_MOVE:
-			case ACTION_ATTACK:
-				Set_Default_Mouse(MOUSE_CAN_MOVE, wsmall);
-				break;
-
-			case ACTION_PLACE_WAYPOINT:
-				Set_Default_Mouse(MOUSE_PLACE_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_NO_PLACE_WAYPOINT:
-				Set_Default_Mouse(MOUSE_NO_PLACE_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_ENTER_WAYPOINT_MODE:
-				Set_Default_Mouse(MOUSE_ENTER_WAYPOINT_MODE, wsmall);
-				break;
-
-			case ACTION_SELECT_WAYPOINT:
-				Set_Default_Mouse(MOUSE_SELECT_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_LOOP_WAYPOINT_PATH:
-				Set_Default_Mouse(MOUSE_LOOP_WAYPOINT_PATH, wsmall);
-				break;
-
-			case ACTION_ATTACK_WAYPOINT:
-				Set_Default_Mouse(MOUSE_ATTACK_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_PATROL_WAYPOINT:
-				Set_Default_Mouse(MOUSE_PATROL_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_FOLLOW_WAYPOINT:
-				Set_Default_Mouse(MOUSE_FOLLOW_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_ENTER_WAYPOINT:
-				Set_Default_Mouse(MOUSE_ENTER_WAYPOINT, wsmall);
-				break;
-
-			default:
-				Set_Default_Mouse(MOUSE_NORMAL, wsmall);
-				break;
-		}
-	} else {
-
-		/*
-		**	Change the mouse shape according to the default action that will occur
-		**	if the mouse button were clicked at this location.
-		*/
-		switch (waypoint_action) {
-			case ACTION_TOTE:
-				Set_Default_Mouse(MOUSE_TOTE, wsmall);
-				break;
-
-			case ACTION_NO_ENTER:
-				Set_Default_Mouse(MOUSE_NO_ENTER, wsmall);
-				break;
-
-			case ACTION_GREPAIR:
-				Set_Default_Mouse(MOUSE_GREPAIR, wsmall);
-				break;
-
-			case ACTION_TOGGLE_SELECT:
-			case ACTION_SELECT:
-				Set_Default_Mouse(MOUSE_CAN_SELECT, wsmall);
-				break;
-
-			case ACTION_NO_DEPLOY:
-				Set_Default_Mouse(MOUSE_NO_DEPLOY, wsmall);
-				break;
-
-			case ACTION_GUARD_AREA:
-				Set_Default_Mouse(MOUSE_AREA_GUARD, wsmall);
-				break;
-
-			case ACTION_CHEM_BOMB:
-				Set_Default_Mouse(MOUSE_CHEMBOMB, wsmall);
-				break;
-
-			case ACTION_MOVE:
-			case ACTION_RALLY_TO_POINT:
-				Set_Default_Mouse(MOUSE_CAN_MOVE, wsmall);
-				break;
-
-			case ACTION_ATTACK:
-				if (target != NULL && CurrentObject.Count() == 1 && CurrentObject[0]->Is_Techno() && ((TechnoClass *)CurrentObject[0])->In_Range(target, 0)) {
-					Set_Default_Mouse(MOUSE_STAY_ATTACK, wsmall);
-					break;
-				}
-				// fall into next case.
-
-			case ACTION_HARVEST:
-				Set_Default_Mouse(MOUSE_CAN_ATTACK, wsmall);
-				break;
-
-			case ACTION_SABOTAGE:
-				Set_Default_Mouse(MOUSE_DEMOLITIONS, wsmall);
-				break;
-
-			case ACTION_ENTER:
-			case ACTION_CAPTURE:
-			case ACTION_ENTER_TUNNEL:
-				Set_Default_Mouse(MOUSE_ENTER, wsmall);
-				break;
-
-			case ACTION_NOMOVE:
-				Set_Default_Mouse(MOUSE_NO_MOVE, wsmall);
-				break;
-
-			case ACTION_NO_SELL:
-				Set_Default_Mouse(MOUSE_NO_SELL_BACK, wsmall);
-				break;
-
-			case ACTION_NO_REPAIR:
-			case ACTION_NO_GREPAIR:
-				Set_Default_Mouse(MOUSE_NO_REPAIR, wsmall);
-				break;
-
-			case ACTION_SELF:
-				Set_Default_Mouse(MOUSE_DEPLOY, wsmall);
-				break;
-
-			case ACTION_REPAIR:
-				Set_Default_Mouse(MOUSE_REPAIR, wsmall);
-				break;
-
-			case ACTION_SELL_UNIT:
-				Set_Default_Mouse(MOUSE_SELL_UNIT, wsmall);
-				break;
-
-			case ACTION_NO_TOGGLE_POWER:
-				Set_Default_Mouse(MOUSE_NO_TOGGLE_POWER, wsmall);
-				break;
-
-			case ACTION_TOGGLE_POWER:
-				Set_Default_Mouse(MOUSE_TOGGLE_POWER, wsmall);
-				break;
-
-			case ACTION_SELL:
-				Set_Default_Mouse(MOUSE_SELL_BACK, wsmall);
-				break;
-
-			case ACTION_NUKE_BOMB:
-				Set_Default_Mouse(MOUSE_NUCLEAR_BOMB, wsmall);
-				break;
-
-			case ACTION_EMPULSE:
-				Set_Default_Mouse(MOUSE_EM_PULSE, wsmall);
-				break;
-
-			case ACTION_EMPULSE_RANGE:
-				Set_Default_Mouse(MOUSE_EM_PULSE_RANGE, wsmall);
-				break;
-
-			case ACTION_ION_CANNON:
-			case ACTION_DROP_POD:
-				Set_Default_Mouse(MOUSE_AIR_STRIKE, wsmall);
-				break;
-
-			case ACTION_HEAL:
-				Set_Default_Mouse(MOUSE_HEAL, wsmall);
-				break;
-
-			case ACTION_PLACE_WAYPOINT:
-				Set_Default_Mouse(MOUSE_PLACE_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_NO_PLACE_WAYPOINT:
-				Set_Default_Mouse(MOUSE_NO_PLACE_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_ENTER_WAYPOINT_MODE:
-				Set_Default_Mouse(MOUSE_ENTER_WAYPOINT_MODE, wsmall);
-				break;
-
-			case ACTION_SELECT_WAYPOINT:
-				Set_Default_Mouse(MOUSE_SELECT_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_LOOP_WAYPOINT_PATH:
-				Set_Default_Mouse(MOUSE_LOOP_WAYPOINT_PATH, wsmall);
-				break;
-
-			case ACTION_ATTACK_WAYPOINT:
-				Set_Default_Mouse(MOUSE_ATTACK_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_PATROL_WAYPOINT:
-				Set_Default_Mouse(MOUSE_PATROL_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_FOLLOW_WAYPOINT:
-				Set_Default_Mouse(MOUSE_FOLLOW_WAYPOINT, wsmall);
-				break;
-
-			case ACTION_ENTER_WAYPOINT:
-				Set_Default_Mouse(MOUSE_ENTER_WAYPOINT, wsmall);
-				break;
-
-			default:
-				Set_Default_Mouse(MOUSE_NORMAL, wsmall);
-				break;
-		}
+	bool move_to_shroud = false;
+	if (shadow && waypoint_action == ACTION_NOMOVE && CurrentObject.Count()
+		&& CurrentObject[0]->Is_Techno()) {
+		move_to_shroud = ((TechnoClass *)CurrentObject[0])->TClass->IsMoveToShroud;
 	}
+
+	bool attack_in_range = false;
+	if (!shadow && waypoint_action == ACTION_ATTACK && target != NULL && CurrentObject.Count() == 1
+		&& CurrentObject[0]->Is_Techno()) {
+		attack_in_range = ((TechnoClass *)CurrentObject[0])->In_Range(target, 0);
+	}
+
+	Set_Default_Mouse(Action_Cursor_Shape(waypoint_action, shadow, move_to_shroud, attack_in_range), wsmall);
 }
 
 
@@ -2694,14 +2415,14 @@ void DisplayClass::Sell_Mode_Control(int control)
 	}
 
 	if (mode != IsSellMode && !PendingObject) {
-		Set_Default_Mouse(MOUSE_NORMAL, false);
+		Set_Default_Mouse(RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Normal), false);
 		IsRepairMode = false;
 		IsPowerMode = false;
 		IsWaypointMode = false;
 		if (mode && PlayerPtr->CurBuildings > 0) {
 			IsSellMode = true;
 			Unselect_All();
-			Set_Default_Mouse(MOUSE_SELL_BACK, false);
+			Set_Default_Mouse(RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Sell), false);
 		} else {
 			IsSellMode = false;
 			Revert_Mouse_Shape();
@@ -2717,12 +2438,25 @@ void DisplayClass::Sell_Mode_Control(int control)
 /// </summary>
 void DisplayClass::Controller_Repair_Sell_Cycle(void)
 {
+	RepairSellModeCursor mode = RepairSellModeCursor::Normal;
 	if (IsRepairMode) {
-		Sell_Mode_Control(1);
+		mode = RepairSellModeCursor::Repair;
 	} else if (IsSellMode) {
-		Sell_Mode_Control(0);
-	} else {
-		Repair_Mode_Control(1);
+		mode = RepairSellModeCursor::Sell;
+	}
+
+	switch (Next_RepairSell_Mode_Cursor(mode)) {
+		case RepairSellModeCursor::Repair:
+			Repair_Mode_Control(1);
+			break;
+
+		case RepairSellModeCursor::Sell:
+			Sell_Mode_Control(1);
+			break;
+
+		case RepairSellModeCursor::Normal:
+			Sell_Mode_Control(0);
+			break;
 	}
 }
 
@@ -2864,11 +2598,11 @@ void DisplayClass::Repair_Mode_Control(int control)
 		IsSellMode = false;
 		IsPowerMode = false;
 		IsWaypointMode = false;
-		Set_Default_Mouse(MOUSE_NORMAL, false);
+		Set_Default_Mouse(RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Normal), false);
 		if (mode && PlayerPtr->CurBuildings > 0) {
 			IsRepairMode = true;
 			Unselect_All();
-			Set_Default_Mouse(MOUSE_REPAIR, false);
+			Set_Default_Mouse(RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Repair), false);
 		} else {
 			IsRepairMode = false;
 			Revert_Mouse_Shape();

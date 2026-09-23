@@ -127,6 +127,14 @@ submitted in a final cursor view after the UI views; pointer-only presents reuse
 frame texture. The window is per-monitor DPI aware, and `VideoScaleInfo` records where the
 logical frame lands in the physical client area.
 
+The tactical pointer follows `What_Action` through `DisplayClass::Mouse_Left_Up`, which maps
+the resolved action to the native cursor shape. Repair and Sell controls seed their native
+cursor on a mode transition; the next hover refines it through that same action path. Touch,
+left-stick pointer movement, and hardware mouse input share this path. `uimodeicon.cpp` draws
+an informational overlay from armed-mode state and does not set the pointer shape. Touch and
+controller pan remain separate until `ScrollClass` scales them, so `Options.ScrollRate` can
+scale controller pan without changing touch pan.
+
 Input reaches a control by one of two routes. Windows delivers a mouse message
 to the visible child window under the cursor, so a legacy dialog receives its
 own messages and `MainWindow`'s procedure never sees them. For `MainWindow`,
@@ -271,7 +279,7 @@ today.
 | `uitexture.cpp` | image decoding, SHP and PCX conversion, surface-backed textures |
 | `uiscreen.h`, `uirmlview.h` | presenter, intent, and result contracts; the RmlUi view base |
 | `uidev.cpp` | ImGui context and developer overlays |
-| `uimodeicon.cpp` | the mode icon: the armed mode's cursor, drawn in the corner where a display has no pointer |
+| `uimodeicon.cpp` | an informational armed-mode cursor icon, drawn in the corner where a display has no pointer |
 | one file per screen | presenter, view-model binding, and the RmlUi view glue |
 
 Shipped UI files (documents, styles, images, the font) live in `ui/` at the

@@ -30,7 +30,7 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version | tee proof/iphoneos-sdk-version.log
           git rev-parse --abbrev-ref HEAD | tee proof/ref.log
           printf '%s\n' "${GITHUB_REF_NAME}" | tee proof/ref-name.log
-          test "${GITHUB_REF_NAME}" = "secondsun/ss-g5-037-ios-audio-route"
+          test "${GITHUB_REF_NAME}" = "secondsun/ss-g5-038-cursor-scrollrate-parity"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -52,10 +52,10 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build/g3-host-tests \
-            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract OpenTSDonorHostSmoke \
+            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CursorStateContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract OpenTSDonorHostSmoke \
             --parallel 3 2>&1 | tee proof/host-tests-build.log
           ctest --test-dir build/g3-host-tests \
-            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|donor-host-smoke)$' \
+            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cursor-scrollrate-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|donor-host-smoke)$' \
             --output-on-failure 2>&1 | tee proof/host-tests-ctest.log
 
       - name: Configure unsigned iPhoneOS device route

@@ -55,7 +55,7 @@ void Win_Text_Input_Begin(void);
 void Win_Text_Input_End(void);
 bool Win_Pointer_Is_Drawn(void);
 bool Win_Window_Safe_Area(HWND window, RECT & area);
-bool Win_Pointer_Take_Scroll(int & x, int & y);
+bool Win_Pointer_Take_Scroll(int & touch_x, int & touch_y, int & controller_x, int & controller_y);
 
 enum WinGamepadAction {
 	WIN_GAMEPAD_ACTION_NONE = 0,

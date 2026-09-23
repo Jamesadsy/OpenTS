@@ -7,19 +7,9 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
-// The mode icon: the cursor for the mode the player has armed, drawn in the corner of the
-// frame while it is armed.
-//
-// The pointer's shape is where this game says a superweapon is aimed, or that the next tap
-// sells or repairs. A display that draws no pointer says none of it, and there is nothing
-// else on screen that does, so the corner says it instead.
-//
-// The mode is read from the flags that hold it, not from the shape the engine last chose.
-// DisplayClass picks that shape from what lies under the pointer, so with sell armed and
-// nothing sellable beneath it the sell cursor is never asked for at all -- and an armed mode
-// with nothing under the finger is exactly the case this exists for. Everything the pointer
-// shape can say beyond the mode describes the spot it is on, which a player with no hover
-// only learns after the tap that has already committed the action.
+// This is an informational mode icon, shown in the corner while a persistent mode is armed.
+// The actual pointer is seeded by the native mode controls and then follows What_Action under
+// the pointer. The icon reports the armed mode without writing pointer state.
 //
 // docs/UI_DESIGN.md, "Screens" and "Assets and strings", own the contracts this keeps to.
 
@@ -32,10 +22,8 @@
 #include "dbgprint.h"
 #include "globals.h"
 #include "mouse.h"
-#include "object.h"
 #include "stimer.h"
 #include "suprtype.h"
-#include "techno.h"
 #include "timer.h"
 #include "vector.h"
 #include "video.h"
@@ -160,12 +148,8 @@ static MouseType Armed_Super_Shape(SuperWeaponType super)
 
 
 /// <summary>
-/// Which shape reports what the player can do next, or MOUSE_COUNT while there is nothing to
-/// report. Most of these are modes the player armed from the sidebar, which stay set wherever
-/// the pointer goes until they act or cancel. A unit that can deploy is not a mode but belongs
-/// here for the same reason: without a hovering pointer there is nothing else on screen to say
-/// that tapping it turns it into a building. A building being placed is deliberately absent —
-/// its own picture is already under the finger.
+/// Which shape reports the sidebar mode, or MOUSE_COUNT while there is nothing to report.
+/// Target-specific pointer shapes remain owned by the tactical action path.
 /// </summary>
 static MouseType Armed_Shape(void)
 {
@@ -189,44 +173,7 @@ static MouseType Armed_Shape(void)
 		return(Armed_Super_Shape(Map.IsTargettingMode));
 	}
 
-	// Can_Deploy_Now is the same question the engine asks before it offers ACTION_SELF, so the
-	// icon appears exactly when a tap would deploy and not merely when a deployable unit is
-	// selected somewhere it cannot unfold.
-	for (int index = 0; index < CurrentObject.Count(); index++) {
-		ObjectClass const * object = CurrentObject[index];
-
-		if (object == NULL) {
-			continue;
-		}
-
-		TechnoClass const * techno = object->As_TechnoClass();
-
-		if (techno != NULL && techno->Can_Deploy_Now()) {
-			return(MOUSE_DEPLOY);
-		}
-	}
-
 	return(MOUSE_COUNT);
-}
-
-
-/// <summary>
-/// Seeds the real native pointer with the same armed-state answer used by the no-hover icon.
-/// The tactical hover pass runs afterwards and replaces this seed with the higher-priority
-/// target-specific action cursor. This keeps touch/controller movement readable before that
-/// pass has a target to evaluate without inventing a second cursor rule.
-/// </summary>
-static void Apply_Armed_Pointer_Fallback(void)
-{
-	if (!GameActive || !ScenarioActive || UI_Modal_Is_Shown() || !Win_Pointer_Is_Drawn()
-		|| MouseClass::MouseShapes == NULL) {
-		return;
-	}
-
-	MouseType const shape = Armed_Shape();
-	if (shape != MOUSE_COUNT && Map.Get_Mouse_Shape() != shape) {
-		Map.Set_Default_Mouse(shape, Map.IsSmall);
-	}
 }
 
 
@@ -339,8 +286,6 @@ static void Place(void)
 /// </summary>
 void UI_Mode_Icon_Service(void)
 {
-	Apply_Armed_Pointer_Fallback();
-
 	MouseType const shape = Belongs_On_Screen() ? Armed_Shape() : MOUSE_COUNT;
 
 	if (shape == MOUSE_COUNT) {

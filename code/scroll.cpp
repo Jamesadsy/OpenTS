@@ -55,6 +55,7 @@
 #include "inline.h"
 #include "misc.h"
 #include "overtype.h"
+#include "pointerscrollpolicy.hh"
 #include "rules.h"
 #include "savestream.h"
 #include "suprtype.h"
@@ -91,8 +92,10 @@ static double _EdgeScrollRemainder = 0.0;
 static double _CoastRemainderX = 0.0;
 static double _CoastRemainderY = 0.0;
 
-static double _PointerScrollRemainderX = 0.0;
-static double _PointerScrollRemainderY = 0.0;
+static double _TouchScrollRemainderX = 0.0;
+static double _TouchScrollRemainderY = 0.0;
+static double _ControllerScrollRemainderX = 0.0;
+static double _ControllerScrollRemainderY = 0.0;
 
 
 /***********************************************************************************************
@@ -549,12 +552,14 @@ void ScrollClass::Scroll_Edge(Point2D const & point)
 // part of a pixel that does not survive the conversion is carried rather than dropped.
 static void Pointer_Scroll_AI(bool apply)
 {
-	int windowx = 0;
-	int windowy = 0;
+	int touchx = 0;
+	int touchy = 0;
+	int controllerx = 0;
+	int controllery = 0;
 
 	// The offset is taken whether it can be used or not, so that one held back through a
 	// dialog does not arrive afterward as a jump.
-	if (!Win_Pointer_Take_Scroll(windowx, windowy)) {
+	if (!Win_Pointer_Take_Scroll(touchx, touchy, controllerx, controllery)) {
 		return;
 	}
 
@@ -575,12 +580,14 @@ static void Pointer_Scroll_AI(bool apply)
 		return;
 	}
 
-	double const scaledx = (double)windowx * (double)scale.GameWidth / (double)scale.DestWidth + _PointerScrollRemainderX;
-	double const scaledy = (double)windowy * (double)scale.GameHeight / (double)scale.DestHeight + _PointerScrollRemainderY;
-	int distx = (int)scaledx;
-	int disty = (int)scaledy;
-	_PointerScrollRemainderX = scaledx - distx;
-	_PointerScrollRemainderY = scaledy - disty;
+	double const pixels_per_window_x = (double)scale.GameWidth / (double)scale.DestWidth;
+	double const pixels_per_window_y = (double)scale.GameHeight / (double)scale.DestHeight;
+	int const distx = Scale_Touch_Scroll_Offset(touchx, pixels_per_window_x, _TouchScrollRemainderX)
+		+ Scale_Controller_Scroll_Offset(controllerx, pixels_per_window_x, Options.ScrollRate,
+			OptionsClass::MAX_SCROLL_SETTING, _ControllerScrollRemainderX);
+	int const disty = Scale_Touch_Scroll_Offset(touchy, pixels_per_window_y, _TouchScrollRemainderY)
+		+ Scale_Controller_Scroll_Offset(controllery, pixels_per_window_y, Options.ScrollRate,
+			OptionsClass::MAX_SCROLL_SETTING, _ControllerScrollRemainderY);
 
 	if (distx > 0) {
 		Map.Scroll_Map(FACING_E, distx, true);

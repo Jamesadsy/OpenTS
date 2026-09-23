@@ -640,26 +640,20 @@ bool Win_Window_Safe_Area(HWND window, RECT & area)
 
 
 /// <summary>
-/// Takes the offset a pointing device has asked the tactical view to travel.
-/// The offset is in the window's own pixels and is handed over whole, so a caller that
-/// polls at any rate loses none of it. A device that scrolls nothing answers false and
-/// leaves the values alone.
+/// Takes pending touch and controller pan in window pixels, keeping their sources separate.
+/// The offsets are handed over whole, so polling loses none of either contribution.
 /// </summary>
-bool Win_Pointer_Take_Scroll(int & x, int & y)
+bool Win_Pointer_Take_Scroll(int & touch_x, int & touch_y, int & controller_x, int & controller_y)
 {
 #ifdef _WIN32
-	(void)x;
-	(void)y;
+	touch_x = 0;
+	touch_y = 0;
+	controller_x = 0;
+	controller_y = 0;
 	return(false);
 #else
-	int touchx = 0;
-	int touchy = 0;
-	int controllerx = 0;
-	int controllery = 0;
-	bool const touch = Win32_Touch_Take_Scroll(&touchx, &touchy);
-	bool const controller = Win32_Gamepad_Take_Camera_Pan(&controllerx, &controllery);
-	x = touchx + controllerx;
-	y = touchy + controllery;
+	bool const touch = Win32_Touch_Take_Scroll(&touch_x, &touch_y);
+	bool const controller = Win32_Gamepad_Take_Camera_Pan(&controller_x, &controller_y);
 	return(touch || controller);
 #endif
 }

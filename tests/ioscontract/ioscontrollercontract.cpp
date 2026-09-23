@@ -276,6 +276,34 @@ void Test_Right_Stick_Camera_Pan(void)
 }
 
 
+int One_Second_Right_Stick_Travel(Uint64 frame, Sint16 axis)
+{
+	Setup();
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, axis);
+	Service(frame);
+	for (int index = 2; index <= (int)(SECOND / frame); index++) {
+		Service((Uint64)index * frame);
+	}
+
+	int panx = 0;
+	int pany = 0;
+	Win32_Gamepad_Take_Camera_Pan(&panx, &pany);
+	return(panx);
+}
+
+
+void Test_Right_Stick_Time_And_Analog(void)
+{
+	int const travel_60 = One_Second_Right_Stick_Travel(FRAME_60, 32767);
+	int const travel_30 = One_Second_Right_Stick_Travel(FRAME_30, 32767);
+	int const partial = One_Second_Right_Stick_Travel(FRAME_60, 16384);
+	Check(travel_60 == 480 && travel_30 == 480,
+		"right-stick camera pan integrates elapsed time consistently at 60 Hz and 30 Hz");
+	Check(partial > 100 && partial < travel_60,
+		"right-stick camera pan preserves analog stick magnitude");
+}
+
+
 void Test_Right_Stick_R2_Independence(void)
 {
 	Setup();
@@ -341,6 +369,7 @@ int main(void)
 	Test_Face_Buttons_And_Modifiers();
 	Test_Start_And_Dpad();
 	Test_Right_Stick_Camera_Pan();
+	Test_Right_Stick_Time_And_Analog();
 	Test_Right_Stick_R2_Independence();
 	Test_Lifecycle_Release_And_Reconnect();
 	std::printf("%s\n", Failures == 0 ? "All checks passed." : "There were failures.");
