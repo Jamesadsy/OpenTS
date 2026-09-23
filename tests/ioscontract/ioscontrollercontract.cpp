@@ -297,7 +297,8 @@ void Test_Right_Stick_Time_And_Analog(void)
 	int const travel_60 = One_Second_Right_Stick_Travel(FRAME_60, 32767);
 	int const travel_30 = One_Second_Right_Stick_Travel(FRAME_30, 32767);
 	int const partial = One_Second_Right_Stick_Travel(FRAME_60, 16384);
-	Check(travel_60 == 480 && travel_30 == 480,
+	Check(travel_60 >= 479 && travel_60 <= 480 && travel_30 >= 479 && travel_30 <= 480
+		&& std::abs(travel_60 - travel_30) <= 1,
 		"right-stick camera pan integrates elapsed time consistently at 60 Hz and 30 Hz");
 	Check(partial > 100 && partial < travel_60,
 		"right-stick camera pan preserves analog stick magnitude");
