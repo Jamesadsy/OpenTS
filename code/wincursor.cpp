@@ -14,6 +14,7 @@
 #include "_convert.h"
 #include "_xmouse.h"
 #include "convert.h"
+#include "cursorpresentationpolicy.hh"
 #include "globals.h"
 #include "goptions.h"
 #include "shapeset.h"
@@ -66,6 +67,7 @@ static bool _OverlayDirty = true;
 static int _PresentedX = 0;
 static int _PresentedY = 0;
 static bool _PresentedPositionValid = false;
+static CursorContentGeneration _ContentGeneration;
 
 
 /// <summary>
@@ -264,10 +266,12 @@ static void Flush_Cursor_Cache(void)
 void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool apply)
 {
 	int scale = Cursor_Scale();
+	bool content_rebuilt = false;
 
 	if (scale != _CacheScale) {
 		Flush_Cursor_Cache();
 		_CacheScale = scale;
+		content_rebuilt = true;
 	}
 
 	_CurrentShape = shape;
@@ -291,6 +295,7 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 				entry.Image = std::move(image);
 				entry.HotX = hotx;
 				entry.HotY = hoty;
+				content_rebuilt = true;
 			}
 			cursor = entry.Cursor;
 			_CurrentImage = entry.Image.Pixels.empty() ? NULL : &entry.Image;
@@ -302,6 +307,7 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 	if (!selected) {
 		if (_CursorCacheCount >= (int)(sizeof(_CursorCache) / sizeof(_CursorCache[0]))) {
 			Flush_Cursor_Cache();
+			content_rebuilt = true;
 		}
 
 		CursorImage image;
@@ -317,11 +323,13 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 			entry.Cursor = cursor;
 			entry.Image = std::move(image);
 			_CurrentImage = &entry.Image;
+			content_rebuilt = true;
 		} else {
 			_CurrentImage = NULL;
 		}
 	}
 
+	_ContentGeneration.Select(CursorContentSelection{ shape, frame, hotx, hoty, scale }, content_rebuilt);
 	_CurrentCursor = cursor;
 	_OverlayDirty = true;
 
@@ -420,6 +428,7 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 	overlay->HotY = _CurrentImage->HotY;
 	overlay->X = x - overlay->HotX;
 	overlay->Y = y - overlay->HotY;
+	overlay->ContentGeneration = _ContentGeneration.Current();
 	return(true);
 #else
 	(void)overlay;
@@ -431,16 +440,12 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 bool Win_Cursor_Is_Dirty(void)
 {
 #ifdef OPENTS_IOS
-	if (_OverlayDirty) {
-		return(true);
-	}
-
 	WinCursorOverlay overlay;
 	if (!Win_Cursor_Get_Overlay(&overlay)) {
-		return(_PresentedPositionValid);
+		return(_OverlayDirty || _PresentedPositionValid);
 	}
 
-	return(!_PresentedPositionValid
+	return(_OverlayDirty || _ContentGeneration.Needs_Present() || !_PresentedPositionValid
 		|| overlay.X + overlay.HotX != _PresentedX
 		|| overlay.Y + overlay.HotY != _PresentedY);
 #else
@@ -449,18 +454,31 @@ bool Win_Cursor_Is_Dirty(void)
 }
 
 
-void Win_Cursor_Acknowledge_Present(void)
+void Win_Cursor_Acknowledge_Present(WinCursorOverlay const & submitted_overlay)
+{
+#ifdef OPENTS_IOS
+	if (!_ContentGeneration.Acknowledge(submitted_overlay.ContentGeneration)) {
+		return;
+	}
+
+	_PresentedX = submitted_overlay.X + submitted_overlay.HotX;
+	_PresentedY = submitted_overlay.Y + submitted_overlay.HotY;
+	_PresentedPositionValid = true;
+	_OverlayDirty = false;
+#else
+	(void)submitted_overlay;
+#endif
+}
+
+
+void Win_Cursor_Acknowledge_No_Overlay_Present(void)
 {
 #ifdef OPENTS_IOS
 	WinCursorOverlay overlay;
-	if (Win_Cursor_Get_Overlay(&overlay)) {
-		_PresentedX = overlay.X + overlay.HotX;
-		_PresentedY = overlay.Y + overlay.HotY;
-		_PresentedPositionValid = true;
-	} else {
+	if (!Win_Cursor_Get_Overlay(&overlay)) {
 		_PresentedPositionValid = false;
+		_OverlayDirty = false;
 	}
-	_OverlayDirty = false;
 #endif
 }
 

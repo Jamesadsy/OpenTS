@@ -69,6 +69,10 @@ float Win32_Pixel_Density(void);
 // the engine polls or receives about the pointer is answered from it, so the message queue
 // and the polled state cannot disagree.
 void Win32_Pointer_Move(float x, float y);
+void Win32_Pointer_Move_Host(float x, float y);
+void Win32_Pointer_Move_Controller(float x, float y);
+void Win32_Pointer_Set_Controller_Owner(bool controller_owns_pointer);
+bool Win32_Pointer_Is_Controller_Owner(void);
 void Win32_Pointer_Button(Uint8 button, bool down);
 bool Win32_Pointer_Controller_Button(Uint8 button, bool down);
 void Win32_Pointer_Position(float * x, float * y);

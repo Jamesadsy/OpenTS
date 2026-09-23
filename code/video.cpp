@@ -320,11 +320,16 @@ void Video_Present(void)
 	Backend_Present(pixels, surface->Stride(), _ScaleInfo.DestX, _ScaleInfo.DestY, _ScaleInfo.DestWidth, _ScaleInfo.DestHeight, Backend_Scale_Mode(), _FrameIsDirty);
 	UI_Render_Overlay();
 	WinCursorOverlay cursor;
-	if (Win_Cursor_Get_Overlay(&cursor)) {
-		Backend_Present_Cursor(cursor.Pixels, cursor.Width, cursor.Height, cursor.X, cursor.Y);
-	}
+	bool const cursor_visible = Win_Cursor_Get_Overlay(&cursor);
+	bool const cursor_submitted = cursor_visible
+		&& Backend_Present_Cursor(cursor.Pixels, cursor.Width, cursor.Height, cursor.X, cursor.Y,
+			cursor.ContentGeneration);
 	Backend_End_Frame();
-	Win_Cursor_Acknowledge_Present();
+	if (cursor_submitted) {
+		Win_Cursor_Acknowledge_Present(cursor);
+	} else if (!cursor_visible) {
+		Win_Cursor_Acknowledge_No_Overlay_Present();
+	}
 	_Presenting = false;
 
 	_FrameIsDirty = false;

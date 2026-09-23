@@ -644,7 +644,8 @@ void ScrollClass::Scroll_AI(void)
 			} else {
 				HoverObject = NULL;
 			}
-			if (Options.AutoScroll && !Debug_Map) {
+			if (Options.AutoScroll && !Debug_Map
+				&& Pointer_Edge_Scroll_Allowed(Win_Pointer_Is_Controller_Owner())) {
 				Scroll_Edge(point);
 			}
 		}

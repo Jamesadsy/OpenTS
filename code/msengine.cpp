@@ -11,6 +11,7 @@
 #include "always.h"
 
 #include "msengine.h"
+#include "legacyinputpolicy.hh"
 
 #include "_surface.h"
 #include "conquer.h"
@@ -25,6 +26,7 @@
 #include "rect.h"
 #include "surface.h"
 #include "win.h"
+#include "winstub.h"
 
 #include "color.hh"
 
@@ -370,7 +372,10 @@ void MSEngine::Wait_Delay(int delay)
 			Process_Idle();
 			Advance(HiddenSurface);
 			Blit_All(HiddenSurface);
-			Windows_Message_Handler();
+			MSEngine_Service_Legacy_Input(
+				[]() { Win_Gamepad_Service(); },
+				[]() { Win_Gamepad_Discard_Actions(); },
+				[]() { Windows_Message_Handler(); });
 
 			if (!GameInFocus) {
 				timer.Stop();

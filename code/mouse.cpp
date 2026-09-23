@@ -41,6 +41,7 @@
 #include "always.h"
 
 #include "mouse.h"
+#include "mouseoverridepolicy.hh"
 
 #include "_mixfile.h"
 #include "animtype.h"
@@ -275,18 +276,17 @@ bool MouseClass::Override_Mouse_Shape(MouseType mouse, bool wsmall)
 	**	If the mouse shape is going to change, then inform the mouse driver of the
 	**	change.
 	*/
-	if (!startup || (MouseShapes && ((mouse != CurrentMouseShape) || (wsmall != IsSmall)))) {
-		startup = true;
-
-		Timer = control->FrameRate;
-		Frame = 0;
-
-		MouseCursor->Set_Cursor(Get_Mouse_Hotspot(mouse), MouseShapes, Get_Mouse_Current_Frame(mouse, wsmall));
-		CurrentMouseShape = mouse;
-		IsSmall = wsmall;
-		return(true);
-	}
-	return(false);
+	Point2D const hotspot = Get_Mouse_Hotspot(mouse);
+	return(Mouse_Override_Shape_If_Changed(startup, MouseShapes, mouse, CurrentMouseShape,
+		wsmall, IsSmall, hotspot,
+		[this, control]() {
+			Timer = control->FrameRate;
+			Frame = 0;
+		},
+		[this, mouse, wsmall]() { return(Get_Mouse_Current_Frame(mouse, wsmall)); },
+		[this](Point2D const & cursor_hotspot, ShapeSet const * shapes, int shape_frame) {
+			MouseCursor->Set_Cursor(cursor_hotspot, shapes, shape_frame);
+		}));
 }
 
 

@@ -50,6 +50,7 @@ bool Win_Set_Window_Fullscreen(HWND window, bool fullscreen);
 bool Win_Pointer_Can_Warp(void);
 bool Win_Pointer_Is_Direct_Touch(void);
 void Win_Pointer_Set_Direct_Touch(bool direct);
+bool Win_Pointer_Is_Controller_Owner(void);
 bool Win_Pointer_Should_Suppress_Edge_Scroll(void);
 void Win_Text_Input_Begin(void);
 void Win_Text_Input_End(void);

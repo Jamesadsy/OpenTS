@@ -14,6 +14,8 @@
 
 #include "win.h"
 
+#include <cstdint>
+
 class ShapeSet;
 
 
@@ -26,6 +28,7 @@ struct WinCursorOverlay
 	int HotY;
 	int X;
 	int Y;
+	uint64_t ContentGeneration;
 };
 
 
@@ -35,5 +38,6 @@ bool Win_Cursor_Handle_Set_Cursor(void);
 void Win_Cursor_Refresh(void);
 bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay);
 bool Win_Cursor_Is_Dirty(void);
-void Win_Cursor_Acknowledge_Present(void);
+void Win_Cursor_Acknowledge_Present(WinCursorOverlay const & submitted_overlay);
+void Win_Cursor_Acknowledge_No_Overlay_Present(void);
 void Win_Cursor_Shutdown(void);

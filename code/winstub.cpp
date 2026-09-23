@@ -387,6 +387,7 @@ bool Win32_Pointer_Can_Warp(void);
 bool Win32_Pointer_Is_Drawn(void);
 bool Win32_Pointer_Is_Direct_Touch(void);
 void Win32_Pointer_Set_Direct_Touch(bool direct);
+bool Win32_Pointer_Is_Controller_Owner(void);
 bool Win32_Pointer_Should_Suppress_Edge_Scroll(void);
 bool Win32_Touch_Take_Scroll(int * x, int * y);
 bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
@@ -527,6 +528,16 @@ void Win_Pointer_Set_Direct_Touch(bool direct)
 	(void)direct;
 #else
 	Win32_Pointer_Set_Direct_Touch(direct);
+#endif
+}
+
+
+bool Win_Pointer_Is_Controller_Owner(void)
+{
+#ifdef _WIN32
+	return(false);
+#else
+	return(Win32_Pointer_Is_Controller_Owner());
 #endif
 }
 

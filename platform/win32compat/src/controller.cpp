@@ -239,6 +239,7 @@ void Apply_Button(SDL_GamepadButton button, bool down)
 
 void Reset_Device_State(void)
 {
+	Win32_Pointer_Set_Controller_Owner(false);
 	std::memset(_Axes, 0, sizeof(_Axes));
 	std::memset(_Buttons, 0, sizeof(_Buttons));
 	_ControllerControlHeld = false;
@@ -435,13 +436,17 @@ void Win32_Gamepad_Service(void)
 		float x = 0.0f;
 		float y = 0.0f;
 		Win32_Pointer_Position(&x, &y);
+		float const old_x = x;
+		float const old_y = y;
 		x = std::clamp((double)x + leftx * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost,
 			0.0, (double)width - 1.0);
 		y = std::clamp((double)y + lefty * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost,
 			0.0, (double)height - 1.0);
-		Win32_Pointer_Set_Direct_Touch(false);
-		Win32_Pointer_Move((float)x, (float)y);
-		Win32_Post_Pointer_Message(WM_MOUSEMOVE);
+		if (x != old_x || y != old_y) {
+			Win32_Pointer_Set_Direct_Touch(false);
+			Win32_Pointer_Move_Controller(x, y);
+			Win32_Post_Pointer_Message(WM_MOUSEMOVE);
+		}
 	}
 
 	if (rightx != 0.0 || righty != 0.0) {

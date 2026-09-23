@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <cmath>
+#include <array>
 
 #include "controller_test.h"
 #include "win32compat.h"
@@ -77,7 +78,8 @@ void Test_Stick_Dead_Zone_And_Bounds(void)
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 10000);
 	Service(2 * FRAME_60);
 	Win32_Pointer_Position(&x, &y);
-	Check(x > 320.0f && y == 240.0f, "left stick moves the actual pointer with shaped response");
+	Check(x > 320.0f && y == 240.0f && Win32_Pointer_Is_Controller_Owner(),
+		"left stick moves the actual pointer with shaped response and claims pointer ownership");
 
 	Win32_Pointer_Move(639.0f, 479.0f);
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 32767);
@@ -188,9 +190,15 @@ void Test_Face_Buttons_And_Modifiers(void)
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, true);
 	Check((Win32_Pointer_Buttons() & SDL_BUTTON_LMASK) != 0,
 		"Cross/A holds the effective left mouse button");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, true);
+	Check((Win32_Pointer_Buttons() & SDL_BUTTON_LMASK) != 0,
+		"a held Cross/A does not create another left-button edge");
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, false);
 	Check((Win32_Pointer_Buttons() & SDL_BUTTON_LMASK) == 0,
 		"Cross/A release clears only the controller left-button source");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, false);
+	Check((Win32_Pointer_Buttons() & SDL_BUTTON_LMASK) == 0,
+		"a repeated Cross/A release does not create another left-button edge");
 
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
 	Check((Win32_Pointer_Buttons() & SDL_BUTTON_RMASK) != 0,
@@ -259,7 +267,8 @@ void Test_Right_Stick_Camera_Pan(void)
 	int panx = 0;
 	int pany = 0;
 	Check(x == 250.0f && y == 200.0f, "right stick leaves the visible cursor position unchanged");
-	Check(Win32_Gamepad_Take_Camera_Pan(&panx, &pany) && panx > 0 && pany > 0,
+	Check(Win32_Gamepad_Take_Camera_Pan(&panx, &pany) && panx > 0 && pany > 0
+		&& !Win32_Pointer_Is_Controller_Owner(),
 		"right stick produces diagonal native camera-pan output");
 
 	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, -32768);
@@ -273,6 +282,69 @@ void Test_Right_Stick_Camera_Pan(void)
 	Service(3 * FRAME_60);
 	Check(!Win32_Gamepad_Take_Camera_Pan(&panx, &pany),
 		"neutral right stick produces no further camera movement");
+}
+
+
+void Test_Left_Stick_Edge_With_Right_Stick_Camera(void)
+{
+	auto camera_travel = [](bool move_pointer) {
+		Setup();
+		if (move_pointer) {
+			Win32_Pointer_Move(600.0f, 240.0f);
+			Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 32767);
+		}
+		Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTX, 16000);
+		Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_RIGHTY, -16000);
+		Service(FRAME_60);
+		for (int frame = 2; frame <= 40; frame++) {
+			Service((Uint64)frame * FRAME_60);
+		}
+		int panx = 0;
+		int pany = 0;
+		Win32_Gamepad_Take_Camera_Pan(&panx, &pany);
+		float pointer_x = 0.0f;
+		float pointer_y = 0.0f;
+		Win32_Pointer_Position(&pointer_x, &pointer_y);
+		return(std::array<int, 4>{panx, pany, Win32_Pointer_Is_Controller_Owner() ? 1 : 0,
+			pointer_x >= 639.0f && pointer_y == 240.0f ? 1 : 0});
+	};
+
+	std::array<int, 4> const right_only = camera_travel(false);
+	std::array<int, 4> const left_at_edge = camera_travel(true);
+	Check(left_at_edge[2] == 1 && left_at_edge[3] == 1
+		&& left_at_edge[0] == right_only[0] && left_at_edge[1] == right_only[1],
+		"left stick reaches the edge while simultaneous right-stick pan equals the right-only camera input");
+}
+
+
+void Test_Pointer_Ownership_Transitions(void)
+{
+	Setup();
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 12000);
+	Service(FRAME_60);
+	Check(Win32_Pointer_Is_Controller_Owner(),
+		"meaningful left-stick pointer movement suppresses controller-owned native edge scroll");
+
+	Win32_Pointer_Move_Host(20.0f, 20.0f);
+	Check(!Win32_Pointer_Is_Controller_Owner(),
+		"real host mouse movement returns pointer ownership to native hardware edge scroll");
+
+	Win32_Pointer_Move_Controller(30.0f, 30.0f);
+	Win32_Pointer_Set_Direct_Touch(true);
+	Check(!Win32_Pointer_Is_Controller_Owner(),
+		"direct touch clears controller pointer ownership");
+	Win32_Pointer_Set_Direct_Touch(false);
+
+	Win32_Pointer_Move_Controller(40.0f, 40.0f);
+	Win32_Gamepad_Test_Set_Connected(false);
+	Check(!Win32_Pointer_Is_Controller_Owner(),
+		"controller disconnect clears pointer ownership without retaining edge-scroll suppression");
+
+	Win32_Gamepad_Test_Set_Connected(true);
+	Win32_Pointer_Move_Controller(50.0f, 50.0f);
+	Win32_Gamepad_Set_Focus(false);
+	Check(!Win32_Pointer_Is_Controller_Owner(),
+		"background/focus reset clears controller pointer ownership");
 }
 
 
@@ -370,6 +442,8 @@ int main(void)
 	Test_Face_Buttons_And_Modifiers();
 	Test_Start_And_Dpad();
 	Test_Right_Stick_Camera_Pan();
+	Test_Left_Stick_Edge_With_Right_Stick_Camera();
+	Test_Pointer_Ownership_Transitions();
 	Test_Right_Stick_Time_And_Analog();
 	Test_Right_Stick_R2_Independence();
 	Test_Lifecycle_Release_And_Reconnect();

@@ -13,6 +13,7 @@
 #include "bgfxbackend.h"
 
 #include "backendviews.hh"
+#include "cursorpresentationpolicy.hh"
 
 #ifdef _WIN32
 #include "dbgprint.h"
@@ -59,7 +60,7 @@ static int _FrameWidth = 0;
 static int _FrameHeight = 0;
 static int _CursorWidth = 0;
 static int _CursorHeight = 0;
-static void const * _CursorPixels = NULL;
+static uint64_t _CursorContentGeneration = 0;
 static int _PrescaleWidth = 0;
 static int _PrescaleHeight = 0;
 static int _DrawableWidth = 0;
@@ -458,7 +459,7 @@ void Backend_Shutdown(void)
 	_FrameHeight = 0;
 	_CursorWidth = 0;
 	_CursorHeight = 0;
-	_CursorPixels = NULL;
+	_CursorContentGeneration = 0;
 	_Initialized = false;
 }
 
@@ -610,35 +611,47 @@ void Backend_Present(void const * pixels, int pitch, int destx, int desty, int d
 }
 
 
-void Backend_Present_Cursor(void const * pixels, int width, int height, int destx, int desty)
+bool Backend_Present_Cursor(void const * pixels, int width, int height, int destx, int desty,
+	uint64_t content_generation)
 {
 	if (!_Initialized || pixels == NULL || width <= 0 || height <= 0
 		|| _DrawableWidth <= 0 || _DrawableHeight <= 0) {
-		return;
+		return(false);
 	}
 
 	uint64_t const samplerflags = BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
 		| BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT | BGFX_SAMPLER_MIP_POINT;
 
-	if (!bgfx::isValid(_CursorTexture) || _CursorWidth != width || _CursorHeight != height) {
-		if (bgfx::isValid(_CursorTexture)) {
+	bool const texture_valid = bgfx::isValid(_CursorTexture);
+	CursorTextureUploadState const upload_state{
+		_CursorWidth, _CursorHeight, _CursorContentGeneration, texture_valid
+	};
+	if (Cursor_Texture_Needs_Upload(upload_state, width, height, content_generation)) {
+		if (texture_valid && (_CursorWidth != width || _CursorHeight != height)) {
 			bgfx::destroy(_CursorTexture);
+			_CursorTexture = BGFX_INVALID_HANDLE;
 		}
 
-		_CursorTexture = bgfx::createTexture2D((uint16_t)width, (uint16_t)height, false, 1,
-			bgfx::TextureFormat::RGBA8, samplerflags,
-			bgfx::copy(pixels, (uint32_t)(width * height * 4)));
+		if (!bgfx::isValid(_CursorTexture)) {
+			_CursorTexture = bgfx::createTexture2D((uint16_t)width, (uint16_t)height, false, 1,
+				bgfx::TextureFormat::RGBA8, samplerflags,
+				bgfx::copy(pixels, (uint32_t)(width * height * 4)));
+		} else {
+			bgfx::updateTexture2D(_CursorTexture, 0, 0, 0, 0, (uint16_t)width, (uint16_t)height,
+				bgfx::copy(pixels, (uint32_t)(width * height * 4)), (uint16_t)(width * 4));
+		}
+
+		if (!bgfx::isValid(_CursorTexture)) {
+			return(false);
+		}
+
 		_CursorWidth = width;
 		_CursorHeight = height;
-		_CursorPixels = pixels;
-	} else if (_CursorPixels != pixels) {
-		bgfx::updateTexture2D(_CursorTexture, 0, 0, 0, 0, (uint16_t)width, (uint16_t)height,
-			bgfx::copy(pixels, (uint32_t)(width * height * 4)), (uint16_t)(width * 4));
-		_CursorPixels = pixels;
+		_CursorContentGeneration = content_generation;
 	}
 
 	if (!bgfx::isValid(_CursorTexture)) {
-		return;
+		return(false);
 	}
 
 	bgfx::setViewFrameBuffer(VIEW_CURSOR, BGFX_INVALID_HANDLE);
@@ -650,6 +663,7 @@ void Backend_Present_Cursor(void const * pixels, int width, int height, int dest
 		(float)width, (float)height, samplerflags, false,
 		BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
 		| BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_ONE, BGFX_STATE_BLEND_INV_SRC_ALPHA));
+	return(true);
 }
 
 

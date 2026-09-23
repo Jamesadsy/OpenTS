@@ -15,6 +15,8 @@
 
 #include "nativewindow.hh"
 
+#include <cstdint>
+
 
 enum BackendRenderer {
 	BACKEND_RENDERER_AUTO,
@@ -43,7 +45,8 @@ void Backend_On_Resize(int drawablewidth, int drawableheight);
 // caller; they are consumed before this returns. Nothing reaches the screen until
 // Backend_End_Frame, so an overlay drawn in between shares the frame.
 void Backend_Present(void const * pixels, int pitch, int destx, int desty, int destwidth, int destheight, BackendScaleMode mode, bool upload);
-void Backend_Present_Cursor(void const * pixels, int width, int height, int destx, int desty);
+bool Backend_Present_Cursor(void const * pixels, int width, int height, int destx, int desty,
+	uint64_t content_generation);
 void Backend_End_Frame(void);
 
 char const * Backend_Renderer_Name(void);

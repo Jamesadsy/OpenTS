@@ -1,6 +1,6 @@
 ---
 key: ScrollRate
-summary: How fast the tactical map is allowed to scroll, as a position from 0 to 6 where a lower figure scrolls faster.
+summary: How fast the tactical map is allowed to scroll, as a position from 0 to 7 where a lower figure scrolls faster.
 see_also: [ScrollMethod, AutoScroll, ScrollMultiplier]
 when_omitted:
   kind: value
@@ -11,10 +11,10 @@ Resting the pointer against the edge of the screen scrolls the map unless [`Auto
 
 The figure also divides the coast-scroll distance described by [`ScrollMethod`](/keys/scrollmethod/): the further the pointer is dragged from the point where the right button went down, the further the map moves. This figure plus one is the divisor.
 
-A gamepad's right stick also pans the tactical view at a speed set by `ScrollRate`. Lower values move the view faster, and higher values move it more slowly. Touch pan is not scaled by this setting.
+A gamepad's right stick also pans the tactical view at a speed set by `ScrollRate`: its scale runs from `1.0` at `0` to `0.5` at `7`. Touch pan is not scaled by this setting.
 
-The in-game game controls dialog offers seven positions and writes the choice back to `sun.ini`. Its slider runs the other way around, so dragging it toward the fast end stores a smaller figure.
+The in-game game controls dialog offers eight positions and writes the choice back to `sun.ini`. Its slider runs the other way around, so dragging it toward the fast end stores a smaller figure.
 
-:::danger[A figure of eight or more reads past the scroll table]
-Nothing narrows the figure on the way in. A figure of `8` or more indexes past the end of the nine-step edge-scroll table. `-1` is milder but still wrong: it makes the coast-scroll divisor zero, and the distance the map is then scrolled by is whatever converting an infinite quantity to a whole number leaves behind.
+:::danger[A figure outside the supported range can read past the scroll table]
+A figure of `8` or more indexes past the end of the nine-step edge-scroll table. `-1` makes the coast-scroll divisor zero, and the distance the map is then scrolled by depends on converting an infinite quantity to a whole number.
 :::

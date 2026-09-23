@@ -23,6 +23,7 @@ static SDL_MouseButtonFlags _ControllerButtons;
 static bool _PointerStarted;
 static bool _DirectTouch;
 static bool _SuppressEdgeScroll;
+static bool _ControllerOwnsPointer;
 
 
 static SDL_MouseButtonFlags Button_Mask(Uint8 button)
@@ -59,6 +60,34 @@ void Win32_Pointer_Move(float x, float y)
 	_PointerX = x;
 	_PointerY = y;
 	_SuppressEdgeScroll = false;
+}
+
+
+void Win32_Pointer_Move_Host(float x, float y)
+{
+	Win32_Pointer_Set_Controller_Owner(false);
+	Win32_Pointer_Move(x, y);
+}
+
+
+void Win32_Pointer_Move_Controller(float x, float y)
+{
+	_PointerX = x;
+	_PointerY = y;
+	_SuppressEdgeScroll = false;
+	_ControllerOwnsPointer = true;
+}
+
+
+void Win32_Pointer_Set_Controller_Owner(bool controller_owns_pointer)
+{
+	_ControllerOwnsPointer = controller_owns_pointer;
+}
+
+
+bool Win32_Pointer_Is_Controller_Owner(void)
+{
+	return(_ControllerOwnsPointer);
 }
 
 
@@ -139,7 +168,7 @@ void Win32_Pointer_Follow_Host_Mouse(void)
 	int wy = 0;
 	SDL_GetWindowPosition(main->Handle, &wx, &wy);
 
-	Win32_Pointer_Move(x - (float)wx, y - (float)wy);
+	Win32_Pointer_Move_Host(x - (float)wx, y - (float)wy);
 
 	if (!_PointerStarted) {
 		_HostButtons = SDL_GetMouseState(NULL, NULL)
@@ -160,6 +189,9 @@ bool Win32_Pointer_Is_Direct_Touch(void)
 void Win32_Pointer_Set_Direct_Touch(bool direct)
 {
 	_DirectTouch = direct;
+	if (direct) {
+		Win32_Pointer_Set_Controller_Owner(false);
+	}
 }
 
 

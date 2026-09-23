@@ -226,7 +226,7 @@ static void Translate_Event(SDL_Event const & event)
 			}
 #endif
 			Win32_Pointer_Set_Direct_Touch(false);
-			Win32_Pointer_Move(event.motion.x, event.motion.y);
+			Win32_Pointer_Move_Host(event.motion.x, event.motion.y);
 			Win32_Post_Message(main, WM_MOUSEMOVE, Mouse_Key_State(), Pointer_To_LParam());
 			break;
 
@@ -257,7 +257,7 @@ static void Translate_Event(SDL_Event const & event)
 			}
 
 			Win32_Pointer_Set_Direct_Touch(false);
-			Win32_Pointer_Move(event.button.x, event.button.y);
+			Win32_Pointer_Move_Host(event.button.x, event.button.y);
 			Win32_Pointer_Button(event.button.button, down);
 			Win32_Post_Message(main, message, Mouse_Key_State(), Pointer_To_LParam());
 			break;

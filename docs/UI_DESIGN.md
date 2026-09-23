@@ -122,18 +122,29 @@ bgfx runs single-threaded because presents happen from inside dialog paint
 handlers; `_Presenting` guards the recursion. Presents are paced to the refresh
 interval and happen only when the frame is dirty. The mouse pointer is a
 hardware Win32 cursor on Windows, built from the game's shapes, so it never touches a
-surface. On iOS the same shape data is decoded once into an RGBA software-cursor cache and
-submitted in a final cursor view after the UI views; pointer-only presents reuse the last
-frame texture. The window is per-monitor DPI aware, and `VideoScaleInfo` records where the
+surface. On iOS the same shape data is decoded into an RGBA software-cursor cache and
+submitted in a final cursor view after the UI views. Cursor image changes advance a content
+generation; BGFX refreshes the texture when that generation or its dimensions change, while
+pointer-only presents reuse the texture. A present acknowledges only the generation submitted
+in that frame. The window is per-monitor DPI aware, and `VideoScaleInfo` records where the
 logical frame lands in the physical client area.
 
 The tactical pointer follows `What_Action` through `DisplayClass::Mouse_Left_Up`, which maps
 the resolved action to the native cursor shape. Repair and Sell controls seed their native
 cursor on a mode transition; the next hover refines it through that same action path. Touch,
 left-stick pointer movement, and hardware mouse input share this path. `uimodeicon.cpp` draws
-an informational overlay from armed-mode state and does not set the pointer shape. Touch and
-controller pan remain separate until `ScrollClass` scales them, so `Options.ScrollRate` can
-scale controller pan without changing touch pan.
+an informational overlay from armed-mode state and does not set the pointer shape. The
+controller left stick owns pointer placement and cannot start tactical edge scrolling when
+that pointer reaches an edge. The controller right stick is the sole controller camera
+owner. Hardware mouse edge scrolling and direct-touch pan keep their existing paths. The
+eight `Options.ScrollRate` positions scale right-stick pan from 1.0 at 0 to 0.5 at 7; R2
+continues to boost only left-stick pointer movement.
+
+Legacy campaign recap screens use the same virtual pointer and native mouse-button messages
+as other screens. `MSEngine::Wait_Delay` services the controller before draining messages,
+so Cross/A reaches its existing left-button path without a recap-specific mapping. Square and
+Triangle gameplay action edges are discarded during this legacy wait loop, while Start keeps
+its existing Escape path.
 
 Input reaches a control by one of two routes. Windows delivers a mouse message
 to the visible child window under the cursor, so a legacy dialog receives its
