@@ -19,6 +19,7 @@
 #include "cursorstate.hh"
 #include "legacyinputpolicy.hh"
 #include "mouseoverridepolicy.hh"
+#include "point.h"
 #include "pointerscrollpolicy.hh"
 
 namespace
