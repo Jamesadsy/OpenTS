@@ -7,6 +7,7 @@
  * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -21,6 +22,9 @@
 #include "mouseoverridepolicy.hh"
 #include "point.h"
 #include "pointerscrollpolicy.hh"
+#include "controlleredgescrollpolicy.hh"
+#include "rect.h"
+#include "sidebarlayoutpolicy.hh"
 
 namespace
 {
@@ -118,7 +122,7 @@ void Test_Mode_Icon_Ownership(void)
 
 void Test_Controller_ScrollRate(void)
 {
-	static double const expected[] = { 1.000, 0.906, 0.820, 0.743, 0.673, 0.610, 0.552, 0.500 };
+	static double const expected[] = { 1.250, 1.167, 1.083, 1.000, 0.917, 0.833, 0.750, 0.667 };
 	double scales[SCROLL_RATE_SETTING_COUNT] = {};
 	for (int rate = 0; rate < SCROLL_RATE_SETTING_COUNT; rate++) {
 		scales[rate] = Controller_ScrollRate_Scale(rate, SCROLL_RATE_SETTING_COUNT);
@@ -129,9 +133,11 @@ void Test_Controller_ScrollRate(void)
 		table_matches = table_matches && std::abs(scales[rate] - expected[rate]) < 0.0006;
 		if (rate != 0) monotonic = monotonic && scales[rate] < scales[rate - 1];
 	}
-	Check(table_matches, "all eight controller ScrollRate settings match the accepted geometric curve");
-	Check(monotonic && scales[0] == 1.0 && scales[7] == 0.5,
-		"controller ScrollRate is monotonic with 1.0 and 0.5 endpoint scales");
+	Check(table_matches, "all eight controller ScrollRate settings use the accepted 600-to-320 px/s curve");
+	Check(monotonic && std::abs(scales[0] * 480.0 - 600.0) < 0.001
+		&& std::abs(scales[3] * 480.0 - 480.0) < 0.001
+		&& std::abs(scales[7] * 480.0 - 320.0) < 0.001,
+		"raw ScrollRate 3 is 480 px/s and the bounded endpoints are 600 and 320 px/s");
 	Check(Controller_ScrollRate_Scale(-1, SCROLL_RATE_SETTING_COUNT) == scales[0]
 		&& Controller_ScrollRate_Scale(8, SCROLL_RATE_SETTING_COUNT) == scales[7],
 		"controller speed remains bounded outside the slider's ScrollRate values");
@@ -140,6 +146,11 @@ void Test_Controller_ScrollRate(void)
 	std::string options_source((std::istreambuf_iterator<char>(options_file)), std::istreambuf_iterator<char>());
 	Check(options_source.find("MAX_SCROLL_SETTING=8") != std::string::npos,
 		"the game controls expose all eight ScrollRate positions used by controller pan");
+	std::ifstream options_cpp_file(OPENTS_OPTIONS_CPP_SOURCE);
+	std::string options_cpp_source((std::istreambuf_iterator<char>(options_cpp_file)), std::istreambuf_iterator<char>());
+	Check(options_cpp_source.find("ScrollRate(3)") != std::string::npos
+		&& std::abs(Controller_ScrollRate_Scale(3, SCROLL_RATE_SETTING_COUNT) * 480.0 - 480.0) < 0.001,
+		"the native raw ScrollRate default is 3 and preserves 480 px/s camera feel");
 
 	int touch_travel[3] = {};
 	int const rates[] = {0, 3, 7};
@@ -163,22 +174,219 @@ void Test_Controller_ScrollRate(void)
 		controller_travel += Scale_Controller_Scroll_Offset(1, 0.5, 4,
 			SCROLL_RATE_SETTING_COUNT, controller_remainder);
 	}
-	Check(controller_travel == 3 && controller_remainder > 0.3 && controller_remainder < 0.4,
+	Check(controller_travel == 4 && controller_remainder > 0.57 && controller_remainder < 0.60,
 		"controller pan keeps useful fractional travel at a low/mid ScrollRate setting");
-	Check(Pointer_Edge_Scroll_Allowed(false) && !Pointer_Edge_Scroll_Allowed(true),
-		"controller-owned pointer suppresses native edge scroll while hardware pointer ownership permits it");
+	Check(Pointer_Edge_Scroll_Source(false, false, false) == PointerEdgeScrollSource::NativeImmediate
+		&& Pointer_Edge_Scroll_Source(true, false, false) == PointerEdgeScrollSource::ControllerDelayed
+		&& Pointer_Edge_Scroll_Source(false, true, false) == PointerEdgeScrollSource::Suppressed
+		&& Pointer_Edge_Scroll_Source(false, false, true) == PointerEdgeScrollSource::Suppressed,
+		"hardware pointer scrolls immediately, controller pointer waits, and direct touch or camera pan suppresses edges");
+
+	ControllerEdgeScrollDwell dwell;
+	Check(!dwell.Should_Scroll(3, 1000) && !dwell.Should_Scroll(3, 2999)
+		&& !dwell.Should_Scroll(4, 3000) && !dwell.Should_Scroll(4, 4999)
+		&& dwell.Should_Scroll(4, 5000),
+		"controller edge dwell waits 2000 ms and restarts when the native direction changes");
+	dwell.Reset();
+	Check(!dwell.Should_Scroll(3, 10000) && !dwell.Should_Scroll(0, 11000)
+		&& !dwell.Should_Scroll(3, 11999) && !dwell.Should_Scroll(3, 13998)
+		&& dwell.Should_Scroll(3, 13999),
+		"leaving the edge resets controller dwell and requires a fresh 2000 ms stay");
+	dwell.Reset();
+	Check(!dwell.Should_Scroll(5, 20000) && !dwell.Should_Scroll(0, 20500)
+		&& !dwell.Should_Scroll(5, 21999) && !dwell.Should_Scroll(5, 23998)
+		&& dwell.Should_Scroll(5, 23999),
+		"after direct right-stick pan, a neutral pointer at the same edge starts a new dwell");
 
 	std::ifstream file(OPENTS_SCROLL_SOURCE);
 	std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-	std::size_t const auto_scroll = source.find("if (Options.AutoScroll && !Debug_Map");
-	std::size_t const edge_scroll = source.find("Scroll_Edge(point);", auto_scroll);
-	std::string const gate = auto_scroll == std::string::npos || edge_scroll == std::string::npos
+	std::ifstream controller_file(OPENTS_CONTROLLER_SOURCE);
+	std::string controller_source((std::istreambuf_iterator<char>(controller_file)), std::istreambuf_iterator<char>());
+	std::size_t const edge_start = source.find("void ScrollClass::Scroll_Edge(Point2D const & point)");
+	std::size_t const edge_end = source.find("void ScrollClass::Reset_Edge_Scroll_State", edge_start);
+	std::string const edge_body = edge_start == std::string::npos || edge_end == std::string::npos
 		? std::string()
-		: source.substr(auto_scroll, edge_scroll - auto_scroll);
-	Check(!gate.empty()
-		&& gate.find("Pointer_Edge_Scroll_Allowed(Win_Pointer_Is_Controller_Owner())") != std::string::npos
-		&& Pointer_Edge_Scroll_Allowed(false),
-		"Scroll_AI gates only controller-owned pointer edge scroll and retains the hardware path");
+		: source.substr(edge_start, edge_end - edge_start);
+	std::size_t const pointer_scroll = source.find("static bool Pointer_Scroll_AI(bool apply)");
+	std::size_t const pointer_scroll_end = source.find("void ScrollClass::Scroll_AI(void)", pointer_scroll);
+	std::string const camera_body = pointer_scroll == std::string::npos || pointer_scroll_end == std::string::npos
+		? std::string()
+		: source.substr(pointer_scroll, pointer_scroll_end - pointer_scroll);
+	std::size_t const scroll_ai_start = source.find("void ScrollClass::Scroll_AI(void)");
+	std::size_t const hover_start = source.find("void ScrollClass::Refresh_Hover_Action", scroll_ai_start);
+	std::string const scroll_ai_body = scroll_ai_start == std::string::npos || hover_start == std::string::npos
+		? std::string()
+		: source.substr(scroll_ai_start, hover_start - scroll_ai_start);
+	Check(!edge_body.empty()
+		&& edge_body.find("Pointer_Edge_Scroll_Source(") != std::string::npos
+		&& edge_body.find("Win_Pointer_Camera_Pan_Active()") != std::string::npos
+		&& edge_body.find("Reset_Edge_Scroll_State();") != std::string::npos
+		&& edge_body.find("ControllerDelayed && !at_screen_edge") < edge_body.find("if (Inertia || at_screen_edge)")
+		&& edge_body.find("ControllerEdgeDwell.Should_Scroll(control, Win_Monotonic_Time_Ms())") != std::string::npos
+		&& !camera_body.empty()
+		&& camera_body.find("if (camera_pan_active)") != std::string::npos
+		&& camera_body.find("touchx = 0;") != std::string::npos
+		&& camera_body.find("Scale_Touch_Scroll_Offset(touchx") != std::string::npos
+		&& !scroll_ai_body.empty()
+		&& scroll_ai_body.find("bool const camera_pan_active = Pointer_Scroll_AI(!IgnoreInput);") != std::string::npos
+		&& scroll_ai_body.find("KN_RMOUSE) && !camera_pan_active") != std::string::npos
+		&& scroll_ai_body.find("!camera_pan_active && Options.AutoScroll") != std::string::npos
+		&& controller_source.find("leftx * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost") != std::string::npos
+		&& controller_source.find("rightx * GAMEPAD_CAMERA_SPEED * elapsed") != std::string::npos
+		&& controller_source.find("rightx * GAMEPAD_CAMERA_SPEED * elapsed * pointer_boost") == std::string::npos,
+		"edge dwell uses monotonic controller ownership, while right-stick camera pan owns its frame");
+}
+
+
+void Test_Sidebar_Reclaim_Transaction(void)
+{
+	Rect const right_expanded(0, 16, 472, 384);
+	Rect const right_collapsed = Collapse_Tactical_Rect_For_Sidebar(right_expanded, 168, true);
+	Rect const left_expanded(168, 16, 472, 384);
+	Rect const left_collapsed = Collapse_Tactical_Rect_For_Sidebar(left_expanded, 168, false);
+	Check(right_collapsed == Rect(0, 16, 640, 384)
+		&& right_collapsed.Width - right_expanded.Width == 168,
+		"right-sidebar Triangle collapse reclaims exactly 168 tactical pixels");
+	Check(left_collapsed == Rect(0, 16, 640, 384)
+		&& left_collapsed.X == left_expanded.X - 168
+		&& left_collapsed.Width - left_expanded.Width == 168,
+		"left-sidebar Triangle collapse reclaims the same 168 pixels from the left");
+	Check(right_expanded == Rect(0, 16, 472, 384),
+		"the original tactical rectangle remains available as the exact restore target");
+
+	std::ifstream sidebar_file(OPENTS_SIDEBAR_SOURCE);
+	std::string sidebar_source((std::istreambuf_iterator<char>(sidebar_file)), std::istreambuf_iterator<char>());
+	std::size_t const toggle_start = sidebar_source.find("void SidebarClass::Controller_Toggle_Sidebar(void)");
+	std::size_t const toggle_end = sidebar_source.find("SidebarClass::StripClass::StripClass", toggle_start);
+	std::string const toggle_body = toggle_start == std::string::npos || toggle_end == std::string::npos
+		? std::string()
+		: sidebar_source.substr(toggle_start, toggle_end - toggle_start);
+	std::size_t const hidden_ai_start = sidebar_source.find("void SidebarClass::AI(KeyNumType & input");
+	std::size_t const hidden_ai_end = sidebar_source.find("void SidebarClass::Recalc(void)", hidden_ai_start);
+	std::string const hidden_ai = hidden_ai_start == std::string::npos || hidden_ai_end == std::string::npos
+		? std::string()
+		: sidebar_source.substr(hidden_ai_start, hidden_ai_end - hidden_ai_start);
+	std::size_t const activate_start = sidebar_source.find("bool SidebarClass::Activate(int control)");
+	std::size_t const activate_end = sidebar_source.find("void SidebarClass::Controller_Toggle_Sidebar", activate_start);
+	std::string const activate_body = activate_start == std::string::npos || activate_end == std::string::npos
+		? std::string()
+		: sidebar_source.substr(activate_start, activate_end - activate_start);
+	std::size_t const render_start = sidebar_source.find("void SidebarClass::Draw_It(bool complete)");
+	std::size_t const render_end = sidebar_source.find("void SidebarClass::Blit_Sidebar", render_start);
+	std::string const render_body = render_start == std::string::npos || render_end == std::string::npos
+		? std::string()
+		: sidebar_source.substr(render_start, render_end - render_start);
+	std::size_t const blit_end = sidebar_source.find("void SidebarClass::AI(KeyNumType & input", render_end);
+	std::string const blit_body = render_end == std::string::npos || blit_end == std::string::npos
+		? std::string()
+		: sidebar_source.substr(render_end, blit_end - render_end);
+	std::size_t const hide_flag = toggle_body.find("IsMobileUserCollapsed = true;");
+	std::size_t const deactivate = toggle_body.find("Activate(0)");
+	std::size_t const dimensions = toggle_body.find("Set_View_Dimensions(reclaimed)");
+	std::size_t const reflow = toggle_body.find("Reposition_Sidebar();");
+	std::size_t const restore_geometry = toggle_body.find("Set_View_Dimensions(expanded)");
+	std::size_t const restore_activate = toggle_body.find("Activate(1)", restore_geometry);
+	std::size_t const restore_commit = toggle_body.find("IsMobileUserCollapsed = false;", restore_activate);
+	std::size_t const actions = hidden_ai.find("while (Win_Gamepad_Take_Action(action))");
+	std::size_t const hidden_controls = hidden_ai.find("if (IsSidebarActive)");
+	Check(!toggle_body.empty()
+		&& hide_flag != std::string::npos && deactivate > hide_flag
+		&& dimensions > deactivate && reflow > dimensions
+		&& toggle_body.find("VisibleSurface->Fill_Rect") != std::string::npos
+		&& toggle_body.find("Repair_Mode_Control") == std::string::npos
+		&& toggle_body.find("Sell_Mode_Control") == std::string::npos
+		&& restore_geometry != std::string::npos && restore_activate > restore_geometry
+		&& restore_commit > restore_activate
+		&& toggle_body.find("IsForceCompleteRedraw = true;") != std::string::npos
+		&& toggle_body.find("Flag_To_Redraw(GS_REDRAW_ALL)") != std::string::npos,
+		"Triangle saves the original state, collapses and clears the former strip, then restores geometry before successful activation");
+	Check(!hidden_ai.empty()
+		&& hidden_ai.find("KeyNumType dormant_input = KeyNumType(0)") != std::string::npos
+		&& actions != std::string::npos && hidden_controls > actions
+		&& hidden_ai.find("Controller_Repair_Sell_Cycle()") != std::string::npos
+		&& hidden_ai.find("Controller_Toggle_Sidebar()") != std::string::npos
+		&& hidden_ai.find("BASECLASS::AI(input, xy);") != std::string::npos,
+		"hidden sidebar drains controller actions and keeps tactical input and production timers running");
+	Check(!activate_body.empty()
+		&& activate_body.find("Remove_A_Button(RadarButton)") != std::string::npos
+		&& activate_body.find("Add_A_Button(RadarButton)") != std::string::npos
+		&& activate_body.find("Column[0].Deactivate()") != std::string::npos
+		&& !render_body.empty()
+		&& render_body.find("IsSidebarActive && ToolTips != NULL") != std::string::npos
+		&& !blit_body.empty()
+		&& blit_body.find("if (IsSidebarActive && GameActive && ScenarioActive)") != std::string::npos,
+		"native activation restores radar/sidebar gadgets while hidden rendering cannot draw tooltips or blit stale sidebar pixels");
+
+	std::size_t const reposition_start = sidebar_source.find("void SidebarClass::Reposition_Sidebar(void)");
+	std::size_t const reposition_end = sidebar_source.find("const char * SidebarClass::Help_Text", reposition_start);
+	std::string const reposition_body = reposition_start == std::string::npos || reposition_end == std::string::npos
+		? std::string()
+		: sidebar_source.substr(reposition_start, reposition_end - reposition_start);
+	Check(!reposition_body.empty()
+		&& reposition_body.find("if (IsSidebarActive) {\n\t\t\t\t\tToolTips->Add(&tmp);") != std::string::npos
+		&& reposition_body.find("if (IsSidebarActive) ToolTips->Add(&tooltip)") != std::string::npos,
+		"hidden sidebar cameo and mode-button tooltip hit regions are removed during reflow");
+}
+
+
+void Test_Native_Cursor_And_Action_Continuity(void)
+{
+	std::ifstream unit_file(OPENTS_UNIT_SOURCE);
+	std::string unit_source((std::istreambuf_iterator<char>(unit_file)), std::istreambuf_iterator<char>());
+	std::size_t const action_start = unit_source.find("ActionType UnitClass::What_Action(ObjectClass const * object, bool disallow_force) const");
+	std::size_t const action_end = unit_source.find("ActionType UnitClass::What_Action(Cell const & cell", action_start);
+	std::string const action_body = action_start == std::string::npos || action_end == std::string::npos
+		? std::string()
+		: unit_source.substr(action_start, action_end - action_start);
+	Check(!action_body.empty()
+		&& action_body.find("bool deploying = object == this && (action == ACTION_SELF || action == ACTION_NO_DEPLOY);") != std::string::npos
+		&& action_body.find("object->RTTI != RTTI_BUILDING && !deploying") != std::string::npos,
+		"the narrow upstream deploy-cursor fix preserves only native self/no-deploy verdicts on a repairing unit");
+
+	std::ifstream cursor_file(OPENTS_CURSOR_SOURCE);
+	std::string cursor_source((std::istreambuf_iterator<char>(cursor_file)), std::istreambuf_iterator<char>());
+	std::ifstream mouse_file(OPENTS_MOUSE_HEADER_SOURCE);
+	std::string mouse_source((std::istreambuf_iterator<char>(mouse_file)), std::istreambuf_iterator<char>());
+	std::ifstream mouse_cpp_file(OPENTS_MOUSE_CPP_SOURCE);
+	std::string mouse_cpp_source((std::istreambuf_iterator<char>(mouse_cpp_file)), std::istreambuf_iterator<char>());
+	std::ifstream display_file(OPENTS_DISPLAY_SOURCE);
+	std::string display_source((std::istreambuf_iterator<char>(display_file)), std::istreambuf_iterator<char>());
+	std::size_t const cancel_start = display_source.find("void DisplayClass::Mouse_Right_Release(Point2D const & point)");
+	std::size_t const cancel_end = display_source.find("void DisplayClass::Mouse_Left_Up", cancel_start);
+	std::string const cancel_body = cancel_start == std::string::npos || cancel_end == std::string::npos
+		? std::string()
+		: display_source.substr(cancel_start, cancel_end - cancel_start);
+	std::size_t const cycle_start = display_source.find("void DisplayClass::Controller_Repair_Sell_Cycle(void)");
+	std::size_t const cycle_end = display_source.find("DisplayClass::Closest_Free_Spot", cycle_start);
+	std::string const cycle_body = cycle_start == std::string::npos || cycle_end == std::string::npos
+		? std::string()
+		: display_source.substr(cycle_start, cycle_end - cycle_start);
+	std::size_t const override_start = mouse_cpp_source.find("bool MouseClass::Override_Mouse_Shape(MouseType mouse, bool wsmall)");
+	std::size_t const override_end = mouse_cpp_source.find("void MouseClass::AI", override_start);
+	std::string const override_body = override_start == std::string::npos || override_end == std::string::npos
+		? std::string()
+		: mouse_cpp_source.substr(override_start, override_end - override_start);
+	Check(cursor_source.find("MFCD::Retrieve(\"MOUSE.SHP\")") == std::string::npos
+		&& mouse_source.find("Get_Current_Mouse_Shape(void) const {return(CurrentMouseShape);}") != std::string::npos
+		&& cursor_source.find("Map.Get_Current_Mouse_Shape()") != std::string::npos
+		&& cursor_source.find("Make_Cursor_Presentation_Snapshot") != std::string::npos
+		&& cursor_source.find("CursorSnapshot type=%d") != std::string::npos
+		&& cursor_source.find("_LastDiagnosticSnapshot.ContentGeneration") != std::string::npos
+		&& cursor_source.find("snapshot.DrawableAnchorX != _LastDiagnosticSnapshot") == std::string::npos
+		&& !override_body.empty()
+		&& override_body.find("MouseControl[mouse]") != std::string::npos
+		&& override_body.find("Get_Mouse_Hotspot(mouse)") != std::string::npos
+		&& override_body.find("MouseCursor->Set_Cursor") != std::string::npos,
+		"iOS cursor presentation follows the live native MouseType and shape/frame raster instead of a synthetic pointer");
+	Check(!cancel_body.empty()
+		&& cancel_body.find("Refresh_Hover_Action") != std::string::npos
+		&& cancel_body.find("Set_Default_Mouse(MOUSE_NORMAL") == std::string::npos
+		&& !cycle_body.empty()
+		&& cycle_body.find("if (IsRepairMode)") != std::string::npos
+		&& cycle_body.find("else if (IsSellMode)") != std::string::npos
+		&& cycle_body.find("Repair_Mode_Control(1)") != std::string::npos
+		&& cycle_body.find("Sell_Mode_Control(1)") != std::string::npos,
+		"Circle resolves the native target on cancel and Square cycles DisplayClass Repair/Sell state");
 }
 
 
@@ -225,9 +433,8 @@ void Test_Mouse_Override_Frontier(void)
 
 void Test_Cursor_Content_Presentation(void)
 {
-	char shape_set = 0;
 	CursorContentGeneration generation;
-	CursorContentSelection const normal{ &shape_set, 10, 2, 3, 1 };
+	CursorContentSelection const normal{ 16, 16, 1, 0x1234 };
 	Check(generation.Select(normal) && generation.Current() != 0,
 		"initial selected cursor image receives a content generation");
 
@@ -235,18 +442,18 @@ void Test_Cursor_Content_Presentation(void)
 	void const * const same_pixels_address = rgba;
 	rgba[0] = 0x11;
 	CursorTextureUploadState texture{ 16, 16, generation.Current(), true };
-	CursorContentSelection const selection{ &shape_set, 11, 2, 3, 1 };
+	CursorContentSelection const selection{ 16, 16, 1, 0x5678 };
 	Check(generation.Select(selection),
-		"a same-dimension native cursor frame changes the content generation");
+		"different native MOUSE.SHP pixels change content generation at the same dimensions");
 	rgba[0] = 0x22;
 	Check(same_pixels_address == rgba
 		&& Cursor_Texture_Needs_Upload(texture, 16, 16, generation.Current()),
-		"same-size RGBA content is uploaded when frame A and frame B reuse one pixel address");
+		"same-size native cursor RGBA is uploaded when frame A and frame B reuse one pixel address");
 
 	texture.Generation = generation.Current();
 	Check(!generation.Select(selection)
 		&& !Cursor_Texture_Needs_Upload(texture, 16, 16, generation.Current()),
-		"position-only movement with unchanged cursor content does not request an upload");
+		"position-only movement or hotspot changes with unchanged pixels do not request a content upload");
 
 	Check(Cursor_Texture_Needs_Upload(texture, 24, 16, generation.Current())
 		&& Cursor_Texture_Needs_Upload(CursorTextureUploadState{}, 16, 16, generation.Current()),
@@ -262,8 +469,30 @@ void Test_Cursor_Content_Presentation(void)
 	Check(generation.Acknowledge(generation.Current()) && !generation.Needs_Present(),
 		"the submitted current generation clears cursor content dirtiness");
 
-	CursorContentSelection const scaled{ &shape_set, 11, 2, 3, 2 };
-	Check(generation.Select(scaled), "cursor scale rebuild changes the content generation");
+	CursorContentSelection const scaled{ 32, 32, 2, 0x5678 };
+	Check(generation.Select(scaled)
+		&& Cursor_Texture_Needs_Upload(texture, 32, 32, generation.Current()),
+		"cursor scale rebuild changes generation and resizes the presented texture");
+
+	char shape_set = 0;
+	CursorPresentationSnapshot const select = Make_Cursor_Presentation_Snapshot(
+		MOUSE_CAN_SELECT, &shape_set, 10, 4, 6, 2, 32, 32, 0x1234, 8, 100, 80);
+	CursorPresentationSnapshot const deploy = Make_Cursor_Presentation_Snapshot(
+		MOUSE_DEPLOY, &shape_set, 11, 7, 9, 2, 32, 32, 0x5678, 9, 100, 80);
+	CursorPresentationSnapshot const moved = Make_Cursor_Presentation_Snapshot(
+		MOUSE_DEPLOY, &shape_set, 11, 7, 9, 2, 32, 32, 0x5678, 9, 137, 121);
+	Check(select.DrawableAnchorX == deploy.DrawableAnchorX
+		&& select.DrawableAnchorY == deploy.DrawableAnchorY
+		&& select.DestinationX != deploy.DestinationX
+		&& select.DestinationY != deploy.DestinationY,
+		"native hotspot changes can move the sprite top-left while the click anchor stays fixed");
+	Check(deploy.DrawableAnchorX == 100 && deploy.DrawableAnchorY == 80
+		&& deploy.DestinationX == 86 && deploy.DestinationY == 62
+		&& moved.DrawableAnchorX == 137 && moved.DrawableAnchorY == 121,
+		"cursor destination is derived from the drawable click anchor and scaled native hotspot");
+	Check(select.SemanticMouseType == MOUSE_CAN_SELECT && deploy.SemanticMouseType == MOUSE_DEPLOY
+		&& select.Shape == deploy.Shape && select.Frame != deploy.Frame && select.ContentHash != deploy.ContentHash,
+		"cursor presentation snapshots retain native semantic type, frame and pixel identity");
 }
 
 
@@ -275,51 +504,89 @@ void Test_Cursor_Sequences_Reach_Presentation(void)
 	bool current_small = false;
 	CursorContentGeneration generation;
 	CursorTextureUploadState texture;
-	Point2D const hotspot(3, 4);
+	Point2D const pointer(211, 127);
 	int uploads = 0;
-	int frame = 0;
+	std::vector<CursorPresentationSnapshot> presented;
 
 	auto apply = [&](MouseType requested) {
-		int const selected_frame = ++frame;
+		int const selected_frame = 18 + (int)requested;
+		CursorPresentationSnapshot result;
 		bool const changed = Mouse_Override_Shape_If_Changed(startup, &loaded_shapes, requested,
-			current, false, current_small, hotspot,
+			current, false, current_small, Point2D(0, 0),
 			[]() {}, [&]() { return(selected_frame); },
-			[&](Point2D const & selected_hotspot, char const * shapes, int selected_frame_for_cursor) {
-				bool const content_changed = generation.Select(CursorContentSelection{
-					shapes, selected_frame_for_cursor, selected_hotspot.X, selected_hotspot.Y, 1 });
-				if (content_changed && Cursor_Texture_Needs_Upload(texture, 32, 32, generation.Current())) {
-					texture = CursorTextureUploadState{ 32, 32, generation.Current(), true };
+			[&](Point2D const &, char const * shapes, int selected_frame_for_cursor) {
+				uint64_t const hash = ((uint64_t)(shapes != nullptr) << 32)
+					| (uint32_t)selected_frame_for_cursor;
+				bool const content_changed = generation.Select(CursorContentSelection{ 64, 64, 2, hash });
+				if (content_changed && Cursor_Texture_Needs_Upload(texture, 64, 64, generation.Current())) {
+					texture = CursorTextureUploadState{ 64, 64, generation.Current(), true };
 					uploads++;
 				}
+				int const hot_x = 1 + ((int)requested % 5);
+				int const hot_y = 1 + ((int)requested % 4);
+				result = Make_Cursor_Presentation_Snapshot(requested, shapes,
+					selected_frame_for_cursor, hot_x, hot_y, 2, 64, 64, hash,
+					generation.Current(), pointer.X, pointer.Y);
+				presented.push_back(result);
 			});
-		return(changed);
+		Check(changed && current == requested && !presented.empty()
+			&& presented.back().SemanticMouseType == requested,
+			"native MouseType reaches the cursor snapshot for each resolved tactical state");
+		return(result);
 	};
 
-	bool const normal_selected = apply(Action_Cursor_Shape(ACTION_NONE, false, false, false));
-	bool const selection_selected = apply(Action_Cursor_Shape(ACTION_SELECT, false, false, false));
-	bool const move_selected = apply(Action_Cursor_Shape(ACTION_MOVE, false, false, false));
-	Check(normal_selected && selection_selected && move_selected && uploads == 3,
-		"normal, selection and move cursors each reach the texture upload contract");
+	MouseType const resolved_states[] = {
+		Action_Cursor_Shape(ACTION_NONE, false, false, false),
+		Action_Cursor_Shape(ACTION_SELECT, false, false, false),
+		Action_Cursor_Shape(ACTION_MOVE, false, false, false),
+		Action_Cursor_Shape(ACTION_ATTACK, false, false, false),
+		Action_Cursor_Shape(ACTION_ENTER, false, false, false),
+		Action_Cursor_Shape(ACTION_SELF, false, false, false),
+		Action_Cursor_Shape(ACTION_NO_DEPLOY, false, false, false),
+		Action_Cursor_Shape(ACTION_REPAIR, false, false, false),
+		Action_Cursor_Shape(ACTION_NO_REPAIR, false, false, false),
+		Action_Cursor_Shape(ACTION_SELL, false, false, false),
+		Action_Cursor_Shape(ACTION_SELL_UNIT, false, false, false)
+	};
+	MouseType const expected_states[] = {
+		MOUSE_NORMAL, MOUSE_CAN_SELECT, MOUSE_CAN_MOVE, MOUSE_CAN_ATTACK, MOUSE_ENTER,
+		MOUSE_DEPLOY, MOUSE_NO_DEPLOY, MOUSE_REPAIR, MOUSE_NO_REPAIR, MOUSE_SELL_BACK, MOUSE_SELL_UNIT
+	};
+	bool semantic_resolution_matches = true;
+	for (size_t index = 0; index < sizeof(resolved_states) / sizeof(resolved_states[0]); index++) {
+		semantic_resolution_matches = semantic_resolution_matches && resolved_states[index] == expected_states[index];
+		apply(resolved_states[index]);
+	}
+	Check(semantic_resolution_matches && presented.size() == 11 && uploads == 11
+		&& std::all_of(presented.begin(), presented.end(), [&](CursorPresentationSnapshot const & snapshot) {
+			return(snapshot.DrawableAnchorX == pointer.X && snapshot.DrawableAnchorY == pointer.Y);
+		})
+		&& presented[0].DestinationX != presented[5].DestinationX
+		&& presented[0].DestinationY != presented[5].DestinationY,
+		"Idle, select, move, attack, enter, deploy, Repair and Sell reach native rasters at one fixed click anchor");
 
-	int const before_repair = uploads;
-	MouseType const repair_seed = RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Repair);
-	MouseType const sell_seed = RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Sell);
-	apply(repair_seed);
-	apply(sell_seed);
-	apply(RepairSell_Mode_Cursor_Seed(RepairSellModeCursor::Normal));
-	Check(uploads == before_repair + 3,
-		"Repair and Sell immediate seeds use the same native presentation contract");
+	// Circle cancels the current mode and re-resolves the same point before presentation.
+	size_t const before_circle = presented.size();
+	CursorPresentationSnapshot const after_circle = apply(Action_Cursor_Shape(ACTION_MOVE, false, false, false));
+	Check(presented.size() == before_circle + 1 && after_circle.SemanticMouseType == MOUSE_CAN_MOVE,
+		"Circle cancellation presents the freshly resolved native hover cursor without an ordinary-cursor frame");
 
-	int const before_square = uploads;
+	// Square is driven from native Repair/Sell mode state; the pointer coordinate never changes.
 	RepairSellModeCursor square = RepairSellModeCursor::Normal;
 	square = Next_RepairSell_Mode_Cursor(square);
-	apply(RepairSell_Mode_Cursor_Seed(square));
+	CursorPresentationSnapshot const repair = apply(RepairSell_Mode_Cursor_Seed(square));
 	square = Next_RepairSell_Mode_Cursor(square);
-	apply(RepairSell_Mode_Cursor_Seed(square));
+	CursorPresentationSnapshot const sell = apply(RepairSell_Mode_Cursor_Seed(square));
 	square = Next_RepairSell_Mode_Cursor(square);
-	apply(RepairSell_Mode_Cursor_Seed(square));
-	Check(square == RepairSellModeCursor::Normal && uploads == before_square + 3,
-		"Square Normal to Repair to Sell to Normal propagates cursor content changes");
+	size_t const before_square_cancel = presented.size();
+	CursorPresentationSnapshot const square_cancel = apply(
+		Action_Cursor_Shape(ACTION_ATTACK, false, false, true));
+	Check(square == RepairSellModeCursor::Normal && repair.SemanticMouseType == MOUSE_REPAIR
+		&& sell.SemanticMouseType == MOUSE_SELL_BACK
+		&& square_cancel.SemanticMouseType == MOUSE_STAY_ATTACK
+		&& presented.size() == before_square_cancel + 1
+		&& square_cancel.DrawableAnchorX == pointer.X && square_cancel.DrawableAnchorY == pointer.Y,
+		"Square cycles native Normal to Repair to Sell and immediately re-hovers without moving the pointer");
 }
 
 
@@ -369,6 +636,8 @@ int main(void)
 	Test_Square_Mode_Cycle();
 	Test_Mode_Icon_Ownership();
 	Test_Controller_ScrollRate();
+	Test_Sidebar_Reclaim_Transaction();
+	Test_Native_Cursor_And_Action_Continuity();
 	Test_Mouse_Override_Frontier();
 	Test_Cursor_Content_Presentation();
 	Test_Cursor_Sequences_Reach_Presentation();

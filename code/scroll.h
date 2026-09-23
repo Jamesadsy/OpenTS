@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include "controlleredgescrollpolicy.hh"
 #include "tab.h"
 
 
@@ -86,6 +87,8 @@ class ScrollClass: public TabClass
 		 */
 		bool IsMouseDown;
 
+		ControllerEdgeScrollDwell ControllerEdgeDwell;
+
 	public:
 		ScrollClass(void);
 
@@ -107,9 +110,11 @@ class ScrollClass: public TabClass
 	protected:
 		virtual void Mouse_Right_Press(Point2D const & point = Point2D()) override;
 		virtual void Mouse_Right_Release(Point2D const & point = Point2D()) override;
+		virtual void Refresh_Hover_Action(Point2D const & point) override;
 
 		void Scroll_AI(void);
 
 		void Scroll_Edge(Point2D const & point);
 		void Scroll_Coast(Point2D const & point);
+		void Reset_Edge_Scroll_State(void);
 };

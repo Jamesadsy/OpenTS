@@ -10,7 +10,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 
 
 inline double Controller_ScrollRate_Scale(int scroll_rate, int scroll_rate_setting_count)
@@ -21,13 +20,7 @@ inline double Controller_ScrollRate_Scale(int scroll_rate, int scroll_rate_setti
 
 	int const last_setting = std::min(scroll_rate_setting_count - 1, 7);
 	int const bounded_rate = std::clamp(scroll_rate, 0, last_setting);
-	return(std::exp2(-(double)bounded_rate / 7.0));
-}
-
-
-inline bool Pointer_Edge_Scroll_Allowed(bool controller_owns_pointer)
-{
-	return(!controller_owns_pointer);
+	return((600.0 - 40.0 * (double)bounded_rate) / 480.0);
 }
 
 

@@ -105,6 +105,8 @@ void Win32_Gamepad_Service(void);
 void Win32_Gamepad_Set_Focus(bool focused);
 void Win32_Gamepad_Release_All(void);
 bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
+bool Win32_Gamepad_Camera_Pan_Active(void);
+Uint64 Win32_Monotonic_Time_Ms(void);
 bool Win32_Gamepad_Take_Action(int * action);
 void Win32_Gamepad_Discard_Actions(void);
 void Win32_Gamepad_Shutdown(void);

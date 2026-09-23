@@ -433,4 +433,8 @@ class SidebarClass : public PowerClass
 		bool IsRepairActive;
 		bool IsUpgradeActive;
 		bool IsDemolishActive;
+
+		// Runtime-only geometry cached for the controller's collapse/restore transaction.
+		// It is not serialized; a loaded scenario derives its layout from the current display.
+		Rect ExpandedTacticalRect;
 };

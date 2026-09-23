@@ -322,8 +322,9 @@ void Video_Present(void)
 	WinCursorOverlay cursor;
 	bool const cursor_visible = Win_Cursor_Get_Overlay(&cursor);
 	bool const cursor_submitted = cursor_visible
-		&& Backend_Present_Cursor(cursor.Pixels, cursor.Width, cursor.Height, cursor.X, cursor.Y,
-			cursor.ContentGeneration);
+		&& Backend_Present_Cursor(cursor.Pixels, cursor.Presentation.ImageWidth,
+			cursor.Presentation.ImageHeight, cursor.Presentation.DestinationX,
+			cursor.Presentation.DestinationY, cursor.Presentation.ContentGeneration);
 	Backend_End_Frame();
 	if (cursor_submitted) {
 		Win_Cursor_Acknowledge_Present(cursor);

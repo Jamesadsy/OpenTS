@@ -16,6 +16,8 @@
 #include "point.h"
 #include "win.h"
 
+#include <cstdint>
+
 class Surface;
 class PaletteClass;
 struct NativeWindow;
@@ -52,6 +54,8 @@ bool Win_Pointer_Is_Direct_Touch(void);
 void Win_Pointer_Set_Direct_Touch(bool direct);
 bool Win_Pointer_Is_Controller_Owner(void);
 bool Win_Pointer_Should_Suppress_Edge_Scroll(void);
+bool Win_Pointer_Camera_Pan_Active(void);
+uint64_t Win_Monotonic_Time_Ms(void);
 void Win_Text_Input_Begin(void);
 void Win_Text_Input_End(void);
 bool Win_Pointer_Is_Drawn(void);

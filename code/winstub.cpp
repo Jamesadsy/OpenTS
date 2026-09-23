@@ -391,6 +391,8 @@ bool Win32_Pointer_Is_Controller_Owner(void);
 bool Win32_Pointer_Should_Suppress_Edge_Scroll(void);
 bool Win32_Touch_Take_Scroll(int * x, int * y);
 bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
+bool Win32_Gamepad_Camera_Pan_Active(void);
+uint64_t Win32_Monotonic_Time_Ms(void);
 void Win32_Gamepad_Service(void);
 bool Win32_Gamepad_Take_Action(int * action);
 void Win32_Gamepad_Discard_Actions(void);
@@ -548,6 +550,26 @@ bool Win_Pointer_Should_Suppress_Edge_Scroll(void)
 	return(false);
 #else
 	return(Win32_Pointer_Should_Suppress_Edge_Scroll());
+#endif
+}
+
+
+bool Win_Pointer_Camera_Pan_Active(void)
+{
+#ifdef _WIN32
+	return(false);
+#else
+	return(Win32_Gamepad_Camera_Pan_Active());
+#endif
+}
+
+
+uint64_t Win_Monotonic_Time_Ms(void)
+{
+#ifdef _WIN32
+	return((uint64_t)GetTickCount64());
+#else
+	return(Win32_Monotonic_Time_Ms());
 #endif
 }
 

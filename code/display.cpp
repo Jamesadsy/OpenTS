@@ -1872,8 +1872,11 @@ void DisplayClass::Mouse_Right_Release(Point2D const & point)
 		}
 	}
 
-	// If it breaks... call 228.
-	Set_Default_Mouse(MOUSE_NORMAL, Map.IsSmall);
+	// Resolve the next native action at the current pointer position in the same call, so
+	// cancelling a mode never presents a one-frame ordinary cursor over a valid target.
+	if (MouseCursor != NULL) {
+		Refresh_Hover_Action(MouseCursor->Get_Mouse_Point() - TacticalRect.Top_Left());
+	}
 }
 
 
@@ -2428,6 +2431,10 @@ void DisplayClass::Sell_Mode_Control(int control)
 			Revert_Mouse_Shape();
 		}
 	}
+
+	if (MouseCursor != NULL) {
+		Refresh_Hover_Action(MouseCursor->Get_Mouse_Point() - TacticalRect.Top_Left());
+	}
 }
 
 
@@ -2607,6 +2614,10 @@ void DisplayClass::Repair_Mode_Control(int control)
 			IsRepairMode = false;
 			Revert_Mouse_Shape();
 		}
+	}
+
+	if (MouseCursor != NULL) {
+		Refresh_Hover_Action(MouseCursor->Get_Mouse_Point() - TacticalRect.Top_Left());
 	}
 }
 

@@ -15,8 +15,10 @@
 #include "_xmouse.h"
 #include "convert.h"
 #include "cursorpresentationpolicy.hh"
+#include "dbgprint.h"
 #include "globals.h"
 #include "goptions.h"
+#include "mouse.h"
 #include "shapeset.h"
 #include "vidscale.h"
 #include "video.h"
@@ -36,6 +38,7 @@ struct CursorImage
 	int Height = 0;
 	int HotX = 0;
 	int HotY = 0;
+	uint64_t ContentHash = 0;
 	std::vector<unsigned char> Pixels;
 };
 
@@ -64,9 +67,10 @@ static HCURSOR _CurrentCursor = NULL;
 static CursorImage const * _CurrentImage = NULL;
 static bool _CursorVisible = true;
 static bool _OverlayDirty = true;
-static int _PresentedX = 0;
-static int _PresentedY = 0;
-static bool _PresentedPositionValid = false;
+static CursorPresentationSnapshot _PresentedSnapshot;
+static bool _PresentedSnapshotValid = false;
+static CursorPresentationSnapshot _LastDiagnosticSnapshot;
+static bool _DiagnosticSnapshotValid = false;
 static CursorContentGeneration _ContentGeneration;
 
 
@@ -101,7 +105,7 @@ static int Cursor_Scale(void)
 /// right place. Palette entry zero is the transparent one.
 /// </summary>
 /// <returns>The cursor, or NULL if it could not be built.</returns>
-static bool Build_Cursor_Image(ShapeSet const * shape, int frame, int hotx, int hoty, int scale, CursorImage & image)
+static bool Build_Cursor_Image(ShapeSet const * shape, int frame, int scale, CursorImage & image)
 {
 	image = CursorImage();
 
@@ -125,8 +129,6 @@ static bool Build_Cursor_Image(ShapeSet const * shape, int frame, int hotx, int 
 
 	image.Width = width;
 	image.Height = height;
-	image.HotX = hotx * scale;
-	image.HotY = hoty * scale;
 	image.Pixels.assign((std::size_t)width * height * 4, 0);
 
 	unsigned short const * table = (unsigned short const *)MouseDrawer->Get_Translate_Table();
@@ -168,6 +170,13 @@ static bool Build_Cursor_Image(ShapeSet const * shape, int frame, int hotx, int 
 			line += *(unsigned short const *)line;
 		}
 	}
+
+	uint64_t hash = 14695981039346656037ULL;
+	for (unsigned char pixel : image.Pixels) {
+		hash ^= pixel;
+		hash *= 1099511628211ULL;
+	}
+	image.ContentHash = hash;
 
 	return(true);
 }
@@ -251,7 +260,7 @@ static void Flush_Cursor_Cache(void)
 	_CurrentCursor = NULL;
 	_CurrentImage = NULL;
 	_OverlayDirty = true;
-	_PresentedPositionValid = false;
+	_PresentedSnapshotValid = false;
 }
 
 
@@ -266,12 +275,12 @@ static void Flush_Cursor_Cache(void)
 void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool apply)
 {
 	int scale = Cursor_Scale();
-	bool content_rebuilt = false;
+	bool cache_invalidated = false;
 
 	if (scale != _CacheScale) {
 		Flush_Cursor_Cache();
 		_CacheScale = scale;
-		content_rebuilt = true;
+		cache_invalidated = true;
 	}
 
 	_CurrentShape = shape;
@@ -289,13 +298,14 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 				if (entry.Cursor != NULL) {
 					DestroyCursor(entry.Cursor);
 				}
-				CursorImage image;
-				Build_Cursor_Image(shape, frame, hotx, hoty, scale, image);
-				entry.Cursor = Build_Cursor(image);
-				entry.Image = std::move(image);
+				if (entry.Image.Pixels.empty()) {
+					Build_Cursor_Image(shape, frame, scale, entry.Image);
+				}
+				entry.Image.HotX = hotx * scale;
+				entry.Image.HotY = hoty * scale;
+				entry.Cursor = Build_Cursor(entry.Image);
 				entry.HotX = hotx;
 				entry.HotY = hoty;
-				content_rebuilt = true;
 			}
 			cursor = entry.Cursor;
 			_CurrentImage = entry.Image.Pixels.empty() ? NULL : &entry.Image;
@@ -307,11 +317,13 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 	if (!selected) {
 		if (_CursorCacheCount >= (int)(sizeof(_CursorCache) / sizeof(_CursorCache[0]))) {
 			Flush_Cursor_Cache();
-			content_rebuilt = true;
+			cache_invalidated = true;
 		}
 
 		CursorImage image;
-		Build_Cursor_Image(shape, frame, hotx, hoty, scale, image);
+		Build_Cursor_Image(shape, frame, scale, image);
+		image.HotX = hotx * scale;
+		image.HotY = hoty * scale;
 		cursor = Build_Cursor(image);
 
 		if (!image.Pixels.empty()) {
@@ -323,13 +335,16 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 			entry.Cursor = cursor;
 			entry.Image = std::move(image);
 			_CurrentImage = &entry.Image;
-			content_rebuilt = true;
 		} else {
 			_CurrentImage = NULL;
 		}
 	}
 
-	_ContentGeneration.Select(CursorContentSelection{ shape, frame, hotx, hoty, scale }, content_rebuilt);
+	if (_CurrentImage != NULL) {
+		_ContentGeneration.Select(CursorContentSelection{
+			_CurrentImage->Width, _CurrentImage->Height, scale, _CurrentImage->ContentHash
+		}, cache_invalidated);
+	}
 	_CurrentCursor = cursor;
 	_OverlayDirty = true;
 
@@ -406,6 +421,36 @@ static bool Current_Overlay_Position(int * x, int * y)
 }
 
 
+static void Trace_Cursor_Presentation(CursorPresentationSnapshot const & snapshot)
+{
+	bool const transition = !_DiagnosticSnapshotValid
+		|| snapshot.SemanticMouseType != _LastDiagnosticSnapshot.SemanticMouseType
+		|| snapshot.Shape != _LastDiagnosticSnapshot.Shape
+		|| snapshot.Frame != _LastDiagnosticSnapshot.Frame
+		|| snapshot.NativeHotX != _LastDiagnosticSnapshot.NativeHotX
+		|| snapshot.NativeHotY != _LastDiagnosticSnapshot.NativeHotY
+		|| snapshot.DisplayScale != _LastDiagnosticSnapshot.DisplayScale
+		|| snapshot.ImageWidth != _LastDiagnosticSnapshot.ImageWidth
+		|| snapshot.ImageHeight != _LastDiagnosticSnapshot.ImageHeight
+		|| snapshot.ContentHash != _LastDiagnosticSnapshot.ContentHash
+		|| snapshot.ContentGeneration != _LastDiagnosticSnapshot.ContentGeneration;
+
+	if (transition) {
+		DebugString("CursorSnapshot type=%d shape=%p frame=%d native_hot=%d,%d scale=%d canvas=%dx%d hash=%016llx generation=%llu anchor=%d,%d top_left=%d,%d\n",
+			snapshot.SemanticMouseType, const_cast<void *>(snapshot.Shape), snapshot.Frame,
+			snapshot.NativeHotX, snapshot.NativeHotY, snapshot.DisplayScale,
+			snapshot.ImageWidth, snapshot.ImageHeight,
+			(unsigned long long)snapshot.ContentHash,
+			(unsigned long long)snapshot.ContentGeneration,
+			snapshot.DrawableAnchorX, snapshot.DrawableAnchorY,
+			snapshot.DestinationX, snapshot.DestinationY);
+	}
+
+	_LastDiagnosticSnapshot = snapshot;
+	_DiagnosticSnapshotValid = true;
+}
+
+
 bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 {
 #ifdef OPENTS_IOS
@@ -422,13 +467,12 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 	}
 
 	overlay->Pixels = _CurrentImage->Pixels.data();
-	overlay->Width = _CurrentImage->Width;
-	overlay->Height = _CurrentImage->Height;
-	overlay->HotX = _CurrentImage->HotX;
-	overlay->HotY = _CurrentImage->HotY;
-	overlay->X = x - overlay->HotX;
-	overlay->Y = y - overlay->HotY;
-	overlay->ContentGeneration = _ContentGeneration.Current();
+	overlay->Presentation = Make_Cursor_Presentation_Snapshot(
+		(int)Map.Get_Current_Mouse_Shape(), _CurrentShape, _CurrentFrame,
+		_CurrentHotX, _CurrentHotY, _CacheScale,
+		_CurrentImage->Width, _CurrentImage->Height, _CurrentImage->ContentHash,
+		_ContentGeneration.Current(), x, y);
+	Trace_Cursor_Presentation(overlay->Presentation);
 	return(true);
 #else
 	(void)overlay;
@@ -442,12 +486,11 @@ bool Win_Cursor_Is_Dirty(void)
 #ifdef OPENTS_IOS
 	WinCursorOverlay overlay;
 	if (!Win_Cursor_Get_Overlay(&overlay)) {
-		return(_OverlayDirty || _PresentedPositionValid);
+		return(_OverlayDirty || _PresentedSnapshotValid);
 	}
 
-	return(_OverlayDirty || _ContentGeneration.Needs_Present() || !_PresentedPositionValid
-		|| overlay.X + overlay.HotX != _PresentedX
-		|| overlay.Y + overlay.HotY != _PresentedY);
+	return(_OverlayDirty || _ContentGeneration.Needs_Present() || !_PresentedSnapshotValid
+		|| !(overlay.Presentation == _PresentedSnapshot));
 #else
 	return(false);
 #endif
@@ -457,13 +500,15 @@ bool Win_Cursor_Is_Dirty(void)
 void Win_Cursor_Acknowledge_Present(WinCursorOverlay const & submitted_overlay)
 {
 #ifdef OPENTS_IOS
-	if (!_ContentGeneration.Acknowledge(submitted_overlay.ContentGeneration)) {
+	WinCursorOverlay current_overlay;
+	if (!Win_Cursor_Get_Overlay(&current_overlay)
+		|| !(current_overlay.Presentation == submitted_overlay.Presentation)
+		|| !_ContentGeneration.Acknowledge(submitted_overlay.Presentation.ContentGeneration)) {
 		return;
 	}
 
-	_PresentedX = submitted_overlay.X + submitted_overlay.HotX;
-	_PresentedY = submitted_overlay.Y + submitted_overlay.HotY;
-	_PresentedPositionValid = true;
+	_PresentedSnapshot = submitted_overlay.Presentation;
+	_PresentedSnapshotValid = true;
 	_OverlayDirty = false;
 #else
 	(void)submitted_overlay;
@@ -476,7 +521,7 @@ void Win_Cursor_Acknowledge_No_Overlay_Present(void)
 #ifdef OPENTS_IOS
 	WinCursorOverlay overlay;
 	if (!Win_Cursor_Get_Overlay(&overlay)) {
-		_PresentedPositionValid = false;
+		_PresentedSnapshotValid = false;
 		_OverlayDirty = false;
 	}
 #endif
@@ -492,4 +537,6 @@ void Win_Cursor_Shutdown(void)
 	Flush_Cursor_Cache();
 	_CurrentShape = NULL;
 	_CurrentImage = NULL;
+	_PresentedSnapshotValid = false;
+	_DiagnosticSnapshotValid = false;
 }

@@ -13,6 +13,7 @@
 #pragma once
 
 #include "win.h"
+#include "cursorpresentationpolicy.hh"
 
 #include <cstdint>
 
@@ -21,14 +22,8 @@ class ShapeSet;
 
 struct WinCursorOverlay
 {
-	unsigned char const * Pixels;
-	int Width;
-	int Height;
-	int HotX;
-	int HotY;
-	int X;
-	int Y;
-	uint64_t ContentGeneration;
+	unsigned char const * Pixels = nullptr;
+	CursorPresentationSnapshot Presentation;
 };
 
 

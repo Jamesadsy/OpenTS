@@ -495,6 +495,21 @@ bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y)
 }
 
 
+bool Win32_Gamepad_Camera_Pan_Active(void)
+{
+	return(Controller_Active()
+		&& (Axis_Value(_Axes[SDL_GAMEPAD_AXIS_RIGHTX]) != 0.0
+			|| Axis_Value(_Axes[SDL_GAMEPAD_AXIS_RIGHTY]) != 0.0
+			|| (int)_CameraPanX != 0 || (int)_CameraPanY != 0));
+}
+
+
+Uint64 Win32_Monotonic_Time_Ms(void)
+{
+	return(SDL_GetTicksNS() / 1000000ULL);
+}
+
+
 bool Win32_Gamepad_Take_Action(int * action)
 {
 	if (_Actions.empty()) {

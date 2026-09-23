@@ -61,6 +61,7 @@ class MouseClass: public ScrollClass
 		virtual bool Override_Mouse_Shape(MouseType mouse, bool wsmall=false) override;
 		virtual void Revert_Mouse_Shape(void) override;
 		virtual MouseType Get_Mouse_Shape(void) const override {return(NormalMouseShape);};
+		MouseType Get_Current_Mouse_Shape(void) const {return(CurrentMouseShape);}
 		virtual void Mouse_Small(bool wsmall) override;
 
 		virtual void Set_Default_Mouse(MouseType mouse, bool wsmall = false) override;

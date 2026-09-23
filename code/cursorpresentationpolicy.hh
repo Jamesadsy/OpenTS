@@ -14,11 +14,10 @@
 
 struct CursorContentSelection
 {
-	void const * Shape = nullptr;
-	int Frame = 0;
-	int HotX = 0;
-	int HotY = 0;
+	int Width = 0;
+	int Height = 0;
 	int Scale = 0;
+	uint64_t Hash = 0;
 
 	bool operator==(CursorContentSelection const &) const = default;
 };
@@ -68,6 +67,51 @@ class CursorContentGeneration
 		uint64_t _PresentedGeneration = 0;
 		bool _HasSelection = false;
 };
+
+
+struct CursorPresentationSnapshot
+{
+	int SemanticMouseType = 0;
+	void const * Shape = nullptr;
+	int Frame = 0;
+	int NativeHotX = 0;
+	int NativeHotY = 0;
+	int DisplayScale = 0;
+	int ImageWidth = 0;
+	int ImageHeight = 0;
+	uint64_t ContentHash = 0;
+	uint64_t ContentGeneration = 0;
+	int DrawableAnchorX = 0;
+	int DrawableAnchorY = 0;
+	int DestinationX = 0;
+	int DestinationY = 0;
+
+	bool operator==(CursorPresentationSnapshot const &) const = default;
+};
+
+
+inline CursorPresentationSnapshot Make_Cursor_Presentation_Snapshot(int semantic_mouse_type,
+	void const * shape, int frame, int native_hot_x, int native_hot_y, int display_scale,
+	int image_width, int image_height, uint64_t content_hash, uint64_t content_generation,
+	int drawable_anchor_x, int drawable_anchor_y)
+{
+	CursorPresentationSnapshot snapshot;
+	snapshot.SemanticMouseType = semantic_mouse_type;
+	snapshot.Shape = shape;
+	snapshot.Frame = frame;
+	snapshot.NativeHotX = native_hot_x;
+	snapshot.NativeHotY = native_hot_y;
+	snapshot.DisplayScale = display_scale;
+	snapshot.ImageWidth = image_width;
+	snapshot.ImageHeight = image_height;
+	snapshot.ContentHash = content_hash;
+	snapshot.ContentGeneration = content_generation;
+	snapshot.DrawableAnchorX = drawable_anchor_x;
+	snapshot.DrawableAnchorY = drawable_anchor_y;
+	snapshot.DestinationX = drawable_anchor_x - native_hot_x * display_scale;
+	snapshot.DestinationY = drawable_anchor_y - native_hot_y * display_scale;
+	return(snapshot);
+}
 
 
 struct CursorTextureUploadState

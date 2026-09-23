@@ -91,6 +91,7 @@
 #include "conquer.h"
 #include "convert.h"
 #include "data.h"
+#include "dbgprint.h"
 #include "dialog.h"
 #include "draw.h"
 #include "event.h"
@@ -111,6 +112,7 @@
 #include "scheme.h"
 #include "session.h"
 #include "shapeset.h"
+#include "sidebarlayoutpolicy.hh"
 #include "super.h"
 #include "suprtype.h"
 #include "surface.h"
@@ -311,7 +313,8 @@ SidebarClass::SidebarClass(void) :
 	IsToRedraw(true),
 	IsRepairActive(false),
 	IsUpgradeActive(false),
-	IsDemolishActive(false)
+	IsDemolishActive(false),
+	ExpandedTacticalRect(0, 0, 0, 0)
 {
 	/*
 	**	Set up the coordinates for the sidebar strips. These coordinates are for
@@ -391,6 +394,7 @@ void SidebarClass::Init_Clear(void)
 
 	IsToRedraw = true;
 	IsMobileUserCollapsed = false;
+	ExpandedTacticalRect.Set(0, 0, 0, 0);
 	IsRepairActive = false;
 	IsUpgradeActive = false;
 	IsDemolishActive = false;
@@ -808,7 +812,9 @@ bool SidebarClass::Add(RTTIType type, int id)
 		int column = Which_Column(type);
 
 		if (Column[column].Add(type, id)) {
-			Activate(1);
+			if (!IsMobileUserCollapsed) {
+				Activate(1);
+			}
 			IsToRedraw = true;
 			Flag_To_Redraw();
 			return(true);
@@ -992,7 +998,7 @@ void SidebarClass::Draw_It(bool complete)
 		IsToBlitSidebar = true;
 		Waypoint.IsDrawn = false;
 	}
-	if (ToolTips != NULL) {
+	if (IsSidebarActive && ToolTips != NULL) {
 		ToolTips->Draw_Current(true);
 	}
 	IsToRedraw = false;
@@ -1101,8 +1107,17 @@ void SidebarClass::AI(KeyNumType & input, Point2D const & xy)
 	}
 
 	if (!Debug_Map) {
-		Column[0].AI(input, xy_rel);
-		Column[1].AI(input, xy_rel);
+		if (IsSidebarActive) {
+			Column[0].AI(input, xy_rel);
+			Column[1].AI(input, xy_rel);
+		} else {
+			// Continue strip timers, sorting and production notifications while closed,
+			// but remove the per-frame input token so hidden cameos cannot be clicked.
+			KeyNumType dormant_input = KeyNumType(0);
+			Column[0].AI(dormant_input, xy_rel);
+			dormant_input = KeyNumType(0);
+			Column[1].AI(dormant_input, xy_rel);
+		}
 	}
 
 	if (IsSidebarActive) {
@@ -1284,9 +1299,9 @@ bool SidebarClass::Activate(int control)
 
 
 /// <summary>
-/// Toggles the sidebar for the deliberate controller/mobile user action. The native Activate
-/// path owns gadget membership, redraw and hit testing; this flag only prevents the normal
-/// desktop force-on policy from undoing an explicit hide on the next AI tick.
+/// Toggles the sidebar for the deliberate controller/mobile user action. Collapse saves the
+/// current tactical rectangle, removes sidebar controls, and gives that width to the map;
+/// restore returns the saved geometry before rebuilding sidebar controls and tooltips.
 /// </summary>
 void SidebarClass::Controller_Toggle_Sidebar(void)
 {
@@ -1294,11 +1309,66 @@ void SidebarClass::Controller_Toggle_Sidebar(void)
 		return;
 	}
 
-	bool const old = IsSidebarActive;
-	Activate(-1);
-	if (IsSidebarActive != old) {
-		IsMobileUserCollapsed = !IsSidebarActive;
+	if (IsSidebarActive) {
+		Rect const expanded = TacticalRect;
+		Rect const reclaimed = Collapse_Tactical_Rect_For_Sidebar(
+			expanded, SIDE_WIDTH, Options.IsSidebarOnRight);
+
+		ExpandedTacticalRect = expanded;
+		IsMobileUserCollapsed = true;
+		Activate(0);
+		if (IsSidebarActive) {
+			IsMobileUserCollapsed = false;
+			ExpandedTacticalRect.Set(0, 0, 0, 0);
+			return;
+		}
+
+		Set_View_Dimensions(reclaimed);
+		Reposition_Sidebar();
+
+		if (ToolTips != NULL) {
+			ToolTips->Reset_Current();
+		}
+		if (VisibleSurface != NULL) {
+			int const old_sidebar_x = Options.IsSidebarOnRight
+				? expanded.X + expanded.Width : 0;
+			VisibleSurface->Fill_Rect(Rect(old_sidebar_x, 0, SIDE_WIDTH,
+				VisibleSurface->Get_Height()), TBLACK);
+		}
+		IsToRedraw = true;
+		IsForceCompleteRedraw = true;
+		Flag_To_Redraw(GS_REDRAW_ALL);
+		DebugString("Sidebar collapsed; tactical viewport reclaimed %d pixels\n", SIDE_WIDTH);
+		return;
 	}
+
+	if (IsMobileUserCollapsed) {
+		Rect const collapsed = TacticalRect;
+		Rect const expanded = ExpandedTacticalRect;
+		Set_View_Dimensions(expanded);
+		Activate(1);
+		if (!IsSidebarActive) {
+			Set_View_Dimensions(collapsed);
+			if (ToolTips != NULL) {
+				ToolTips->Reset_Current();
+			}
+			return;
+		}
+
+		IsMobileUserCollapsed = false;
+		ExpandedTacticalRect.Set(0, 0, 0, 0);
+		if (ToolTips != NULL) {
+			ToolTips->Reset_Current();
+		}
+		IsToRedraw = true;
+		IsForceCompleteRedraw = true;
+		Flag_To_Redraw(GS_REDRAW_ALL);
+		DebugString("Sidebar restored; tactical viewport returned to %d,%d,%d,%d\n",
+			expanded.X, expanded.Y, expanded.Width, expanded.Height);
+		return;
+	}
+
+	Activate(1);
 }
 
 
@@ -2813,7 +2883,9 @@ void SidebarClass::Reposition_Sidebar(void)
 				tmp.ID = (i | (col << 8)) + GADGET_CAMEO;
 				tmp.Region.Set(StripClass::SelectButton[col][i].X,	  StripClass::SelectButton[col][i].Y,
 								   StripClass::SelectButton[col][i].Width, StripClass::SelectButton[col][i].Height);
-				ToolTips->Add(&tmp);
+				if (IsSidebarActive) {
+					ToolTips->Add(&tmp);
+				}
 			}
 
 		}
@@ -2822,25 +2894,25 @@ void SidebarClass::Reposition_Sidebar(void)
 		tooltip.Text = TXT_REPAIR_MODE;
 		tooltip.Region.Set(Repair.X, Repair.Y, Repair.Width, Repair.Height);
 		ToolTips->Remove(tooltip.ID);
-		ToolTips->Add(&tooltip);
+		if (IsSidebarActive) ToolTips->Add(&tooltip);
 
 		tooltip.ID = BUTTON_POWER;
 		tooltip.Text = TXT_POWER_MODE;
 		tooltip.Region.Set(Power.X, Power.Y, Power.Width, Power.Height);
 		ToolTips->Remove(tooltip.ID);
-		ToolTips->Add(&tooltip);
+		if (IsSidebarActive) ToolTips->Add(&tooltip);
 
 		tooltip.ID = BUTTON_SELL;
 		tooltip.Text = TXT_SELL_MODE;
 		tooltip.Region.Set(Upgrade.X, Upgrade.Y, Upgrade.Width, Upgrade.Height);
 		ToolTips->Remove(tooltip.ID);
-		ToolTips->Add(&tooltip);
+		if (IsSidebarActive) ToolTips->Add(&tooltip);
 
 		tooltip.ID = BUTTON_WAYPOINT;
 		tooltip.Text = TXT_WAYPOINTMODE;
 		tooltip.Region.Set(Waypoint.X, Waypoint.Y, Waypoint.Width, Waypoint.Height);
 		ToolTips->Remove(tooltip.ID);
-		ToolTips->Add(&tooltip);
+		if (IsSidebarActive) ToolTips->Add(&tooltip);
 	}
 
 	int x = 0;

@@ -410,7 +410,19 @@ ActionType ScrollClass::What_Action(Cell const & cell, ObjectClass * object, boo
 void ScrollClass::Scroll_Edge(Point2D const & point)
 {
 	if (Win_Pointer_Should_Suppress_Edge_Scroll()) {
+		Reset_Edge_Scroll_State();
 		return;
+	}
+
+	PointerEdgeScrollSource const source = Pointer_Edge_Scroll_Source(
+		Win_Pointer_Is_Controller_Owner(), Win_Pointer_Is_Direct_Touch(),
+		Win_Pointer_Camera_Pan_Active());
+	if (source == PointerEdgeScrollSource::Suppressed) {
+		Reset_Edge_Scroll_State();
+		return;
+	}
+	if (source == PointerEdgeScrollSource::NativeImmediate) {
+		ControllerEdgeDwell.Reset();
 	}
 
 	/*
@@ -430,6 +442,10 @@ void ScrollClass::Scroll_Edge(Point2D const & point)
 			int h = CompositeSurface->Get_Height() - 1;
 
 			bool at_screen_edge = (y <= 0 || x == 0 || x >= w || y >= h);
+			if (source == PointerEdgeScrollSource::ControllerDelayed && !at_screen_edge) {
+				Reset_Edge_Scroll_State();
+				return;
+			}
 
 			bool player_scrolled=false;
 
@@ -477,7 +493,13 @@ void ScrollClass::Scroll_Edge(Point2D const & point)
 				}
 
 				int control = Dir_Facing(direction);
-
+				if (source == PointerEdgeScrollSource::ControllerDelayed
+					&& !ControllerEdgeDwell.Should_Scroll(control, Win_Monotonic_Time_Ms())) {
+					Inertia = 0;
+					Counter = 0;
+					_EdgeScrollRemainder = 0.0;
+					return;
+				}
 				/*
 				**	The mouse is over a scroll region so set the mouse shape accordingly if the map
 				**	can be scrolled in the direction indicated.
@@ -546,12 +568,22 @@ void ScrollClass::Scroll_Edge(Point2D const & point)
 }
 
 
+void ScrollClass::Reset_Edge_Scroll_State(void)
+{
+	ControllerEdgeDwell.Reset();
+	Inertia = 0;
+	Counter = 0;
+	_EdgeScrollRemainder = 0.0;
+}
+
+
 // A pointing device that scrolls the view itself, rather than by pulling a pointer toward
 // an edge, hands over an offset in the window's own pixels. The frame may be drawn scaled,
 // so the offset is measured across the same conversion a position goes through, and the
 // part of a pixel that does not survive the conversion is carried rather than dropped.
-static void Pointer_Scroll_AI(bool apply)
+static bool Pointer_Scroll_AI(bool apply)
 {
+	bool const camera_pan_active = Win_Pointer_Camera_Pan_Active();
 	int touchx = 0;
 	int touchy = 0;
 	int controllerx = 0;
@@ -559,12 +591,17 @@ static void Pointer_Scroll_AI(bool apply)
 
 	// The offset is taken whether it can be used or not, so that one held back through a
 	// dialog does not arrive afterward as a jump.
-	if (!Win_Pointer_Take_Scroll(touchx, touchy, controllerx, controllery)) {
-		return;
+	bool const has_scroll = Win_Pointer_Take_Scroll(touchx, touchy, controllerx, controllery);
+	if (camera_pan_active) {
+		// Right-stick camera input owns this poll. Consume any simultaneous touch offset
+		// without letting it add to the camera movement or leave a touch fraction behind.
+		touchx = 0;
+		touchy = 0;
+		_TouchScrollRemainderX = 0.0;
+		_TouchScrollRemainderY = 0.0;
 	}
-
-	if (!apply || !GameActive || !TacticalActive || TacticalMap == NULL) {
-		return;
+	if (!has_scroll || !apply || !GameActive || !TacticalActive || TacticalMap == NULL) {
+		return(camera_pan_active);
 	}
 
 	/*
@@ -577,7 +614,7 @@ static void Pointer_Scroll_AI(bool apply)
 	VideoScaleInfo const & scale = Video_Get_Scale_Info();
 
 	if (scale.DestWidth <= 0 || scale.DestHeight <= 0) {
-		return;
+		return(camera_pan_active);
 	}
 
 	double const pixels_per_window_x = (double)scale.GameWidth / (double)scale.DestWidth;
@@ -602,6 +639,8 @@ static void Pointer_Scroll_AI(bool apply)
 		int distance = -disty;
 		Map.Scroll_Map(FACING_N, distance, true);
 	}
+
+	return(camera_pan_active);
 }
 
 
@@ -618,7 +657,7 @@ void ScrollClass::Scroll_AI(void)
 	}
 	_LastScrollPollTime = now;
 
-	Pointer_Scroll_AI(!IgnoreInput);
+	bool const camera_pan_active = Pointer_Scroll_AI(!IgnoreInput);
 
 	if (!IgnoreInput) {
 		Point2D tacti = TacticalRect.Top_Left();
@@ -626,29 +665,45 @@ void ScrollClass::Scroll_AI(void)
 		Point2D point = mouse - tacti;
 
 		if (IsMouseDown == true) {
+			Reset_Edge_Scroll_State();
 			if (Keyboard->Down(KN_LMOUSE)) {
 				Map.Mouse_Left_Held(point);
-			} else if (Keyboard->Down(KN_RMOUSE)) {
+			} else if (Keyboard->Down(KN_RMOUSE) && !camera_pan_active) {
 				Map.Scroll_Coast(point);
 			}
 			return;
 		} else {
-			Cell			cell;						/// cell click happened over
-			Coord			coord;						/// coord click happened over
-			ObjectClass *	object /*= 0*/;				// what object is in the cell
-			bool			fog;						/// is the cell in fog or not
-			bool			shadow;						// is the cell in shadow or not
-			if (Resolve_Point(point, cell, coord, object, fog, shadow)) {
-				HoverObject = object;
-				Map.Mouse_Left_Up(cell, shadow, object, What_Action(cell, object, true));
-			} else {
-				HoverObject = NULL;
-			}
-			if (Options.AutoScroll && !Debug_Map
-				&& Pointer_Edge_Scroll_Allowed(Win_Pointer_Is_Controller_Owner())) {
+			Refresh_Hover_Action(point);
+			if (!camera_pan_active && Options.AutoScroll && !Debug_Map) {
 				Scroll_Edge(point);
+			} else {
+				Reset_Edge_Scroll_State();
 			}
 		}
+	} else {
+		Reset_Edge_Scroll_State();
+	}
+}
+
+
+/// <summary>
+/// Recomputes the live native action cursor for the current tactical point. Mode entry,
+/// mode cancellation and ordinary hover all use this resolver, so no controller-owned
+/// cursor mode can replace Repair, Sell, deploy or target-specific mouse shapes.
+/// </summary>
+void ScrollClass::Refresh_Hover_Action(Point2D const & point)
+{
+	Cell cell;
+	Coord coord;
+	ObjectClass * object = NULL;
+	bool fog = false;
+	bool shadow = false;
+
+	if (Resolve_Point(point, cell, coord, object, fog, shadow)) {
+		HoverObject = object;
+		Map.Mouse_Left_Up(cell, shadow, object, What_Action(cell, object, true));
+	} else {
+		HoverObject = NULL;
 	}
 }
 
@@ -943,6 +998,9 @@ void ScrollClass::Mouse_Right_Release(Point2D const & point)
 	if (IsDragOperation) {
 		Set_Default_Mouse(MOUSE_NORMAL, Map.IsSmall);
 		IsDragOperation = false;
+		if (MouseCursor != NULL) {
+			Refresh_Hover_Action(MouseCursor->Get_Mouse_Point() - TacticalRect.Top_Left());
+		}
 		return;
 	}
 	BASECLASS::Mouse_Right_Release(point);
