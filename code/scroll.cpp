@@ -582,10 +582,10 @@ static void Pointer_Scroll_AI(bool apply)
 
 	double const pixels_per_window_x = (double)scale.GameWidth / (double)scale.DestWidth;
 	double const pixels_per_window_y = (double)scale.GameHeight / (double)scale.DestHeight;
-	int const distx = Scale_Touch_Scroll_Offset(touchx, pixels_per_window_x, _TouchScrollRemainderX)
+	int distx = Scale_Touch_Scroll_Offset(touchx, pixels_per_window_x, _TouchScrollRemainderX)
 		+ Scale_Controller_Scroll_Offset(controllerx, pixels_per_window_x, Options.ScrollRate,
 			OptionsClass::MAX_SCROLL_SETTING, _ControllerScrollRemainderX);
-	int const disty = Scale_Touch_Scroll_Offset(touchy, pixels_per_window_y, _TouchScrollRemainderY)
+	int disty = Scale_Touch_Scroll_Offset(touchy, pixels_per_window_y, _TouchScrollRemainderY)
 		+ Scale_Controller_Scroll_Offset(controllery, pixels_per_window_y, Options.ScrollRate,
 			OptionsClass::MAX_SCROLL_SETTING, _ControllerScrollRemainderY);
 
