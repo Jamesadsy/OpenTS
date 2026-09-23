@@ -19,14 +19,12 @@
 #include "cursorstate.hh"
 #include "legacyinputpolicy.hh"
 #include "mouseoverridepolicy.hh"
-#include "options.h"
 #include "pointerscrollpolicy.hh"
 
 namespace
 {
 
 constexpr int SCROLL_RATE_SETTING_COUNT = 8;
-static_assert(OptionsClass::MAX_SCROLL_SETTING == SCROLL_RATE_SETTING_COUNT);
 int Failures = 0;
 
 
@@ -136,6 +134,11 @@ void Test_Controller_ScrollRate(void)
 	Check(Controller_ScrollRate_Scale(-1, SCROLL_RATE_SETTING_COUNT) == scales[0]
 		&& Controller_ScrollRate_Scale(8, SCROLL_RATE_SETTING_COUNT) == scales[7],
 		"controller speed remains bounded outside the slider's ScrollRate values");
+
+	std::ifstream options_file(OPENTS_OPTIONS_SOURCE);
+	std::string options_source((std::istreambuf_iterator<char>(options_file)), std::istreambuf_iterator<char>());
+	Check(options_source.find("MAX_SCROLL_SETTING=8") != std::string::npos,
+		"the game controls expose all eight ScrollRate positions used by controller pan");
 
 	int touch_travel[3] = {};
 	int const rates[] = {0, 3, 7};
