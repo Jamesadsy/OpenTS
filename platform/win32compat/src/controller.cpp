@@ -248,6 +248,9 @@ void Apply_Button(SDL_GamepadButton button, bool down)
 
 void Reset_Device_State(void)
 {
+	if (_MovieCircleOwned) {
+		Win32_Touch_Movie_Circle(false);
+	}
 	Win32_Pointer_Set_Controller_Owner(false);
 	std::memset(_Axes, 0, sizeof(_Axes));
 	std::memset(_Buttons, 0, sizeof(_Buttons));
