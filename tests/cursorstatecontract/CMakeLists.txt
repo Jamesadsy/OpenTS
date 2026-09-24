@@ -9,6 +9,8 @@ target_compile_definitions(CursorStateContract PRIVATE
     "OPENTS_OPTIONS_SOURCE=\"${CMAKE_SOURCE_DIR}/code/options.h\""
     "OPENTS_OPTIONS_CPP_SOURCE=\"${CMAKE_SOURCE_DIR}/code/options.cpp\""
     "OPENTS_CONTROLLER_SOURCE=\"${CMAKE_SOURCE_DIR}/platform/win32compat/src/controller.cpp\""
+    "OPENTS_POINTER_SOURCE=\"${CMAKE_SOURCE_DIR}/platform/win32compat/src/pointer.cpp\""
+    "OPENTS_TOUCH_SOURCE=\"${CMAKE_SOURCE_DIR}/platform/win32compat/src/touch.cpp\""
     "OPENTS_SCROLL_SOURCE=\"${CMAKE_SOURCE_DIR}/code/scroll.cpp\""
     "OPENTS_SIDEBAR_SOURCE=\"${CMAKE_SOURCE_DIR}/code/sidebar.cpp\""
     "OPENTS_DISPLAY_SOURCE=\"${CMAKE_SOURCE_DIR}/code/display.cpp\""

@@ -59,6 +59,10 @@ static CursorCacheEntry _CursorCache[384];
 static int _CursorCacheCount = 0;
 static int _CacheScale = 0;
 
+static constexpr int STATIC_POINTER_FRAME = 0;
+static constexpr int STATIC_POINTER_HOT_X = 0;
+static constexpr int STATIC_POINTER_HOT_Y = 0;
+
 static ShapeSet const * _CurrentShape = NULL;
 static int _CurrentFrame = 0;
 static int _CurrentHotX = 0;
@@ -66,9 +70,9 @@ static int _CurrentHotY = 0;
 static MouseType _SemanticMouseType = MOUSE_NORMAL;
 static HCURSOR _CurrentCursor = NULL;
 static CursorImage const * _CurrentImage = NULL;
-static CursorImage _FrontEndImage;
-static ShapeSet const * _FrontEndShape = NULL;
-static int _FrontEndScale = 0;
+static CursorImage _StaticPointerImage;
+static ShapeSet const * _StaticPointerShape = NULL;
+static int _StaticPointerScale = 0;
 static bool _CursorVisible = true;
 static bool _OverlayDirty = true;
 static CursorPresentationSnapshot _PresentedSnapshot;
@@ -277,9 +281,9 @@ static void Flush_Cursor_Cache(void)
 	_CursorCacheCount = 0;
 	_CurrentCursor = NULL;
 	_CurrentImage = NULL;
-	_FrontEndImage = {};
-	_FrontEndShape = NULL;
-	_FrontEndScale = 0;
+	_StaticPointerImage = CursorImage();
+	_StaticPointerShape = NULL;
+	_StaticPointerScale = 0;
 	_OverlayDirty = true;
 	_PresentedSnapshotValid = false;
 }
@@ -308,25 +312,29 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 	_CurrentFrame = frame;
 	_CurrentHotX = hotx;
 	_CurrentHotY = hoty;
+	bool const static_pointer = MouseCursor != NULL && MouseCursor->Is_Captured();
+	int const display_frame = static_pointer ? STATIC_POINTER_FRAME : frame;
+	int const display_hot_x = static_pointer ? STATIC_POINTER_HOT_X : hotx;
+	int const display_hot_y = static_pointer ? STATIC_POINTER_HOT_Y : hoty;
 
 	HCURSOR cursor = NULL;
 	bool selected = false;
 
 	for (int index = 0; index < _CursorCacheCount; index++) {
 		CursorCacheEntry & entry = _CursorCache[index];
-		if (entry.Shape == shape && entry.Frame == frame) {
-			if (entry.HotX != hotx || entry.HotY != hoty || entry.Image.Pixels.empty()) {
+		if (entry.Shape == shape && entry.Frame == display_frame) {
+			if (entry.HotX != display_hot_x || entry.HotY != display_hot_y || entry.Image.Pixels.empty()) {
 				if (entry.Cursor != NULL) {
 					DestroyCursor(entry.Cursor);
 				}
 				if (entry.Image.Pixels.empty()) {
-					Build_Cursor_Image(shape, frame, scale, entry.Image);
+					Build_Cursor_Image(shape, display_frame, scale, entry.Image);
 				}
-				entry.Image.HotX = hotx * scale;
-				entry.Image.HotY = hoty * scale;
+				entry.Image.HotX = display_hot_x * scale;
+				entry.Image.HotY = display_hot_y * scale;
 				entry.Cursor = Build_Cursor(entry.Image);
-				entry.HotX = hotx;
-				entry.HotY = hoty;
+				entry.HotX = display_hot_x;
+				entry.HotY = display_hot_y;
 			}
 			cursor = entry.Cursor;
 			_CurrentImage = entry.Image.Pixels.empty() ? NULL : &entry.Image;
@@ -342,17 +350,17 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 		}
 
 		CursorImage image;
-		Build_Cursor_Image(shape, frame, scale, image);
-		image.HotX = hotx * scale;
-		image.HotY = hoty * scale;
+		Build_Cursor_Image(shape, display_frame, scale, image);
+		image.HotX = display_hot_x * scale;
+		image.HotY = display_hot_y * scale;
 		cursor = Build_Cursor(image);
 
 		if (!image.Pixels.empty()) {
 			CursorCacheEntry & entry = _CursorCache[_CursorCacheCount++];
 			entry.Shape = shape;
-			entry.Frame = frame;
-			entry.HotX = hotx;
-			entry.HotY = hoty;
+			entry.Frame = display_frame;
+			entry.HotX = display_hot_x;
+			entry.HotY = display_hot_y;
 			entry.Cursor = cursor;
 			entry.Image = std::move(image);
 			_CurrentImage = &entry.Image;
@@ -479,16 +487,17 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 		return(false);
 	}
 	bool const front_end = !MouseCursor->Is_Captured();
-	CursorImage const * image = _CurrentImage;
-	if (front_end && _CurrentShape != NULL) {
-		if (_FrontEndShape != _CurrentShape || _FrontEndScale != _CacheScale) {
-			Build_Cursor_Image(_CurrentShape, 0, _CacheScale, _FrontEndImage);
-			_FrontEndShape = _CurrentShape;
-			_FrontEndScale = _CacheScale;
-		}
-		image = &_FrontEndImage;
+	if (_CurrentShape == NULL) {
+		return(false);
 	}
-	if (image == NULL || image->Pixels.empty()) {
+	if (_StaticPointerShape != _CurrentShape || _StaticPointerScale != _CacheScale
+		|| _StaticPointerImage.Pixels.empty()) {
+		Build_Cursor_Image(_CurrentShape, STATIC_POINTER_FRAME, _CacheScale, _StaticPointerImage);
+		_StaticPointerShape = _CurrentShape;
+		_StaticPointerScale = _CacheScale;
+	}
+	CursorImage const * image = &_StaticPointerImage;
+	if (image->Pixels.empty()) {
 		return(false);
 	}
 
@@ -504,8 +513,7 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 	overlay->Pixels = image->Pixels.data();
 	overlay->Presentation = Make_Cursor_Presentation_Snapshot(
 		front_end ? (int)MOUSE_NORMAL : (int)_SemanticMouseType, _CurrentShape,
-		front_end ? 0 : _CurrentFrame,
-		front_end ? 0 : _CurrentHotX, front_end ? 0 : _CurrentHotY, _CacheScale,
+		STATIC_POINTER_FRAME, STATIC_POINTER_HOT_X, STATIC_POINTER_HOT_Y, _CacheScale,
 		image->Width, image->Height, image->ContentHash,
 		_ContentGeneration.Current(), x, y);
 	Trace_Cursor_Presentation(overlay->Presentation);
@@ -573,6 +581,9 @@ void Win_Cursor_Shutdown(void)
 	Flush_Cursor_Cache();
 	_CurrentShape = NULL;
 	_CurrentImage = NULL;
+	_StaticPointerImage = CursorImage();
+	_StaticPointerShape = NULL;
+	_StaticPointerScale = 0;
 	_PresentedSnapshotValid = false;
 	_DiagnosticSnapshotValid = false;
 }
