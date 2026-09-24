@@ -14,6 +14,7 @@
 
 #include "win.h"
 #include "cursorpresentationpolicy.hh"
+#include "mouse.hh"
 
 #include <cstdint>
 
@@ -28,6 +29,8 @@ struct WinCursorOverlay
 
 
 void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool apply);
+// Retains the authoritative MouseClass type for diagnostics; cursor raster changes do not set it.
+void Win_Cursor_Set_Semantic_Mouse_Type(MouseType semantic_mouse_type);
 void Win_Cursor_Set_Visible(bool visible);
 bool Win_Cursor_Handle_Set_Cursor(void);
 void Win_Cursor_Refresh(void);

@@ -345,6 +345,8 @@ void Test_Native_Cursor_And_Action_Continuity(void)
 
 	std::ifstream cursor_file(OPENTS_CURSOR_SOURCE);
 	std::string cursor_source((std::istreambuf_iterator<char>(cursor_file)), std::istreambuf_iterator<char>());
+	std::ifstream cursor_header_file(OPENTS_CURSOR_HEADER_SOURCE);
+	std::string cursor_header_source((std::istreambuf_iterator<char>(cursor_header_file)), std::istreambuf_iterator<char>());
 	std::ifstream mouse_file(OPENTS_MOUSE_HEADER_SOURCE);
 	std::string mouse_source((std::istreambuf_iterator<char>(mouse_file)), std::istreambuf_iterator<char>());
 	std::ifstream mouse_cpp_file(OPENTS_MOUSE_CPP_SOURCE);
@@ -366,18 +368,50 @@ void Test_Native_Cursor_And_Action_Continuity(void)
 	std::string const override_body = override_start == std::string::npos || override_end == std::string::npos
 		? std::string()
 		: mouse_cpp_source.substr(override_start, override_end - override_start);
+	std::size_t const reset_start = mouse_cpp_source.find("void MouseClass::Init_Clear(void)");
+	std::size_t const reset_end = mouse_cpp_source.find("bool MouseClass::Load", reset_start);
+	std::string const reset_body = reset_start == std::string::npos || reset_end == std::string::npos
+		? std::string()
+		: mouse_cpp_source.substr(reset_start, reset_end - reset_start);
+	std::size_t const overlay_start = cursor_source.find("bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)");
+	std::size_t const overlay_end = cursor_source.find("bool Win_Cursor_Is_Dirty", overlay_start);
+	std::string const overlay_body = overlay_start == std::string::npos || overlay_end == std::string::npos
+		? std::string()
+		: cursor_source.substr(overlay_start, overlay_end - overlay_start);
+	std::size_t const semantic_set_start = cursor_source.find("void Win_Cursor_Set_Semantic_Mouse_Type(MouseType semantic_mouse_type)");
+	std::size_t const semantic_set_end = cursor_source.find("\n}", semantic_set_start);
+	std::string const semantic_set_body = semantic_set_start == std::string::npos || semantic_set_end == std::string::npos
+		? std::string()
+		: cursor_source.substr(semantic_set_start, semantic_set_end - semantic_set_start + 2);
 	Check(cursor_source.find("MFCD::Retrieve(\"MOUSE.SHP\")") == std::string::npos
-		&& mouse_source.find("Get_Current_Mouse_Shape(void) const {return(CurrentMouseShape);}") != std::string::npos
-		&& cursor_source.find("Map.Get_Current_Mouse_Shape()") != std::string::npos
-		&& cursor_source.find("Make_Cursor_Presentation_Snapshot") != std::string::npos
+		&& mouse_source.find("Get_Current_Mouse_Shape") == std::string::npos
+		&& cursor_source.find("Map.Get_Current_Mouse_Shape()") == std::string::npos
+		&& cursor_header_source.find("Win_Cursor_Set_Semantic_Mouse_Type(MouseType semantic_mouse_type)") != std::string::npos
+		&& cursor_source.find("static MouseType _SemanticMouseType = MOUSE_NORMAL;") != std::string::npos
+		&& !overlay_body.empty()
+		&& overlay_body.find("Make_Cursor_Presentation_Snapshot(\n\t\t(int)_SemanticMouseType") != std::string::npos
+		&& overlay_body.find("Map.") == std::string::npos
+		&& !semantic_set_body.empty()
+		&& semantic_set_body.find("_SemanticMouseType = semantic_mouse_type;") != std::string::npos
+		&& semantic_set_body.find("_OverlayDirty = true;") != std::string::npos
+		&& semantic_set_body.find("_CurrentFrame") == std::string::npos
+		&& semantic_set_body.find("_CurrentShape") == std::string::npos
+		&& semantic_set_body.find("_CurrentHot") == std::string::npos
+		&& semantic_set_body.find("_ContentGeneration") == std::string::npos
 		&& cursor_source.find("CursorSnapshot type=%d") != std::string::npos
 		&& cursor_source.find("_LastDiagnosticSnapshot.ContentGeneration") != std::string::npos
 		&& cursor_source.find("snapshot.DrawableAnchorX != _LastDiagnosticSnapshot") == std::string::npos
 		&& !override_body.empty()
+		&& override_body.find("Mouse_Override_Shape_If_Changed") < override_body.find("Win_Cursor_Set_Semantic_Mouse_Type(CurrentMouseShape)")
+		&& override_body.find("return(changed);") != std::string::npos
 		&& override_body.find("MouseControl[mouse]") != std::string::npos
 		&& override_body.find("Get_Mouse_Hotspot(mouse)") != std::string::npos
-		&& override_body.find("MouseCursor->Set_Cursor") != std::string::npos,
-		"iOS cursor presentation follows the live native MouseType and shape/frame raster instead of a synthetic pointer");
+		&& override_body.find("MouseCursor->Set_Cursor") != std::string::npos
+		&& !reset_body.empty()
+		&& reset_body.find("CurrentMouseShape = MOUSE_NORMAL;") != std::string::npos
+		&& reset_body.find("_MouseOverrideStarted = false;") != std::string::npos
+		&& reset_body.find("Win_Cursor_Set_Semantic_Mouse_Type(MOUSE_NORMAL);") != std::string::npos,
+		"native MouseClass MouseType alone feeds diagnostic snapshots and reset returns it to MOUSE_NORMAL");
 	Check(!cancel_body.empty()
 		&& cancel_body.find("Refresh_Hover_Action") != std::string::npos
 		&& cancel_body.find("Set_Default_Mouse(MOUSE_NORMAL") == std::string::npos
@@ -510,28 +544,41 @@ void Test_Cursor_Sequences_Reach_Presentation(void)
 
 	auto apply = [&](MouseType requested) {
 		int const selected_frame = 18 + (int)requested;
+		int const hot_x = 1 + ((int)requested % 5);
+		int const hot_y = 1 + ((int)requested % 4);
+	char const * const shape_data = &loaded_shapes;
+		uint64_t const hash = ((uint64_t)(shape_data != nullptr) << 32)
+			| (uint32_t)selected_frame;
 		CursorPresentationSnapshot result;
-		bool const changed = Mouse_Override_Shape_If_Changed(startup, &loaded_shapes, requested,
+		bool const changed = Mouse_Override_Shape_If_Changed(startup, shape_data, requested,
 			current, false, current_small, Point2D(0, 0),
 			[]() {}, [&]() { return(selected_frame); },
 			[&](Point2D const &, char const * shapes, int selected_frame_for_cursor) {
-				uint64_t const hash = ((uint64_t)(shapes != nullptr) << 32)
-					| (uint32_t)selected_frame_for_cursor;
 				bool const content_changed = generation.Select(CursorContentSelection{ 64, 64, 2, hash });
 				if (content_changed && Cursor_Texture_Needs_Upload(texture, 64, 64, generation.Current())) {
 					texture = CursorTextureUploadState{ 64, 64, generation.Current(), true };
 					uploads++;
 				}
-				int const hot_x = 1 + ((int)requested % 5);
-				int const hot_y = 1 + ((int)requested % 4);
-				result = Make_Cursor_Presentation_Snapshot(requested, shapes,
-					selected_frame_for_cursor, hot_x, hot_y, 2, 64, 64, hash,
-					generation.Current(), pointer.X, pointer.Y);
-				presented.push_back(result);
+				Check(shapes == &loaded_shapes && selected_frame_for_cursor == selected_frame,
+					"MouseClass override forwards the actual native shape and selected frame");
 			});
+		result = Make_Cursor_Presentation_Snapshot(current, shape_data,
+			selected_frame, hot_x, hot_y, 2, 64, 64, hash,
+			generation.Current(), pointer.X, pointer.Y);
+		presented.push_back(result);
 		Check(changed && current == requested && !presented.empty()
 			&& presented.back().SemanticMouseType == requested,
 			"native MouseType reaches the cursor snapshot for each resolved tactical state");
+		CursorPresentationSnapshot const presentation_only_change = Make_Cursor_Presentation_Snapshot(
+			current, shape_data, selected_frame + 1, hot_x + 1, hot_y + 1, 2,
+			64, 64, hash, generation.Current(), pointer.X + 17, pointer.Y - 9);
+		Check(presentation_only_change.SemanticMouseType == result.SemanticMouseType
+			&& presentation_only_change.Frame != result.Frame
+			&& presentation_only_change.NativeHotX != result.NativeHotX
+			&& presentation_only_change.NativeHotY != result.NativeHotY
+			&& presentation_only_change.DrawableAnchorX != result.DrawableAnchorX
+			&& presentation_only_change.DrawableAnchorY != result.DrawableAnchorY,
+			"frame, hotspot and pointer-only presentation changes preserve the committed native MouseType");
 		return(result);
 	};
 

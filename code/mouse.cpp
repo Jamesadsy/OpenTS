@@ -58,6 +58,7 @@
 #include "shapeset.h"
 #include "smudtype.h"
 #include "terrtype.h"
+#include "wincursor.h"
 #include "xmouse.h"
 
 #include <memory>
@@ -78,6 +79,7 @@ ShapeSet const * MouseClass::MouseShapes;
 **	rate so it uses the constant system timer.
 */
 CDTimerClass<SystemTimerClass> MouseClass::Timer = 0;
+static bool _MouseOverrideStarted = false;
 
 
 /***********************************************************************************************
@@ -277,7 +279,7 @@ bool MouseClass::Override_Mouse_Shape(MouseType mouse, bool wsmall)
 	**	change.
 	*/
 	Point2D const hotspot = Get_Mouse_Hotspot(mouse);
-	return(Mouse_Override_Shape_If_Changed(startup, MouseShapes, mouse, CurrentMouseShape,
+	bool const changed = Mouse_Override_Shape_If_Changed(_MouseOverrideStarted, MouseShapes, mouse, CurrentMouseShape,
 		wsmall, IsSmall, hotspot,
 		[this, control]() {
 			Timer = control->FrameRate;
@@ -286,7 +288,9 @@ bool MouseClass::Override_Mouse_Shape(MouseType mouse, bool wsmall)
 		[this, mouse, wsmall]() { return(Get_Mouse_Current_Frame(mouse, wsmall)); },
 		[this](Point2D const & cursor_hotspot, ShapeSet const * shapes, int shape_frame) {
 			MouseCursor->Set_Cursor(cursor_hotspot, shapes, shape_frame);
-		}));
+		});
+	Win_Cursor_Set_Semantic_Mouse_Type(CurrentMouseShape);
+	return(changed);
 }
 
 
@@ -383,7 +387,10 @@ void MouseClass::Init_Clear(void)
 {
 	BASECLASS::Init_Clear();
 	IsSmall = false;
+	CurrentMouseShape = MOUSE_NORMAL;
 	NormalMouseShape = MOUSE_NORMAL;
+	_MouseOverrideStarted = false;
+	Win_Cursor_Set_Semantic_Mouse_Type(MOUSE_NORMAL);
 }
 
 

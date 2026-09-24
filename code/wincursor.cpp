@@ -63,6 +63,7 @@ static ShapeSet const * _CurrentShape = NULL;
 static int _CurrentFrame = 0;
 static int _CurrentHotX = 0;
 static int _CurrentHotY = 0;
+static MouseType _SemanticMouseType = MOUSE_NORMAL;
 static HCURSOR _CurrentCursor = NULL;
 static CursorImage const * _CurrentImage = NULL;
 static bool _CursorVisible = true;
@@ -72,6 +73,20 @@ static bool _PresentedSnapshotValid = false;
 static CursorPresentationSnapshot _LastDiagnosticSnapshot;
 static bool _DiagnosticSnapshotValid = false;
 static CursorContentGeneration _ContentGeneration;
+
+
+/// <summary>
+/// Retains the native MouseClass selection for diagnostic snapshots. Raster presentation
+/// updates intentionally leave this semantic value unchanged.
+/// </summary>
+void Win_Cursor_Set_Semantic_Mouse_Type(MouseType semantic_mouse_type)
+{
+	assert((unsigned)semantic_mouse_type < MOUSE_COUNT);
+	if (_SemanticMouseType != semantic_mouse_type) {
+		_SemanticMouseType = semantic_mouse_type;
+		_OverlayDirty = true;
+	}
+}
 
 
 /// <summary>
@@ -468,7 +483,7 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 
 	overlay->Pixels = _CurrentImage->Pixels.data();
 	overlay->Presentation = Make_Cursor_Presentation_Snapshot(
-		(int)Map.Get_Current_Mouse_Shape(), _CurrentShape, _CurrentFrame,
+		(int)_SemanticMouseType, _CurrentShape, _CurrentFrame,
 		_CurrentHotX, _CurrentHotY, _CacheScale,
 		_CurrentImage->Width, _CurrentImage->Height, _CurrentImage->ContentHash,
 		_ContentGeneration.Current(), x, y);
