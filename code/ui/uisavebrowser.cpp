@@ -34,6 +34,7 @@
 #include "loaddlg.h"
 #include "msgbox.h"
 #include "saveload.h"
+#include "saveidentity.h"
 #include "vector.h"
 
 #include <RmlUi/Core/DataModelHandle.h>
@@ -90,6 +91,8 @@ void UISaveBrowserPresenterClass::Refresh(void)
 		FileEntryClass const * const file = Options.Files[index];
 
 		EntryType entry;
+		entry.Filename = file->Filename;
+		entry.Number = file->Num;
 		entry.Description = file->Descr;
 		entry.Session = (file->Type != GAME_NORMAL);
 		entry.Valid = file->Valid;
@@ -174,11 +177,11 @@ void UISaveBrowserPresenterClass::Run_Pending(void)
 
 	Pending = SUB_NONE;
 
-	if (Selected < 0 || Selected >= Options.Files.Count()) {
+	if (Selected < 0 || Selected >= (int)Entries.size()) {
 		return;
 	}
 
-	if (!Options.Load_File(Options.Files[Selected]->Filename)) {
+	if (!Options.Load_File(Entries[Selected].Filename.c_str())) {
 		WWMessageBox().Process(TXT_ERROR_LOADING_GAME, TXT_OK, TXT_NONE, TXT_NONE);
 		return;
 	}
@@ -190,17 +193,17 @@ void UISaveBrowserPresenterClass::Run_Pending(void)
 void UISaveBrowserPresenterClass::Accept(void)
 {
 	// No row means no operation, which is the LB_ERR the driver tested for.
-	if (Selected < 0 || Selected >= Options.Files.Count()) {
+	if (Selected < 0 || Selected >= (int)Entries.size()) {
 		return;
 	}
 
-	FileEntryClass * const entry = Options.Files[Selected];
+	EntryType const entry = Entries[Selected];
 
 	switch (Style) {
 		case STYLE_LOAD:
 			// The campaign list is read before the screen steps aside, where the dialog
 			// read it, because the load needs it and a mission save carries a campaign.
-			if (entry->Num != -1) {
+			if (entry.Number != -1) {
 				Init_Campaigns();
 			}
 			Pending = SUB_LOAD;
@@ -216,12 +219,13 @@ void UISaveBrowserPresenterClass::Accept(void)
 			char picked[256];
 			char const * filename = NULL;
 
-			if (entry->Valid) {
-				filename = entry->Filename;
-			} else {
+			std::string new_filename;
+			if (!entry.Valid) {
 				Options.Pick_Filename(picked);
-				filename = picked;
+				new_filename = picked;
 			}
+			std::string const target = Save_Target_Filename(entry.Valid, entry.Filename, new_filename);
+			filename = target.c_str();
 
 			if (filename == NULL) {
 				return;
@@ -253,23 +257,16 @@ void UISaveBrowserPresenterClass::Accept(void)
 
 		case STYLE_DELETE: {
 			char buffer[256];
-			sprintf(buffer, "%s\n%s", Fetch_String(TXT_DELETE_FILE_QUERY), entry->Descr);
+			sprintf(buffer, "%s\n%s", Fetch_String(TXT_DELETE_FILE_QUERY), entry.Description.c_str());
 
 			if (WWMessageBox()._Process(buffer, 1, TXT_YES, TXT_NO, TXT_NONE)) {
 				return;
 			}
 
-			Options.Delete_File(entry->Filename);
-
-			Options.Files.Delete_Index(Selected);
-			delete entry;
-			Entries.erase(Entries.begin() + Selected);
+			Options.Delete_File(entry.Filename.c_str());
+			Refresh();
 
 			// The list stays open for another deletion; emptying it leaves the screen.
-			Selected = Entries.empty() ? -1 : 0;
-			CanAct = !Entries.empty();
-			ListChanged = true;
-
 			if (Entries.empty()) {
 				Finish(true);
 			}

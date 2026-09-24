@@ -18,6 +18,7 @@
 
 #include "savemgr.h"
 
+#include "addon.h"
 #include "_map.h"
 #include "_rules.h"
 #include "_wsproto.h"
@@ -275,7 +276,9 @@ void SaveManagerClass::Autosave_Service(void)
 
 		if (single) {
 			AutosaveClass::KindType kind = Single_Player_Kind();
-			int slot = Autosave.Advance(kind);
+			AutosaveClass::ProductType const product = Addon_Enabled(ADDON_FIRESTORM)
+				? AutosaveClass::ProductType::Firestorm : AutosaveClass::ProductType::TiberianSun;
+			int slot = Autosave.Advance(product, kind);
 
 			char buffer[512];
 			std::snprintf(buffer, sizeof(buffer), Fetch_String(TXT_AUTOSAVE_DESCRIPTION), slot + 1, Scen->Description);

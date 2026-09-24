@@ -282,13 +282,12 @@ static void Spawner_Bind_Presentation(void)
 
 
 /// <summary>
-/// Hands the game the automatic-save schedule and ring positions the launch file names. A
-/// resumed save overrides the positions when it loads.
+/// Hands this product the ring positions the launch file names. A resumed save overrides
+/// them when it loads.
 /// </summary>
-static void Spawner_Bind_Autosave(void)
+static void Spawner_Bind_Autosave(AutosaveClass::ProductType product)
 {
-	SaveManager.Autosave.Set_Interval(SpawnConfig.AutoSaveInterval);
-	SaveManager.Autosave.Seed_Slots(SpawnConfig.NextCampaignAutoSave, SpawnConfig.NextSkirmishAutoSave);
+	SaveManager.Autosave.Seed_Slots(product, SpawnConfig.NextCampaignAutoSave, SpawnConfig.NextSkirmishAutoSave);
 }
 
 
@@ -565,7 +564,7 @@ bool Spawner_Prepare(bool & gameloaded)
 
 	SpawnConsumed = true;
 
-	Spawner_Bind_Autosave();
+	SaveManager.Autosave.Set_Interval(SpawnConfig.AutoSaveInterval);
 	Spawner_Bind_Presentation();
 
 	/*
@@ -588,6 +587,8 @@ bool Spawner_Prepare(bool & gameloaded)
 		Enable_Addon(ADDON_FIRESTORM);
 		Set_Required_Addon(ADDON_FIRESTORM);
 	}
+	Spawner_Bind_Autosave(SpawnConfig.Firestorm
+		? AutosaveClass::ProductType::Firestorm : AutosaveClass::ProductType::TiberianSun);
 
 	if (SpawnConfig.Launch_Type() == SpawnerConfigClass::LaunchType::Campaign) {
 		if (!Spawner_Setup_Campaign()) {

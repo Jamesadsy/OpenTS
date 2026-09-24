@@ -75,6 +75,7 @@
 #include "always.h"
 
 #include "sidebar.h"
+#include "sidebarfeedback.h"
 
 #include "_bench.h"
 #include "_convert.h"
@@ -1149,12 +1150,16 @@ void SidebarClass::AI(KeyNumType & input, Point2D const & xy)
 		}
 	}
 
-	if ((!IsRepairMode) && Repair.IsOn) {
-		Repair.Turn_Off();
+	RepairSellSidebarFeedbackType const repair_sell_feedback =
+		RepairSell_Sidebar_Feedback_From_Native_Flags(IsRepairMode, IsSellMode);
+	if (repair_sell_feedback.RepairOn != Repair.IsOn) {
+		if (repair_sell_feedback.RepairOn) Repair.Turn_On();
+		else Repair.Turn_Off();
 	}
 
-	if ((!IsSellMode) && Upgrade.IsOn) {
-		Upgrade.Turn_Off();
+	if (repair_sell_feedback.SellOn != Upgrade.IsOn) {
+		if (repair_sell_feedback.SellOn) Upgrade.Turn_On();
+		else Upgrade.Turn_Off();
 	}
 
 	if ((!IsPowerMode) && Power.IsOn) {

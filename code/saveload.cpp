@@ -137,6 +137,7 @@
 #include "vox.h"
 #include "warhead.h"
 #include "ambient.h"
+#include "addon.h"
 #include "voc.h"
 #include "wave.h"
 #include "waypoint.h"
@@ -1240,12 +1241,14 @@ static void Serialize_Misc_Values(SaveStreamClass & stream)
 	}
 
 	// The ring positions travel with every save, so a load continues where the save left off.
-	int campaign_slot = SaveManager.Autosave.Campaign_Slot();
-	int skirmish_slot = SaveManager.Autosave.Skirmish_Slot();
+	AutosaveClass::ProductType const product = Addon_Enabled(ADDON_FIRESTORM)
+		? AutosaveClass::ProductType::Firestorm : AutosaveClass::ProductType::TiberianSun;
+	int campaign_slot = SaveManager.Autosave.Campaign_Slot(product);
+	int skirmish_slot = SaveManager.Autosave.Skirmish_Slot(product);
 	stream.Serialize(campaign_slot);
 	stream.Serialize(skirmish_slot);
 	if (stream.Is_Loading()) {
-		SaveManager.Autosave.Seed_Slots(campaign_slot, skirmish_slot);
+		SaveManager.Autosave.Seed_Slots(product, campaign_slot, skirmish_slot);
 	}
 
 	// The scenario's own tutorial lines travel here, since a load never re-reads the map.

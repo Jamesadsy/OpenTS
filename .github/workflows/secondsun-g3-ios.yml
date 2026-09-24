@@ -34,7 +34,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-039-cursor-present-recap-scroll" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-040-cursor-sidebar-camera-reconcile" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-043-sol-integrated-recovery" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-045-luna-cursor-stabilization"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-045-luna-cursor-stabilization" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-048-integrated-polish"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -56,10 +57,10 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build/g3-host-tests \
-            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CursorStateContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract OpenTSDonorHostSmoke \
+            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CursorStateContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SidebarFeedbackContract OpenTSDonorHostSmoke \
             --parallel 3 2>&1 | tee proof/host-tests-build.log
           ctest --test-dir build/g3-host-tests \
-            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cursor-scrollrate-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|donor-host-smoke)$' \
+            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cursor-scrollrate-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|sidebar-feedback-contract|donor-host-smoke)$' \
             --output-on-failure 2>&1 | tee proof/host-tests-ctest.log
 
       - name: Configure unsigned iPhoneOS device route
@@ -84,6 +85,49 @@ jobs:
           cmake --install build/ios-device --config Release \
             --prefix build/ios-ci-stage --component OpenTS 2>&1 | tee proof/ios-install.log
           test -d build/ios-ci-stage/OpenTS.app
+
+      - name: Package the approved OpenTS app icon
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=build/ios-ci-stage/OpenTS.app
+          SOURCE=code/resources/app-icon/OpenTS-CABAL-Tiberium-AppIcon.png
+          EXPECTED=5EFFA2D17329F21C591B49BFBEE1D8ECE1A82809F21B42A7F61B94AF613CAE0C
+          actual=$(shasum -a 256 "$SOURCE" | awk '{print toupper($1)}')
+          test "$actual" = "$EXPECTED"
+          printf '%s\n' "$actual" | tee proof/approved-icon-sha256.log
+          scripts/build/ios/make-icons.sh build/ios-icons 2>&1 | tee proof/icon-build.log
+          cp build/ios-icons/Assets.car "$APP/Assets.car"
+          cp build/ios-icons/AppIcon60x60@2x.png \
+            build/ios-icons/AppIcon76x76@2x.png \
+            build/ios-icons/AppIcon83.5x83.5@2x.png "$APP/"
+          test -s "$APP/Assets.car"
+          test -s "$APP/AppIcon60x60@2x.png"
+          test -s "$APP/AppIcon76x76@2x.png"
+          test -s "$APP/AppIcon83.5x83.5@2x.png"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('build/ios-icons/AppIcon.xcassets/AppIcon.appiconset')
+          manifest = json.loads((root / 'Contents.json').read_text())
+          images = manifest['images']
+          required = {
+              'AppIcon20x20@2x.png', 'AppIcon20x20@3x.png', 'AppIcon29x29@2x.png',
+              'AppIcon29x29@3x.png', 'AppIcon40x40@2x.png', 'AppIcon40x40@3x.png',
+              'AppIcon60x60@2x.png', 'AppIcon60x60@3x.png', 'AppIcon20x20~ipad.png',
+              'AppIcon20x20@2x~ipad.png', 'AppIcon29x29~ipad.png', 'AppIcon29x29@2x~ipad.png',
+              'AppIcon40x40~ipad.png', 'AppIcon40x40@2x~ipad.png', 'AppIcon76x76~ipad.png',
+              'AppIcon76x76@2x~ipad.png',
+              'AppIcon83.5x83.5@2x~ipad.png', 'AppIcon1024x1024.png',
+          }
+          actual = {entry['filename'] for entry in images}
+          assert actual == required, (actual ^ required)
+          for entry in images:
+              assert (root / entry['filename']).is_file(), entry['filename']
+          assert any(entry['idiom'] == 'ios-marketing' and entry['size'] == '1024x1024'
+                     for entry in images)
+          print('complete iPhone/iPad/marketing AppIcon asset catalog: ok')
+          PY
 
       - name: Verify staged Mach-O bundle plist resources and unsigned state
         shell: bash
@@ -114,12 +158,17 @@ jobs:
           test "$(plist_value UIDeviceFamily:0)" = 1
           test "$(plist_value UIDeviceFamily:1)" = 2
           test "$(plist_value UIRequiredDeviceCapabilities:0)" = arm64
+          test "$(plist_value CFBundleIconName)" = AppIcon
           test "$(plist_value UISupportedInterfaceOrientations:0)" = UIInterfaceOrientationLandscapeLeft
           test "$(plist_value UISupportedInterfaceOrientations:1)" = UIInterfaceOrientationLandscapeRight
           test "$(plist_value UISupportedInterfaceOrientations~ipad:0)" = UIInterfaceOrientationLandscapeLeft
           test "$(plist_value UISupportedInterfaceOrientations~ipad:1)" = UIInterfaceOrientationLandscapeRight
 
           test -f "$APP/Language.dat"
+          test -s "$APP/Assets.car"
+          test -s "$APP/AppIcon60x60@2x.png"
+          test -s "$APP/AppIcon76x76@2x.png"
+          test -s "$APP/AppIcon83.5x83.5@2x.png"
           test -d "$APP/ui"
           for required in \
             ui/LatoLatin-Regular.ttf \

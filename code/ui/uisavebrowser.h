@@ -48,6 +48,11 @@ class UISaveBrowserPresenterClass : public UIPresenterClass
 
 		struct EntryType
 		{
+			// The file identity and campaign number captured when this row was built.
+			// Actions use these values directly instead of resolving the row by its text.
+			std::string Filename;
+			int Number = -1;
+
 			std::string Description;
 
 			// The date and the time the list showed in its own two columns.

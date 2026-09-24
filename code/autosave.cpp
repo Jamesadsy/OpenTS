@@ -22,10 +22,23 @@ void AutosaveClass::Set_Interval(int frames)
 }
 
 
-void AutosaveClass::Seed_Slots(int campaign, int skirmish)
+void AutosaveClass::Seed_Slots(ProductType product, int campaign, int skirmish)
 {
-	CampaignSlot = Held_Slot(campaign);
-	SkirmishSlot = Held_Slot(skirmish);
+	std::array<int, 2> & slots = NextSlots[Product_Index(product)];
+	slots[0] = Held_Slot(campaign);
+	slots[1] = Held_Slot(skirmish);
+}
+
+
+int AutosaveClass::Campaign_Slot(ProductType product) const
+{
+	return(NextSlots[Product_Index(product)][0]);
+}
+
+
+int AutosaveClass::Skirmish_Slot(ProductType product) const
+{
+	return(NextSlots[Product_Index(product)][1]);
 }
 
 
@@ -56,9 +69,10 @@ bool AutosaveClass::Take_Armed(void)
 }
 
 
-int AutosaveClass::Advance(KindType kind)
+int AutosaveClass::Advance(ProductType product, KindType kind)
 {
-	int & slot = kind == KindType::Campaign ? CampaignSlot : SkirmishSlot;
+	std::array<int, 2> & slots = NextSlots[Product_Index(product)];
+	int & slot = slots[kind == KindType::Campaign ? 0 : 1];
 	int written = slot;
 
 	slot = (slot + 1) % SLOT_COUNT;
@@ -81,6 +95,12 @@ std::string AutosaveClass::File_Name(KindType kind, int slot)
 int AutosaveClass::Held_Slot(int slot)
 {
 	return(slot >= 0 && slot < SLOT_COUNT ? slot : 0);
+}
+
+
+std::size_t AutosaveClass::Product_Index(ProductType product)
+{
+	return(product == ProductType::Firestorm ? 1 : 0);
 }
 
 

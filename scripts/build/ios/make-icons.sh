@@ -15,7 +15,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 
-SOURCE=${OPENTS_IOS_ICON_SOURCE:-$ROOT/code/resources/app-icon/opents.svg}
+SOURCE=${OPENTS_IOS_ICON_SOURCE:-$ROOT/code/resources/app-icon/OpenTS-CABAL-Tiberium-AppIcon.png}
+EXPECTED_SOURCE_SHA256=5EFFA2D17329F21C591B49BFBEE1D8ECE1A82809F21B42A7F61B94AF613CAE0C
 OUT=${1:-$ROOT/build/ios-icons}
 # iOS masks the icon itself and refuses an alpha channel, so the artwork is flattened onto
 # an opaque colour. The artwork draws no frame of its own, so nothing is cropped off.
@@ -24,9 +25,14 @@ INSET=${OPENTS_IOS_ICON_INSET:-0.0}
 MIN_OS=${OPENTS_IOS_MIN_OS:-16.0}
 
 [[ -f $SOURCE ]] || { echo "make-icons: icon source not found: $SOURCE" >&2; exit 1; }
+SOURCE_SHA256=$(shasum -a 256 "$SOURCE" | awk '{print toupper($1)}')
+[[ $SOURCE_SHA256 == "$EXPECTED_SOURCE_SHA256" ]] || {
+  echo "make-icons: source does not match the approved OpenTS icon ($EXPECTED_SOURCE_SHA256)" >&2
+  exit 1
+}
 
 STAMP="$OUT/.stamp"
-WANT="source=$SOURCE bg=$BG inset=$INSET mtime=$(stat -f %m "$SOURCE")"
+WANT="source=$SOURCE sha256=$SOURCE_SHA256 bg=$BG inset=$INSET"
 if [[ -f $STAMP && -f $OUT/Assets.car ]] && [[ $(cat "$STAMP") == "$WANT" ]]; then
   echo "  icons: up to date ($OUT)"
   exit 0
@@ -77,6 +83,7 @@ ipad 29x29 1x 29 AppIcon29x29~ipad.png
 ipad 29x29 2x 58 AppIcon29x29@2x~ipad.png
 ipad 40x40 1x 40 AppIcon40x40~ipad.png
 ipad 40x40 2x 80 AppIcon40x40@2x~ipad.png
+ipad 76x76 1x 76 AppIcon76x76~ipad.png
 ipad 76x76 2x 152 AppIcon76x76@2x~ipad.png
 ipad 83.5x83.5 2x 167 AppIcon83.5x83.5@2x~ipad.png
 ios-marketing 1024x1024 1x 1024 AppIcon1024x1024.png
@@ -132,4 +139,4 @@ for f in "$OUT"/AppIcon*.png; do
 done
 
 echo "$WANT" > "$STAMP"
-echo "  icons: generated from $(basename "$SOURCE") -> $OUT"
+echo "  icons: generated from approved $(basename "$SOURCE") ($SOURCE_SHA256) -> $OUT"

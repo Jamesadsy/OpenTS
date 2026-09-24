@@ -155,7 +155,7 @@ A click inside the radar picture with something selected issues an order when th
 
 ### The mode buttons
 
-The four buttons above the strips toggle the same modes as [Repair Mode](/commands/togglerepair/), [Sell Mode](/commands/togglesell/), [Power Mode](/commands/togglepower/) and [Waypoint Mode](/commands/waypointmode/), in that order from the left.
+The four buttons above the strips toggle the same modes as [Repair Mode](/commands/togglerepair/), [Sell Mode](/commands/togglesell/), [Power Mode](/commands/togglepower/) and [Waypoint Mode](/commands/waypointmode/), in that order from the left. The Repair and Sell buttons show their pressed state from the active native mode, including when Square cycles between them or Circle cancels a mode.
 
 ## What is fixed in the engine
 

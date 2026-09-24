@@ -18,6 +18,7 @@
 namespace {
 
 using KindType = AutosaveClass::KindType;
+using ProductType = AutosaveClass::ProductType;
 
 int Failures = 0;
 
@@ -32,9 +33,9 @@ void Check(bool condition, char const * what)
 }
 
 
-std::string Next_Name(AutosaveClass & autosave, KindType kind)
+std::string Next_Name(AutosaveClass & autosave, ProductType product, KindType kind)
 {
-	return(AutosaveClass::File_Name(kind, autosave.Advance(kind)));
+	return(AutosaveClass::File_Name(kind, autosave.Advance(product, kind)));
 }
 
 }
@@ -49,9 +50,9 @@ int main(void)
 	{
 		AutosaveClass autosave;
 
-		Check(Next_Name(autosave, KindType::Campaign) == "AUTOSAVE1.SAV",
+		Check(Next_Name(autosave, ProductType::TiberianSun, KindType::Campaign) == "AUTOSAVE1.SAV",
 			"the first campaign autosave is slot one");
-		Check(Next_Name(autosave, KindType::Skirmish) == "AUTOSAVE_SKIRMISH1.SAV",
+		Check(Next_Name(autosave, ProductType::TiberianSun, KindType::Skirmish) == "AUTOSAVE_SKIRMISH1.SAV",
 			"a skirmish autosave keeps the prefix a client files by");
 	}
 
@@ -63,32 +64,83 @@ int main(void)
 		std::string names;
 
 		for (int index = 0; index <= AutosaveClass::SLOT_COUNT; index++) {
-			names += Next_Name(autosave, KindType::Campaign) + " ";
+			names += Next_Name(autosave, ProductType::TiberianSun, KindType::Campaign) + " ";
 		}
 
 		Check(names == "AUTOSAVE1.SAV AUTOSAVE2.SAV AUTOSAVE3.SAV AUTOSAVE4.SAV AUTOSAVE5.SAV AUTOSAVE1.SAV ",
 			"the campaign slots turn in order and start over");
-		Check(autosave.Campaign_Slot() == 1, "a save records the slot that follows the one written");
-		Check(autosave.Skirmish_Slot() == 0, "turning the campaign ring leaves the skirmish ring alone");
+		Check(autosave.Campaign_Slot(ProductType::TiberianSun) == 1,
+			"a save records the slot that follows the one written");
+		Check(autosave.Skirmish_Slot(ProductType::TiberianSun) == 0,
+			"turning the campaign ring leaves the skirmish ring alone");
 	}
 
 	/*
-	 * A launch file seeds where each ring continues from, and a slot the ring does not hold
-	 * starts it over rather than naming a file outside the ring.
+	 * Each product keeps its own launch-file seed. A slot the ring does not hold starts that
+	 * product's ring over rather than naming a file outside it.
 	 */
 	{
 		AutosaveClass autosave;
 
-		autosave.Seed_Slots(4, 2);
-		Check(Next_Name(autosave, KindType::Campaign) == "AUTOSAVE5.SAV" &&
-			Next_Name(autosave, KindType::Campaign) == "AUTOSAVE1.SAV",
+		autosave.Seed_Slots(ProductType::TiberianSun, 4, 2);
+		Check(Next_Name(autosave, ProductType::TiberianSun, KindType::Campaign) == "AUTOSAVE5.SAV" &&
+			Next_Name(autosave, ProductType::TiberianSun, KindType::Campaign) == "AUTOSAVE1.SAV",
 			"a seeded campaign ring continues from the slot named");
-		Check(Next_Name(autosave, KindType::Skirmish) == "AUTOSAVE_SKIRMISH3.SAV",
+		Check(Next_Name(autosave, ProductType::TiberianSun, KindType::Skirmish) == "AUTOSAVE_SKIRMISH3.SAV",
 			"a seeded skirmish ring continues from its own slot");
 
-		autosave.Seed_Slots(-2, AutosaveClass::SLOT_COUNT);
-		Check(autosave.Campaign_Slot() == 0 && autosave.Skirmish_Slot() == 0,
+		autosave.Seed_Slots(ProductType::TiberianSun, -2, AutosaveClass::SLOT_COUNT);
+		Check(autosave.Campaign_Slot(ProductType::TiberianSun) == 0
+			&& autosave.Skirmish_Slot(ProductType::TiberianSun) == 0,
 			"a seed the ring does not hold starts it over");
+	}
+
+	/*
+	 * Firestorm has its own campaign and skirmish rings even though their filenames match
+	 * Base TS. Persisting and restoring each save's two cursors resumes only its product.
+	 */
+	{
+		AutosaveClass autosave;
+		for (int index = 0; index < 3; index++) {
+			Next_Name(autosave, ProductType::TiberianSun, KindType::Campaign);
+		}
+		Next_Name(autosave, ProductType::Firestorm, KindType::Campaign);
+		Next_Name(autosave, ProductType::Firestorm, KindType::Skirmish);
+
+		Check(autosave.Campaign_Slot(ProductType::TiberianSun) == 3
+			&& autosave.Campaign_Slot(ProductType::Firestorm) == 1,
+			"Base TS and Firestorm campaign cursors advance independently");
+		Check(autosave.Skirmish_Slot(ProductType::TiberianSun) == 0
+			&& autosave.Skirmish_Slot(ProductType::Firestorm) == 1,
+			"Base TS and Firestorm skirmish cursors advance independently");
+
+		AutosaveClass restarted;
+		restarted.Seed_Slots(ProductType::TiberianSun,
+			autosave.Campaign_Slot(ProductType::TiberianSun), autosave.Skirmish_Slot(ProductType::TiberianSun));
+		restarted.Seed_Slots(ProductType::Firestorm,
+			autosave.Campaign_Slot(ProductType::Firestorm), autosave.Skirmish_Slot(ProductType::Firestorm));
+		Check(Next_Name(restarted, ProductType::TiberianSun, KindType::Campaign) == "AUTOSAVE4.SAV"
+			&& Next_Name(restarted, ProductType::Firestorm, KindType::Campaign) == "AUTOSAVE2.SAV",
+			"reconstructed state resumes the saved product-specific next slots");
+	}
+
+	/*
+	 * The five fixed names are the full visible autosave set; one more write replaces slot one.
+	 */
+	{
+		AutosaveClass autosave;
+		std::string slots[AutosaveClass::SLOT_COUNT];
+		for (int index = 0; index < AutosaveClass::SLOT_COUNT; index++) {
+			int const slot = autosave.Advance(ProductType::TiberianSun, KindType::Campaign);
+			slots[slot] = "save " + std::to_string(index + 1);
+		}
+		int const replaced = autosave.Advance(ProductType::TiberianSun, KindType::Campaign);
+		slots[replaced] = "save 6";
+		int count = 0;
+		for (std::string const & slot : slots) if (!slot.empty()) count++;
+		Check(count == AutosaveClass::SLOT_COUNT, "the visible campaign autosave set stays bounded at five");
+		Check(replaced == 0 && slots[0] == "save 6" && slots[1] == "save 2",
+			"the sixth campaign autosave replaces the correct oldest ring slot");
 	}
 
 	/*
