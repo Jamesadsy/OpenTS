@@ -10,6 +10,7 @@
 #include "always.h"
 
 #include "vidscale.h"
+#include "vidscalepolicy.hh"
 
 #include "video.h"
 #include "win.h"
@@ -37,12 +38,9 @@ bool Video_Scaling_Active(void)
 /// <param name="point">The position to convert in place.</param>
 void Window_Point_To_Game(POINT & point)
 {
-	VideoScaleInfo const & scale = Video_Get_Scale_Info();
-
-	if (scale.DestWidth > 0 && scale.DestHeight > 0) {
-		point.x = (LONG)floor((point.x - scale.DestX) * (double)scale.GameWidth / (double)scale.DestWidth);
-		point.y = (LONG)floor((point.y - scale.DestY) * (double)scale.GameHeight / (double)scale.DestHeight);
-	}
+	VideoPoint const game = Window_Pixels_To_Game(Video_Get_Scale_Info(), {(int)point.x, (int)point.y});
+	point.x = game.X;
+	point.y = game.Y;
 }
 
 
@@ -53,12 +51,9 @@ void Window_Point_To_Game(POINT & point)
 /// corner of the area the frame pixel covers on screen.</param>
 void Game_Point_To_Window(POINT & point)
 {
-	VideoScaleInfo const & scale = Video_Get_Scale_Info();
-
-	if (scale.GameWidth > 0 && scale.GameHeight > 0) {
-		point.x = scale.DestX + (LONG)floor(point.x * (double)scale.DestWidth / (double)scale.GameWidth);
-		point.y = scale.DestY + (LONG)floor(point.y * (double)scale.DestHeight / (double)scale.GameHeight);
-	}
+	VideoPoint const drawable = Game_To_Drawable_Pixels(Video_Get_Scale_Info(), {(int)point.x, (int)point.y});
+	point.x = drawable.X;
+	point.y = drawable.Y;
 }
 
 

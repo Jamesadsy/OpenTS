@@ -368,8 +368,9 @@ void WWMouseClass::Convert_Coordinate(int & x, int & y) const
 	**	Convert the mouse position to legal bounds.
 	*/
 	POINT point;
-	point.x = x - ConfiningRect.X;
-	point.y = y - ConfiningRect.Y;
+	point.x = x;
+	point.y = y;
+	ScreenToClient(Window, &point);
 	Window_Point_To_Game(point);
 
 	VideoScaleInfo const & scale = Video_Get_Scale_Info();

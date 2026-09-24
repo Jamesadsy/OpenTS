@@ -66,6 +66,9 @@ static int _CurrentHotY = 0;
 static MouseType _SemanticMouseType = MOUSE_NORMAL;
 static HCURSOR _CurrentCursor = NULL;
 static CursorImage const * _CurrentImage = NULL;
+static CursorImage _FrontEndImage;
+static ShapeSet const * _FrontEndShape = NULL;
+static int _FrontEndScale = 0;
 static bool _CursorVisible = true;
 static bool _OverlayDirty = true;
 static CursorPresentationSnapshot _PresentedSnapshot;
@@ -274,6 +277,9 @@ static void Flush_Cursor_Cache(void)
 	_CursorCacheCount = 0;
 	_CurrentCursor = NULL;
 	_CurrentImage = NULL;
+	_FrontEndImage = {};
+	_FrontEndShape = NULL;
+	_FrontEndScale = 0;
 	_OverlayDirty = true;
 	_PresentedSnapshotValid = false;
 }
@@ -469,9 +475,20 @@ static void Trace_Cursor_Presentation(CursorPresentationSnapshot const & snapsho
 bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 {
 #ifdef OPENTS_IOS
-	if (overlay == NULL || !_CursorVisible
-		|| _CurrentImage == NULL
-		|| _CurrentImage->Pixels.empty()) {
+	if (overlay == NULL || !_CursorVisible || MouseCursor == NULL) {
+		return(false);
+	}
+	bool const front_end = !MouseCursor->Is_Captured();
+	CursorImage const * image = _CurrentImage;
+	if (front_end && _CurrentShape != NULL) {
+		if (_FrontEndShape != _CurrentShape || _FrontEndScale != _CacheScale) {
+			Build_Cursor_Image(_CurrentShape, 0, _CacheScale, _FrontEndImage);
+			_FrontEndShape = _CurrentShape;
+			_FrontEndScale = _CacheScale;
+		}
+		image = &_FrontEndImage;
+	}
+	if (image == NULL || image->Pixels.empty()) {
 		return(false);
 	}
 
@@ -481,11 +498,15 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 		return(false);
 	}
 
-	overlay->Pixels = _CurrentImage->Pixels.data();
+	_ContentGeneration.Select(CursorContentSelection{
+		image->Width, image->Height, _CacheScale, image->ContentHash
+	});
+	overlay->Pixels = image->Pixels.data();
 	overlay->Presentation = Make_Cursor_Presentation_Snapshot(
-		(int)_SemanticMouseType, _CurrentShape, _CurrentFrame,
-		_CurrentHotX, _CurrentHotY, _CacheScale,
-		_CurrentImage->Width, _CurrentImage->Height, _CurrentImage->ContentHash,
+		front_end ? (int)MOUSE_NORMAL : (int)_SemanticMouseType, _CurrentShape,
+		front_end ? 0 : _CurrentFrame,
+		front_end ? 0 : _CurrentHotX, front_end ? 0 : _CurrentHotY, _CacheScale,
+		image->Width, image->Height, image->ContentHash,
 		_ContentGeneration.Current(), x, y);
 	Trace_Cursor_Presentation(overlay->Presentation);
 	return(true);

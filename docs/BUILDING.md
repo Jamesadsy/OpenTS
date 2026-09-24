@@ -261,12 +261,13 @@ refuses to start without one. The engine's own log is written to
 beside cannot be written to.
 
 On iOS the host pointer is hidden and the renderer submits a cached software cursor after
-the game frame and UI overlays. It uses the current `MOUSE.SHP` shape and frame, hotspot,
+the game frame and UI overlays. Tactical play uses the current `MOUSE.SHP` shape and frame, hotspot,
 logical visibility, and internal pointer position, mapped through the same physical scaling
 and letterboxing as the frame. The cursor overlay does not mutate the game surface, so a
 pointer move can present without uploading the full frame. Its click anchor follows the game
 pointer; each frame's scaled native hotspot determines the sprite's top-left, so changing
-cursor shapes does not move the click point. Position-only updates reuse the same raster.
+cursor shapes does not move the click point. Menus and modal screens use the ordinary arrow.
+Position-only updates reuse the same raster.
 `OPENTS_MODE_ICON` remains an optional diagnostic override for the existing mode-icon
 fallback.
 
@@ -280,21 +281,20 @@ where `OPENTS_TOUCH_LOG_DIR` names a different one. `-TOUCHLOG` on the command
 line, or `OPENTS_TOUCH_LOG` in the environment, creates the directory rather than
 waiting for one. Each run writes its own file and every line is flushed, so a run
 that ends without a crash report still leaves its last gesture on disk.
+During a movie, a stationary touch or Circle hold of 500 ms skips it. Releasing early
+cancels the request; a quick tap or press does not skip.
 
 The controller's right stick pans the tactical camera. The raw `ScrollRate` settings 0
 through 7 map to 600, 560, 520, 480, 440, 400, 360 and 320 window pixels per second;
 the default setting is 3. The right trigger boosts left-stick pointer movement only. A
-controller-moved pointer must dwell on a native edge direction for 2000 ms before edge
+controller-moved pointer must dwell on a native edge direction for 1000 ms before edge
 scrolling starts; changing direction or leaving the edge restarts that delay. Hardware
 mouse edge scrolling remains immediate. Two-finger touch pan remains independent of
 `ScrollRate`.
 
-Triangle hides the 168-pixel sidebar and gives that width to the tactical view; Triangle
-again restores the saved view and sidebar layout. The hidden sidebar keeps production
-updates and controller actions active, but its controls and tooltips cannot receive hover
-or click input. Square cycles the native DisplayClass Repair and Sell modes, and Circle
-cancels through the native right-click path before resolving the cursor for the current
-target.
+Triangle currently leaves the sidebar visible. Square cycles the native DisplayClass Repair
+and Sell modes, and Circle cancels through the native right-click path before resolving the
+cursor for the current target.
 
 ## Build from Visual Studio Code
 

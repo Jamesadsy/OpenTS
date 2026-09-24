@@ -13,9 +13,17 @@
 #include <vector>
 
 #include "cdfile.h"
+#include "addon.h"
 #include "deploymentconfig.h"
 #include "gamedirs.h"
 #include "rawfile.h"
+
+static bool FirestormSelected = false;
+
+bool Addon_Enabled(AddonType addon)
+{
+	return(addon == ADDON_FIRESTORM && FirestormSelected);
+}
 
 namespace {
 
@@ -204,15 +212,53 @@ void Test_Saved_Games_And_Repeatability(void)
 {
 	std::string const sep = Separator();
 	Reset();
-	Check(Saved_Game_Name("SAVE0001.SAV") == "Saved Games" + sep + "SAVE0001.SAV",
-		"saved games use a dedicated child of the current directory");
+	FirestormSelected = false;
+	Check(Saved_Game_Name("SAVE0001.SAV") == "Saved Games" + sep + "Tiberian Sun" + sep + "SAVE0001.SAV",
+		"Base TS saves use their own child of Saved Games");
 	Check(File_Exists(Root / "Saved Games"), "the saved games child is created when needed");
+	Check(File_Exists(Root / "Saved Games" / "Tiberian Sun"), "the Base TS save folder is created");
+	Check(Saved_Game_Name("AUTOSAVE0.SAV").find("Tiberian Sun") != std::string::npos,
+		"Base TS autosaves use the same isolated product folder");
+	FirestormSelected = true;
+	Check(Saved_Game_Name("SAVE0001.SAV") == "Saved Games" + sep + "Firestorm" + sep + "SAVE0001.SAV",
+		"Firestorm manual saves cannot overwrite Base TS manual saves");
+	Check(Saved_Game_Name("AUTOSAVE0.SAV") == "Saved Games" + sep + "Firestorm" + sep + "AUTOSAVE0.SAV",
+		"Firestorm autosave rotation cannot overwrite Base TS autosaves");
+	Check(Saved_Game_Name("LEGACY.NET") == "Saved Games" + sep + "LEGACY.NET",
+		"multiplayer saves keep their existing path");
+	Check(Saved_Game_Name("RandMap.Sed") == "Saved Games" + sep + "RandMap.Sed",
+		"map seeds keep their existing path");
+	Write_File(Root / "Saved Games" / "LEGACY.SAV", "preserve");
+	Write_File(Root / "Saved Games" / "Tiberian Sun" / "SAVE0001.SAV", "base");
+	Write_File(Root / "Saved Games" / "Firestorm" / "SAVE0001.SAV", "expansion");
+	auto list_product = [](std::filesystem::path const & directory) {
+		std::vector<std::string> names;
+		for (auto const & entry : std::filesystem::directory_iterator(directory)) {
+			if (entry.is_regular_file() && entry.path().extension() == ".SAV") {
+				names.push_back(entry.path().filename().string());
+			}
+		}
+		std::sort(names.begin(), names.end());
+		return(names);
+	};
+	Check_List(list_product(Root / "Saved Games" / "Tiberian Sun"), {"SAVE0001.SAV"},
+		"Base TS load listing sees its new save and no Firestorm or legacy save");
+	Check_List(list_product(Root / "Saved Games" / "Firestorm"), {"SAVE0001.SAV"},
+		"Firestorm load listing sees its new save and no Base TS or legacy save");
+	Check(Read_File(Saved_Game_Name("SAVE0001.SAV")) == "expansion",
+		"Firestorm load resolves its own new save");
+	FirestormSelected = false;
+	Check(Read_File(Saved_Game_Name("SAVE0001.SAV")) == "base",
+		"Base TS load resolves its own new save");
+	Check(Read_File(Name(Root / "Saved Games" / "LEGACY.SAV")) == "preserve",
+		"mixed legacy saves remain untouched outside new product lists");
 
 	Reset();
 	std::filesystem::path const user = Root / "User" / "Saves";
 	Set_User_Directory(Name(user).c_str());
 	Apply_Game_Directories();
-	Check(Saved_Game_Name("SAVE0002.SAV") == Name(user / "Saved Games") + sep + "SAVE0002.SAV",
+	FirestormSelected = false;
+	Check(Saved_Game_Name("SAVE0002.SAV") == Name(user / "Saved Games" / "Tiberian Sun") + sep + "SAVE0002.SAV",
 		"saved games move beneath USERDIR");
 	Check(File_Exists(user / "Saved Games"), "the USERDIR saved games child is created");
 	CDFileClass file("AGAIN.DAT");

@@ -59,14 +59,18 @@ WNDPROC Win32_Class_Procedure(char const * name)
 
 // Every position and size this layer reports is in physical pixels, because that is what
 // the engine measures its frame and its client area in. The host works in logical points,
-// so one density converts between them. It is read from the display rather than from the
-// window so that it answers the same before and after the window exists.
+// so one density converts between them. A live window supplies its actual backing scale;
+// before creation the display mode is the only available estimate.
 float Win32_Pixel_Density(void)
 {
 	SDL_DisplayID display = SDL_GetPrimaryDisplay();
 	Win32Window * main = Win32_Lookup(_MainWindow);
 
 	if (main != NULL && main->Handle != NULL) {
+		float const density = SDL_GetWindowPixelDensity(main->Handle);
+		if (density > 0.0f) {
+			return(density);
+		}
 		display = SDL_GetDisplayForWindow(main->Handle);
 	}
 

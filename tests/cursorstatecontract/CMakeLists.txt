@@ -17,4 +17,6 @@ target_compile_definitions(CursorStateContract PRIVATE
     "OPENTS_CURSOR_SOURCE=\"${CMAKE_SOURCE_DIR}/code/wincursor.cpp\""
     "OPENTS_CURSOR_HEADER_SOURCE=\"${CMAKE_SOURCE_DIR}/code/wincursor.h\""
     "OPENTS_MOUSE_HEADER_SOURCE=\"${CMAKE_SOURCE_DIR}/code/mouse.h\""
+    "OPENTS_WWMOUSE_SOURCE=\"${CMAKE_SOURCE_DIR}/code/wwmouse.cpp\""
+    "OPENTS_WINDOW_SOURCE=\"${CMAKE_SOURCE_DIR}/platform/win32compat/src/window.cpp\""
 )

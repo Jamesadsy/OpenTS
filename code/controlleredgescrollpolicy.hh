@@ -34,7 +34,7 @@ inline PointerEdgeScrollSource Pointer_Edge_Scroll_Source(bool controller_owns_p
 class ControllerEdgeScrollDwell
 {
 	public:
-		static constexpr uint64_t DWELL_MS = 2000;
+		static constexpr uint64_t DWELL_MS = 1000;
 
 		bool Should_Scroll(int direction, uint64_t now_ms)
 		{

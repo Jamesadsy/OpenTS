@@ -124,6 +124,8 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event);
 void Win32_Touch_Service(void);
 void Win32_Touch_Cancel(void);
 void Win32_Touch_Set_Movie_Mode(bool playing);
+bool Win32_Touch_Movie_Mode(void);
+void Win32_Touch_Movie_Circle(bool down);
 
 // The offset the tactical view has still to travel, in the window's own pixels, taken whole
 // so the remainder is never lost between polls.

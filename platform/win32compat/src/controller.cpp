@@ -31,6 +31,7 @@ Sint16 _Axes[SDL_GAMEPAD_AXIS_COUNT];
 bool _Buttons[SDL_GAMEPAD_BUTTON_COUNT];
 bool _ControllerControlHeld;
 bool _ControllerAltHeld;
+bool _MovieCircleOwned;
 bool _Focused = true;
 bool _Initialized;
 bool _HaveServiceTime;
@@ -195,8 +196,16 @@ void Apply_Button(SDL_GamepadButton button, bool down)
 			break;
 
 		case SDL_GAMEPAD_BUTTON_EAST:
-			Post_Controller_Mouse(SDL_BUTTON_RIGHT, down,
-				down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
+			if (down && Win32_Touch_Movie_Mode()) {
+				_MovieCircleOwned = true;
+				Win32_Touch_Movie_Circle(true);
+			} else if (!down && _MovieCircleOwned) {
+				Win32_Touch_Movie_Circle(false);
+				_MovieCircleOwned = false;
+			} else {
+				Post_Controller_Mouse(SDL_BUTTON_RIGHT, down,
+					down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
+			}
 			break;
 
 		case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
@@ -244,6 +253,7 @@ void Reset_Device_State(void)
 	std::memset(_Buttons, 0, sizeof(_Buttons));
 	_ControllerControlHeld = false;
 	_ControllerAltHeld = false;
+	_MovieCircleOwned = false;
 	_CameraPanX = 0.0;
 	_CameraPanY = 0.0;
 	_HaveServiceTime = false;

@@ -25,6 +25,7 @@
 #include "controlleredgescrollpolicy.hh"
 #include "rect.h"
 #include "sidebarlayoutpolicy.hh"
+#include "vidscalepolicy.hh"
 
 namespace
 {
@@ -183,19 +184,21 @@ void Test_Controller_ScrollRate(void)
 		"hardware pointer scrolls immediately, controller pointer waits, and direct touch or camera pan suppresses edges");
 
 	ControllerEdgeScrollDwell dwell;
-	Check(!dwell.Should_Scroll(3, 1000) && !dwell.Should_Scroll(3, 2999)
-		&& !dwell.Should_Scroll(4, 3000) && !dwell.Should_Scroll(4, 4999)
-		&& dwell.Should_Scroll(4, 5000),
-		"controller edge dwell waits 2000 ms and restarts when the native direction changes");
+	Check(ControllerEdgeScrollDwell::DWELL_MS == 1000
+		&& !dwell.Should_Scroll(3, 1000) && !dwell.Should_Scroll(3, 1999)
+		&& dwell.Should_Scroll(3, 2000)
+		&& !dwell.Should_Scroll(4, 2001) && !dwell.Should_Scroll(4, 3000)
+		&& dwell.Should_Scroll(4, 3001),
+		"controller edge dwell waits 1000 ms and restarts when the native direction changes");
 	dwell.Reset();
-	Check(!dwell.Should_Scroll(3, 10000) && !dwell.Should_Scroll(0, 11000)
-		&& !dwell.Should_Scroll(3, 11999) && !dwell.Should_Scroll(3, 13998)
-		&& dwell.Should_Scroll(3, 13999),
-		"leaving the edge resets controller dwell and requires a fresh 2000 ms stay");
+	Check(!dwell.Should_Scroll(3, 10000) && !dwell.Should_Scroll(0, 10500)
+		&& !dwell.Should_Scroll(3, 11999) && !dwell.Should_Scroll(3, 12998)
+		&& dwell.Should_Scroll(3, 12999),
+		"leaving the edge resets controller dwell and requires a fresh 1000 ms stay");
 	dwell.Reset();
 	Check(!dwell.Should_Scroll(5, 20000) && !dwell.Should_Scroll(0, 20500)
-		&& !dwell.Should_Scroll(5, 21999) && !dwell.Should_Scroll(5, 23998)
-		&& dwell.Should_Scroll(5, 23999),
+		&& !dwell.Should_Scroll(5, 21999) && !dwell.Should_Scroll(5, 22998)
+		&& dwell.Should_Scroll(5, 22999),
 		"after direct right-stick pan, a neutral pointer at the same edge starts a new dwell");
 
 	std::ifstream file(OPENTS_SCROLL_SOURCE);
@@ -238,94 +241,20 @@ void Test_Controller_ScrollRate(void)
 }
 
 
-void Test_Sidebar_Reclaim_Transaction(void)
+void Test_Sidebar_Safe_Fallback(void)
 {
-	Rect const right_expanded(0, 16, 472, 384);
-	Rect const right_collapsed = Collapse_Tactical_Rect_For_Sidebar(right_expanded, 168, true);
-	Rect const left_expanded(168, 16, 472, 384);
-	Rect const left_collapsed = Collapse_Tactical_Rect_For_Sidebar(left_expanded, 168, false);
-	Check(right_collapsed == Rect(0, 16, 640, 384)
-		&& right_collapsed.Width - right_expanded.Width == 168,
-		"right-sidebar Triangle collapse reclaims exactly 168 tactical pixels");
-	Check(left_collapsed == Rect(0, 16, 640, 384)
-		&& left_collapsed.X == left_expanded.X - 168
-		&& left_collapsed.Width - left_expanded.Width == 168,
-		"left-sidebar Triangle collapse reclaims the same 168 pixels from the left");
-	Check(right_expanded == Rect(0, 16, 472, 384),
-		"the original tactical rectangle remains available as the exact restore target");
-
 	std::ifstream sidebar_file(OPENTS_SIDEBAR_SOURCE);
 	std::string sidebar_source((std::istreambuf_iterator<char>(sidebar_file)), std::istreambuf_iterator<char>());
 	std::size_t const toggle_start = sidebar_source.find("void SidebarClass::Controller_Toggle_Sidebar(void)");
 	std::size_t const toggle_end = sidebar_source.find("SidebarClass::StripClass::StripClass", toggle_start);
 	std::string const toggle_body = toggle_start == std::string::npos || toggle_end == std::string::npos
-		? std::string()
-		: sidebar_source.substr(toggle_start, toggle_end - toggle_start);
-	std::size_t const hidden_ai_start = sidebar_source.find("void SidebarClass::AI(KeyNumType & input");
-	std::size_t const hidden_ai_end = sidebar_source.find("void SidebarClass::Recalc(void)", hidden_ai_start);
-	std::string const hidden_ai = hidden_ai_start == std::string::npos || hidden_ai_end == std::string::npos
-		? std::string()
-		: sidebar_source.substr(hidden_ai_start, hidden_ai_end - hidden_ai_start);
-	std::size_t const activate_start = sidebar_source.find("bool SidebarClass::Activate(int control)");
-	std::size_t const activate_end = sidebar_source.find("void SidebarClass::Controller_Toggle_Sidebar", activate_start);
-	std::string const activate_body = activate_start == std::string::npos || activate_end == std::string::npos
-		? std::string()
-		: sidebar_source.substr(activate_start, activate_end - activate_start);
-	std::size_t const render_start = sidebar_source.find("void SidebarClass::Draw_It(bool complete)");
-	std::size_t const render_end = sidebar_source.find("void SidebarClass::Blit_Sidebar", render_start);
-	std::string const render_body = render_start == std::string::npos || render_end == std::string::npos
-		? std::string()
-		: sidebar_source.substr(render_start, render_end - render_start);
-	std::size_t const blit_end = sidebar_source.find("void SidebarClass::AI(KeyNumType & input", render_end);
-	std::string const blit_body = render_end == std::string::npos || blit_end == std::string::npos
-		? std::string()
-		: sidebar_source.substr(render_end, blit_end - render_end);
-	std::size_t const hide_flag = toggle_body.find("IsMobileUserCollapsed = true;");
-	std::size_t const deactivate = toggle_body.find("Activate(0)");
-	std::size_t const dimensions = toggle_body.find("Set_View_Dimensions(reclaimed)");
-	std::size_t const reflow = toggle_body.find("Reposition_Sidebar();");
-	std::size_t const restore_geometry = toggle_body.find("Set_View_Dimensions(expanded)");
-	std::size_t const restore_activate = toggle_body.find("Activate(1)", restore_geometry);
-	std::size_t const restore_commit = toggle_body.find("IsMobileUserCollapsed = false;", restore_activate);
-	std::size_t const actions = hidden_ai.find("while (Win_Gamepad_Take_Action(action))");
-	std::size_t const hidden_controls = hidden_ai.find("if (IsSidebarActive)");
+		? std::string() : sidebar_source.substr(toggle_start, toggle_end - toggle_start);
 	Check(!toggle_body.empty()
-		&& hide_flag != std::string::npos && deactivate > hide_flag
-		&& dimensions > deactivate && reflow > dimensions
-		&& toggle_body.find("VisibleSurface->Fill_Rect") != std::string::npos
-		&& toggle_body.find("Repair_Mode_Control") == std::string::npos
-		&& toggle_body.find("Sell_Mode_Control") == std::string::npos
-		&& restore_geometry != std::string::npos && restore_activate > restore_geometry
-		&& restore_commit > restore_activate
-		&& toggle_body.find("IsForceCompleteRedraw = true;") != std::string::npos
-		&& toggle_body.find("Flag_To_Redraw(GS_REDRAW_ALL)") != std::string::npos,
-		"Triangle saves the original state, collapses and clears the former strip, then restores geometry before successful activation");
-	Check(!hidden_ai.empty()
-		&& hidden_ai.find("KeyNumType dormant_input = KeyNumType(0)") != std::string::npos
-		&& actions != std::string::npos && hidden_controls > actions
-		&& hidden_ai.find("Controller_Repair_Sell_Cycle()") != std::string::npos
-		&& hidden_ai.find("Controller_Toggle_Sidebar()") != std::string::npos
-		&& hidden_ai.find("BASECLASS::AI(input, xy);") != std::string::npos,
-		"hidden sidebar drains controller actions and keeps tactical input and production timers running");
-	Check(!activate_body.empty()
-		&& activate_body.find("Remove_A_Button(RadarButton)") != std::string::npos
-		&& activate_body.find("Add_A_Button(RadarButton)") != std::string::npos
-		&& activate_body.find("Column[0].Deactivate()") != std::string::npos
-		&& !render_body.empty()
-		&& render_body.find("IsSidebarActive && ToolTips != NULL") != std::string::npos
-		&& !blit_body.empty()
-		&& blit_body.find("if (IsSidebarActive && GameActive && ScenarioActive)") != std::string::npos,
-		"native activation restores radar/sidebar gadgets while hidden rendering cannot draw tooltips or blit stale sidebar pixels");
-
-	std::size_t const reposition_start = sidebar_source.find("void SidebarClass::Reposition_Sidebar(void)");
-	std::size_t const reposition_end = sidebar_source.find("const char * SidebarClass::Help_Text", reposition_start);
-	std::string const reposition_body = reposition_start == std::string::npos || reposition_end == std::string::npos
-		? std::string()
-		: sidebar_source.substr(reposition_start, reposition_end - reposition_start);
-	Check(!reposition_body.empty()
-		&& reposition_body.find("if (IsSidebarActive) {\n\t\t\t\t\tToolTips->Add(&tmp);") != std::string::npos
-		&& reposition_body.find("if (IsSidebarActive) ToolTips->Add(&tooltip)") != std::string::npos,
-		"hidden sidebar cameo and mode-button tooltip hit regions are removed during reflow");
+		&& toggle_body.find("Set_View_Dimensions") == std::string::npos
+		&& toggle_body.find("Activate(0)") == std::string::npos
+		&& toggle_body.find("VisibleSurface->Fill_Rect") == std::string::npos
+		&& toggle_body.find("IsMobileUserCollapsed = true") == std::string::npos,
+		"Triangle leaves sidebar and tactical buffer geometry intact");
 }
 
 
@@ -389,7 +318,8 @@ void Test_Native_Cursor_And_Action_Continuity(void)
 		&& cursor_header_source.find("Win_Cursor_Set_Semantic_Mouse_Type(MouseType semantic_mouse_type)") != std::string::npos
 		&& cursor_source.find("static MouseType _SemanticMouseType = MOUSE_NORMAL;") != std::string::npos
 		&& !overlay_body.empty()
-		&& overlay_body.find("Make_Cursor_Presentation_Snapshot(\n\t\t(int)_SemanticMouseType") != std::string::npos
+		&& overlay_body.find("front_end ? (int)MOUSE_NORMAL : (int)_SemanticMouseType") != std::string::npos
+		&& overlay_body.find("front_end ? 0 : _CurrentFrame") != std::string::npos
 		&& overlay_body.find("Map.") == std::string::npos
 		&& !semantic_set_body.empty()
 		&& semantic_set_body.find("_SemanticMouseType = semantic_mouse_type;") != std::string::npos
@@ -527,6 +457,41 @@ void Test_Cursor_Content_Presentation(void)
 	Check(select.SemanticMouseType == MOUSE_CAN_SELECT && deploy.SemanticMouseType == MOUSE_DEPLOY
 		&& select.Shape == deploy.Shape && select.Frame != deploy.Frame && select.ContentHash != deploy.ContentHash,
 		"cursor presentation snapshots retain native semantic type, frame and pixel identity");
+}
+
+
+void Test_Window_To_Cursor_Anchor(void)
+{
+	VideoScaleInfo const scale{640, 440, 2532, 1170, 415, 0, 1702, 1170, 1702.0f / 640, 1170.0f / 440};
+	VideoPoint const window_point{1315, 552};
+	VideoPoint const click_game = Window_Pixels_To_Game(scale, window_point);
+	VideoPoint const drag_origin_game = Window_Pixels_To_Game(scale, window_point);
+	VideoPoint const anchor = Game_To_Drawable_Pixels(scale, click_game);
+	CursorPresentationSnapshot const cursor = Make_Cursor_Presentation_Snapshot(
+		MOUSE_CAN_MOVE, nullptr, 0, 8, 8, 3, 72, 72, 1, 1, anchor.X, anchor.Y);
+	Check(click_game.X == drag_origin_game.X && click_game.Y == drag_origin_game.Y
+		&& cursor.DestinationX + cursor.NativeHotX * cursor.DisplayScale == anchor.X
+		&& cursor.DestinationY + cursor.NativeHotY * cursor.DisplayScale == anchor.Y
+		&& std::abs(anchor.X - window_point.X) <= 3
+		&& std::abs(anchor.Y - window_point.Y) <= 3,
+		"visible hotspot and drag-selection origin share one drawable anchor under letterboxing and non-integer scale");
+	VideoPoint const incorrectly_scaled = Game_To_Drawable_Pixels(scale, anchor);
+	Check(std::abs(incorrectly_scaled.X - anchor.X) > 100,
+		"a duplicate game-to-drawable transform is detected by the anchor contract");
+
+	std::ifstream mouse_file(OPENTS_WWMOUSE_SOURCE);
+	std::string mouse_source((std::istreambuf_iterator<char>(mouse_file)), std::istreambuf_iterator<char>());
+	std::size_t const start = mouse_source.find("void WWMouseClass::Convert_Coordinate(int & x, int & y) const");
+	std::size_t const end = mouse_source.find("void WWMouseClass::Get_Bounded_Position", start);
+	std::string const conversion = start == std::string::npos || end == std::string::npos
+		? std::string() : mouse_source.substr(start, end - start);
+	std::ifstream window_file(OPENTS_WINDOW_SOURCE);
+	std::string window_source((std::istreambuf_iterator<char>(window_file)), std::istreambuf_iterator<char>());
+	Check(conversion.find("ScreenToClient(Window, &point)") != std::string::npos
+		&& conversion.find("Window_Point_To_Game(point)") != std::string::npos
+		&& conversion.find("ConfiningRect.X") == std::string::npos
+		&& window_source.find("SDL_GetWindowPixelDensity(main->Handle)") != std::string::npos,
+		"polled pointer uses the current window origin and backing density before the shared game transform");
 }
 
 
@@ -683,10 +648,11 @@ int main(void)
 	Test_Square_Mode_Cycle();
 	Test_Mode_Icon_Ownership();
 	Test_Controller_ScrollRate();
-	Test_Sidebar_Reclaim_Transaction();
+	Test_Sidebar_Safe_Fallback();
 	Test_Native_Cursor_And_Action_Continuity();
 	Test_Mouse_Override_Frontier();
 	Test_Cursor_Content_Presentation();
+	Test_Window_To_Cursor_Anchor();
 	Test_Cursor_Sequences_Reach_Presentation();
 	Test_Legacy_Controller_Service_Order();
 	std::printf("%s\n", Failures == 0 ? "All checks passed." : "There were failures.");

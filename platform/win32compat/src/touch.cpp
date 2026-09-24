@@ -8,6 +8,7 @@
  ******************************************************************************/
 
 #include "iospaths.h"
+#include "movieholdpolicy.h"
 #include "win32compat.h"
 
 #include <sys/stat.h>
@@ -35,7 +36,7 @@
 //   one finger, dragged              left button held from the press point
 //   one finger, held still           right click, which is the engine's cancel and deselect
 //   two fingers, dragged             a scroll offset the tactical view consumes, with inertia
-//   any tap while a movie plays      the ESC the movie skip already waits for
+//   held touch or Circle in a movie  the ESC the movie skip already waits for
 //
 // The pointer follows the effective touch position, including the first down and motion
 // inside the pending dead zone. When the gesture ends the pointer stays where the gesture
@@ -98,7 +99,7 @@ enum PhaseType
 	PHASE_PRESSED,		// the long press has fired; the finger has nothing left to say
 	PHASE_PAN,			// two fingers are moving the tactical view
 	PHASE_SPENT,		// the gesture is over but fingers are still on the glass
-	PHASE_MOVIE			// a movie is playing, so a tap means skip and nothing else
+	PHASE_MOVIE			// a movie is playing, so a deliberate hold can skip
 };
 
 struct FingerRecord
@@ -150,6 +151,7 @@ double _ScrollY;
 DeferredButton _Press;
 DeferredButton _Release;
 bool _MovieMode;
+MovieSkipHold _MovieSkipHold;
 
 // Which button this layer is holding down, so that nothing here ever releases a button a
 // real mouse pressed.
@@ -675,6 +677,9 @@ void Finger_Down(SDL_FingerID id, float x, float y, Uint64 now)
 	Stop_Coast();
 
 	if (_Fingers.size() >= 2) {
+		if (_Phase == PHASE_MOVIE) {
+			_MovieSkipHold.Release(MovieSkipHold::Source::Touch);
+		}
 		if (_Phase == PHASE_PENDING || _Phase == PHASE_DRAG || _Phase == PHASE_IDLE) {
 			Begin_Pan(now);
 		}
@@ -690,6 +695,9 @@ void Finger_Down(SDL_FingerID id, float x, float y, Uint64 now)
 	_PressY = y;
 	_PressTime = now;
 	Set_Phase(_MovieMode ? PHASE_MOVIE : PHASE_PENDING, "first finger down");
+	if (_MovieMode) {
+		_MovieSkipHold.Press(MovieSkipHold::Source::Touch, now);
+	}
 	Move_To(x, y);
 }
 
@@ -704,6 +712,12 @@ void Finger_Motion(SDL_FingerID id, float x, float y, Uint64 now)
 
 	finger->X = x;
 	finger->Y = y;
+	if (_Phase == PHASE_MOVIE) {
+		if (std::hypot(x - _PressX, y - _PressY) >= Dead_Zone()) {
+			_MovieSkipHold.Release(MovieSkipHold::Source::Touch);
+		}
+		return;
+	}
 
 	if (_Phase == PHASE_PAN) {
 		float cx = 0.0f;
@@ -775,9 +789,7 @@ void Finger_Up(SDL_FingerID id, Uint64 now)
 			break;
 
 		case PHASE_MOVIE:
-			Log("emit ESC to skip the movie");
-			Win32_Post_Key_Message(TOUCH_VK_ESCAPE, true);
-			Win32_Post_Key_Message(TOUCH_VK_ESCAPE, false);
+			_MovieSkipHold.Release(MovieSkipHold::Source::Touch);
 			End_Gesture();
 			break;
 
@@ -812,6 +824,7 @@ void Finger_Up(SDL_FingerID id, Uint64 now)
 
 void Win32_Touch_Cancel(void)
 {
+	_MovieSkipHold.Release(MovieSkipHold::Source::Touch);
 	// Nothing here may touch a pointer this layer is not driving: on a host with a mouse
 	// this is reached with a real button held, and releasing it would end the player's drag.
 	if (_Phase == PHASE_IDLE && _Fingers.empty() && _HeldButton == 0
@@ -916,6 +929,11 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 void Win32_Touch_Service(void)
 {
 	Uint64 const now = Touch_Now();
+	if (_MovieMode && _MovieSkipHold.Ready(now)) {
+		Log("emit ESC after deliberate movie hold");
+		Win32_Post_Key_Message(TOUCH_VK_ESCAPE, true);
+		Win32_Post_Key_Message(TOUCH_VK_ESCAPE, false);
+	}
 
 	// Opened as soon as there is a window to measure, so the header is written even in a
 	// session that ends before anything is touched.
@@ -967,9 +985,8 @@ void Win32_Touch_Service(void)
 }
 
 
-// True while a fullscreen movie is playing. A tap then means skip and nothing else, and it
-// is delivered as the key the skip already waits for, so the vote a network game holds and
-// the overlay that explains it both keep working.
+// True while a fullscreen movie is playing. A deliberate hold sends the key the movie skip
+// already waits for, so network voting and its overlay continue to work.
 void Win32_Touch_Set_Movie_Mode(bool playing)
 {
 	if (_MovieMode == playing) {
@@ -977,10 +994,30 @@ void Win32_Touch_Set_Movie_Mode(bool playing)
 	}
 
 	_MovieMode = playing;
+	_MovieSkipHold.Reset();
 	Log("movie %s", playing ? "started" : "ended");
 
 	if (playing) {
 		Win32_Touch_Cancel();
+	}
+}
+
+
+bool Win32_Touch_Movie_Mode(void)
+{
+	return(_MovieMode);
+}
+
+
+void Win32_Touch_Movie_Circle(bool down)
+{
+	if (!_MovieMode) {
+		return;
+	}
+	if (down) {
+		_MovieSkipHold.Press(MovieSkipHold::Source::Circle, Touch_Now());
+	} else {
+		_MovieSkipHold.Release(MovieSkipHold::Source::Circle);
 	}
 }
 
@@ -1034,6 +1071,7 @@ void Win32_Touch_Test_Reset(void)
 	_Press = {};
 	_Release = {};
 	_MovieMode = false;
+	_MovieSkipHold.Reset();
 	_HeldButton = 0;
 	_EdgeScrollSuppressionPending = false;
 	_Test_Window_Size_Enabled = false;

@@ -11,6 +11,7 @@
 
 #include "gamedirs.h"
 
+#include "addon.h"
 #include "cdfile.h"
 #include "dbgprint.h"
 
@@ -300,12 +301,18 @@ std::string User_File_Write_Name(char const * filename)
 /// <returns>The name to open, delete or scan for.</returns>
 std::string Saved_Game_Name(char const * filename)
 {
-	std::string const folder = UserDirectory + SavedGamesFolder;
+	std::filesystem::path folder = std::filesystem::path(UserDirectory + SavedGamesFolder);
+	std::string extension = filename != NULL ? std::filesystem::path(filename).extension().string() : "";
+	std::transform(extension.begin(), extension.end(), extension.begin(),
+		[](unsigned char c) { return((char)std::toupper(c)); });
+	if (extension == ".SAV") {
+		folder /= Addon_Enabled(ADDON_FIRESTORM) ? "Firestorm" : "Tiberian Sun";
+	}
 
 	std::error_code error;
-	std::filesystem::create_directory(std::filesystem::path(folder), error);
+	std::filesystem::create_directories(folder, error);
 
-	return(folder + (char)std::filesystem::path::preferred_separator + filename);
+	return((folder / filename).string());
 }
 
 

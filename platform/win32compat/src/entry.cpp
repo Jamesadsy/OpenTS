@@ -15,6 +15,7 @@
 // then calls back here. Without it the process has no application object, and so no view
 // controller and no events.
 #include <SDL3/SDL_main.h>
+#include <unistd.h>
 #endif
 
 // Windows enters the game at WinMain. Nothing else does, so the host's entry point records
@@ -22,6 +23,7 @@
 // build starts in.
 
 int CALLBACK WinMain(HINSTANCE instance, HINSTANCE previous, char * commandline, int show);
+void __cdecl Prog_End(void);
 
 void Win32_Record_Arguments(int argc, char ** argv);
 
@@ -54,6 +56,12 @@ int main(int argc, char ** argv)
 	int const result = WinMain((HINSTANCE)(ULONG_PTR)1, NULL, NULL, 1);
 
 	Win32_Gamepad_Shutdown();
+#ifdef OPENTS_IOS
+	Prog_End();
+#endif
 	SDL_Quit();
+#ifdef OPENTS_IOS
+	_exit(result);
+#endif
 	return(result);
 }

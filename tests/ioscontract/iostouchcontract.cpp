@@ -12,6 +12,7 @@
 #include <cstdio>
 
 #include "touch_test.h"
+#include "movieholdpolicy.h"
 #include "win32compat.h"
 
 namespace
@@ -145,6 +146,29 @@ void Test_Device_Qualification(void)
 	Check(!Left_Down(), "indirect touch cannot inject a recognizer click");
 }
 
+
+void Test_Movie_Hold(void)
+{
+	MovieSkipHold hold;
+	Check(MovieSkipHold::HOLD_NS == 500 * MS, "TD/RA donor movie hold is 500 ms");
+	hold.Press(MovieSkipHold::Source::Touch, 0);
+	Check(!hold.Ready(100 * MS), "quick touch tap cannot skip");
+	hold.Release(MovieSkipHold::Source::Touch);
+	Check(!hold.Ready(700 * MS), "early touch release cancels the hold");
+	hold.Press(MovieSkipHold::Source::Circle, 1000 * MS);
+	Check(!hold.Ready(1499 * MS) && hold.Ready(1500 * MS)
+		&& !hold.Ready(1600 * MS), "Circle skips once only after a deliberate hold");
+	hold.Reset();
+	hold.Press(MovieSkipHold::Source::Circle, 2000 * MS);
+	hold.Release(MovieSkipHold::Source::Circle);
+	Check(!hold.Ready(2600 * MS), "quick Circle press cannot skip another movie");
+	hold.Press(MovieSkipHold::Source::Touch, 3000 * MS);
+	Check(!hold.Ready(3499 * MS) && hold.Ready(3500 * MS),
+		"touch hold skips at the same threshold after a movie reset");
+	hold.Reset();
+	Check(!hold.Ready(4000 * MS), "movie end clears all pending skip state");
+}
+
 }
 
 
@@ -155,6 +179,7 @@ int main(void)
 	Test_Multi_Touch();
 	Test_Drag_Cancel();
 	Test_Device_Qualification();
+	Test_Movie_Hold();
 	std::printf("%s\n", Failures == 0 ? "All checks passed." : "There were failures.");
 	return(Failures == 0 ? 0 : 1);
 }

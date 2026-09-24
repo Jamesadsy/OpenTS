@@ -1299,76 +1299,11 @@ bool SidebarClass::Activate(int control)
 
 
 /// <summary>
-/// Toggles the sidebar for the deliberate controller/mobile user action. Collapse saves the
-/// current tactical rectangle, removes sidebar controls, and gives that width to the map;
-/// restore returns the saved geometry before rebuilding sidebar controls and tooltips.
+/// Leaves the sidebar visible until the tactical renderer can safely resize its buffers.
 /// </summary>
 void SidebarClass::Controller_Toggle_Sidebar(void)
 {
-	if (Debug_Map || !GameActive || !ScenarioActive) {
-		return;
-	}
-
-	if (IsSidebarActive) {
-		Rect const expanded = TacticalRect;
-		Rect const reclaimed = Collapse_Tactical_Rect_For_Sidebar(
-			expanded, SIDE_WIDTH, Options.IsSidebarOnRight);
-
-		ExpandedTacticalRect = expanded;
-		IsMobileUserCollapsed = true;
-		Activate(0);
-		if (IsSidebarActive) {
-			IsMobileUserCollapsed = false;
-			ExpandedTacticalRect.Set(0, 0, 0, 0);
-			return;
-		}
-
-		Set_View_Dimensions(reclaimed);
-		Reposition_Sidebar();
-
-		if (ToolTips != NULL) {
-			ToolTips->Reset_Current();
-		}
-		if (VisibleSurface != NULL) {
-			int const old_sidebar_x = Options.IsSidebarOnRight
-				? expanded.X + expanded.Width : 0;
-			VisibleSurface->Fill_Rect(Rect(old_sidebar_x, 0, SIDE_WIDTH,
-				VisibleSurface->Get_Height()), TBLACK);
-		}
-		IsToRedraw = true;
-		IsForceCompleteRedraw = true;
-		Flag_To_Redraw(GS_REDRAW_ALL);
-		DebugString("Sidebar collapsed; tactical viewport reclaimed %d pixels\n", SIDE_WIDTH);
-		return;
-	}
-
-	if (IsMobileUserCollapsed) {
-		Rect const collapsed = TacticalRect;
-		Rect const expanded = ExpandedTacticalRect;
-		Set_View_Dimensions(expanded);
-		Activate(1);
-		if (!IsSidebarActive) {
-			Set_View_Dimensions(collapsed);
-			if (ToolTips != NULL) {
-				ToolTips->Reset_Current();
-			}
-			return;
-		}
-
-		IsMobileUserCollapsed = false;
-		ExpandedTacticalRect.Set(0, 0, 0, 0);
-		if (ToolTips != NULL) {
-			ToolTips->Reset_Current();
-		}
-		IsToRedraw = true;
-		IsForceCompleteRedraw = true;
-		Flag_To_Redraw(GS_REDRAW_ALL);
-		DebugString("Sidebar restored; tactical viewport returned to %d,%d,%d,%d\n",
-			expanded.X, expanded.Y, expanded.Width, expanded.Height);
-		return;
-	}
-
-	Activate(1);
+	// The 040 collapse can invalidate the tactical scroll surface after a viewport resize.
 }
 
 
