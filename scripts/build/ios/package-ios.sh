@@ -93,7 +93,7 @@ if [[ -f $ENV_FILE ]]; then
   saved=
   for v in OPENTS_IOS_TEAM_ID OPENTS_IOS_CODESIGN_IDENTITY OPENTS_IOS_BUNDLE_ID \
            OPENTS_IOS_DEVICE OPENTS_IOS_DEVICE_UDID OPENTS_IOS_BUNDLE_VERSION \
-           OPENTS_IOS_ICON_SOURCE OPENTS_IOS_ICON_BG OPENTS_IOS_ICON_INSET; do
+           OPENTS_IOS_ICON_SOURCE; do
     eval "cur=\${$v:-}"
     [[ -n $cur ]] && saved="$saved $v=$(printf %q "$cur")"
   done

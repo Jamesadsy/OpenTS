@@ -18,10 +18,10 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 SOURCE=${OPENTS_IOS_ICON_SOURCE:-$ROOT/code/resources/app-icon/OpenTS-CABAL-Tiberium-AppIcon.png}
 EXPECTED_SOURCE_SHA256=5EFFA2D17329F21C591B49BFBEE1D8ECE1A82809F21B42A7F61B94AF613CAE0C
 OUT=${1:-$ROOT/build/ios-icons}
-# iOS masks the icon itself and refuses an alpha channel, so the artwork is flattened onto
-# an opaque colour. The artwork draws no frame of its own, so nothing is cropped off.
-BG=${OPENTS_IOS_ICON_BG:-101010}
-INSET=${OPENTS_IOS_ICON_INSET:-0.0}
+# The approved artwork is opaque and full-bleed. Keep the established compositor's canvas
+# colour fixed, and do not inset or crop the source when producing the required sizes.
+BG=101010
+INSET=0.0
 MIN_OS=${OPENTS_IOS_MIN_OS:-16.0}
 
 [[ -f $SOURCE ]] || { echo "make-icons: icon source not found: $SOURCE" >&2; exit 1; }
