@@ -14,6 +14,7 @@
 #include <SDL3/SDL.h>
 
 constexpr int WIN32_VK_ESCAPE = 0x1B;
+constexpr int WIN32_VK_RETURN = 0x0D;
 constexpr int WIN32_VK_LEFT = 0x25;
 constexpr int WIN32_VK_UP = 0x26;
 constexpr int WIN32_VK_RIGHT = 0x27;
