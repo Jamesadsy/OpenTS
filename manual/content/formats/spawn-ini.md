@@ -85,7 +85,7 @@ A written `Seed` makes a launch repeatable: the same file played twice places ev
 
 `AutoSaveGame` is the number of frames between automatic saves, and `0` turns them off, which is also what an absent key means. A written interval replaces the [`AutoSaveInterval`](/keys/autosaveinterval/) a player's own settings hold, whatever kind of game the file starts. In a game against other machines every machine saves the same frame, so the file must hold the same interval on each of them, as a lobby option written alike into every file does. [Save games](/formats/save-games/#automatic-saves) owns what is written, under which names, and when.
 
-`NextSPAutoSaveId` and `NextSkirmishAutoSaveId` seed the rotating rings a fresh launch writes into: a campaign continues from the slot the first names and a skirmish from the second, both counted from one. A saved game holds its own ring positions, and a resumed game continues from those rather than from the file. A number below one or beyond the ring starts the ring at its first slot, so the `-1` a client writes for a loaded save that was no automatic save is harmless.
+`NextSPAutoSaveId` and `NextSkirmishAutoSaveId` are still accepted and carried in saves, but they no longer choose automatic-save filenames. Campaign and skirmish autosave names come from the active scenario filename, as described under [automatic saves](/formats/save-games/#automatic-saves).
 
 ## Who is playing
 

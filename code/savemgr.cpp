@@ -51,6 +51,38 @@
 #include <vector>
 
 
+std::string const & SaveManagerClass::Current_Manual_Save_Identity(AutosaveClass::ProductType product) const
+{
+	return(ManualSaveIdentity.File_Name(product));
+}
+
+
+void SaveManagerClass::Record_Manual_Load(AutosaveClass::ProductType product, std::string const & filename,
+	bool succeeded)
+{
+	ManualSaveIdentity.Record_Load(product, filename, succeeded);
+}
+
+
+void SaveManagerClass::Record_Manual_Save(AutosaveClass::ProductType product, std::string const & filename,
+	bool succeeded)
+{
+	ManualSaveIdentity.Record_Save(product, filename, succeeded);
+}
+
+
+void SaveManagerClass::Clear_Manual_Save_Identity(void)
+{
+	ManualSaveIdentity.Clear();
+}
+
+
+void SaveManagerClass::Clear_Manual_Save_Identity(AutosaveClass::ProductType product)
+{
+	ManualSaveIdentity.Clear(product);
+}
+
+
 static AutosaveClass::KindType Single_Player_Kind(void)
 {
 	return(Session.Type == GAME_NORMAL ? AutosaveClass::KindType::Campaign : AutosaveClass::KindType::Skirmish);
@@ -276,14 +308,12 @@ void SaveManagerClass::Autosave_Service(void)
 
 		if (single) {
 			AutosaveClass::KindType kind = Single_Player_Kind();
-			AutosaveClass::ProductType const product = Addon_Enabled(ADDON_FIRESTORM)
-				? AutosaveClass::ProductType::Firestorm : AutosaveClass::ProductType::TiberianSun;
-			int slot = Autosave.Advance(product, kind);
+			std::string const filename = AutosaveClass::File_Name(kind, Scen->ScenarioName);
 
 			char buffer[512];
-			std::snprintf(buffer, sizeof(buffer), Fetch_String(TXT_AUTOSAVE_DESCRIPTION), slot + 1, Scen->Description);
+			std::snprintf(buffer, sizeof(buffer), Fetch_String(TXT_AUTOSAVE_DESCRIPTION), 1, Scen->Description);
 
-			Request_Save_Game(AutosaveClass::File_Name(kind, slot).c_str(), buffer, true, NoticeType::Automatic);
+			Request_Save_Game(filename.c_str(), buffer, true, NoticeType::Automatic);
 		} else {
 			Request_Multiplayer_Save(Fetch_String(TXT_AUTOSAVE_MULTIPLAYER), true, NoticeType::Automatic);
 		}

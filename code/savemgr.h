@@ -11,6 +11,7 @@
 
 #include "autosave.h"
 #include "mpload.h"
+#include "saveidentity.h"
 
 #include <string>
 
@@ -32,6 +33,12 @@ class SaveManagerClass
 
 		AutosaveClass Autosave;
 		MultiplayerLoadClass MultiplayerLoad;
+
+		std::string const & Current_Manual_Save_Identity(AutosaveClass::ProductType product) const;
+		void Record_Manual_Load(AutosaveClass::ProductType product, std::string const & filename, bool succeeded);
+		void Record_Manual_Save(AutosaveClass::ProductType product, std::string const & filename, bool succeeded);
+		void Clear_Manual_Save_Identity(void);
+		void Clear_Manual_Save_Identity(AutosaveClass::ProductType product);
 
 		bool Request_Save_Game(char const * file_name, char const * descr, bool quiet, NoticeType notice);
 		void Request_Quick_Save(void);
@@ -75,6 +82,7 @@ class SaveManagerClass
 		std::string PendingSaveDescription;
 		NoticeType PendingSaveNotice = NoticeType::None;
 		bool QuickSaveRequested = false;
+		ManualSaveIdentityClass ManualSaveIdentity;
 
 		// The outcome the frame boundary still owes the message list.
 		NoticeType OutcomeNotice = NoticeType::None;

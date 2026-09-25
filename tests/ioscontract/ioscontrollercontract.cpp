@@ -251,6 +251,23 @@ void Test_Start_And_Dpad(void)
 	Check(key != '4' && key != '2', "D-pad navigation never injects printable 4 or 2");
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
 	Drain_Key_Events();
+
+	float pointer_x = 0.0f;
+	float pointer_y = 0.0f;
+	Win32_Pointer_Position(&pointer_x, &pointer_y);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_UP, true);
+	Check(Take_Key(WIN32_VK_UP, true), "D-pad up remains a native key for the active screen");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+	Check(Take_Key(WIN32_VK_UP, false), "D-pad up emits a matching native key release");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+	Check(Take_Key(WIN32_VK_DOWN, true), "D-pad down remains a native key for the active screen");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+	Check(Take_Key(WIN32_VK_DOWN, false), "D-pad down emits a matching native key release");
+	float pointer_x_after = 0.0f;
+	float pointer_y_after = 0.0f;
+	Win32_Pointer_Position(&pointer_x_after, &pointer_y_after);
+	Check(pointer_x_after == pointer_x && pointer_y_after == pointer_y,
+		"D-pad list keys do not move the tactical pointer");
 }
 
 

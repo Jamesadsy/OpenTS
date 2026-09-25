@@ -8,6 +8,7 @@ extensions:
 role: persistence
 source_files:
   - code/autosave.cpp
+  - code/autosave.h
   - code/conquer.cpp
   - code/deploymentconfig.cpp
   - code/desyncdlg.cpp
@@ -21,14 +22,22 @@ source_files:
   - code/savefile.cpp
   - code/saveload.cpp
   - code/savemgr.cpp
+  - code/savemgr.h
   - code/savestream.cpp
   - code/savever.cpp
+  - code/saveidentity.h
+  - code/scenario.cpp
+  - code/scenario.h
   - code/scenfile.cpp
   - code/abstract.cpp
   - code/objtype.cpp
   - code/unittype.cpp
   - code/ambient.cpp
   - code/voc.cpp
+  - code/sha.cpp
+  - code/ui/savebrowsernavigation.h
+  - code/ui/uisavebrowser.cpp
+  - code/ui/uisavebrowser.h
 ---
 
 The save dialog creates `.SAV` files. Each file begins with a fixed header and a table of the details the load dialog lists a save by, followed by the game state as one compressed block. The listing is read from the header and table alone. A file that is truncated, damaged, or written by a later format version is refused before anything is loaded. A save is written under a temporary name and moved into place once complete, so an interrupted save leaves the previous file intact.
@@ -41,11 +50,17 @@ Earlier `.SAV` files directly in `Saved Games` remain untouched and are not show
 
 The dialog names a new save `SAVE` followed by four hexadecimal digits, drawing again until it finds a name no existing file answers to. Saving over a listed game uses the filename captured for that selected row, even when another save has the same description; the write updates the selected file and its listing metadata. A multiplayer save is written under a numbered name instead, and never appears in the campaign or skirmish list. The random map generator keeps its saved settings in the same folder, under names of its own. The map a host generates for a match is not one of them: it stays with the game's files so that it can travel to the other machines.
 
+## Save browser
+
+After a Load screen load succeeds, or a Save completes, the Save screen remembers that exact filename for the current session and product. The next Save screen selects it and loads its current description when the file is still listed in that product's folder. A new game clears the selection; if a remembered file is no longer listed, Save opens on `[EMPTY SLOT]`. Duplicate descriptions do not affect which file is selected.
+
+The Up and Down keys, including controller D-pad input, move through the Save, Load and Delete rows, wrap at either end, and scroll the highlighted row into view. The Save screen includes `[EMPTY SLOT]` in that cycle. Its description field follows the selected row, returning to the caller's suggested description when `[EMPTY SLOT]` is selected.
+
 ## When the file is written
 
 A campaign or skirmish save requested through the save dialog is written immediately while that dialog has the scenario paused. A multiplayer click instead submits a synchronized `SAVEGAME` command. When that command executes, each peer copies one pending filename and description. Duplicate commands before the frame ends share that one request. The file is written only after the command queue has finished and the end-of-frame deletion pass has retired every object already marked for removal.
 
-The [Create Autosave](/mapping/actions/taction-create-autosave/) trigger action requests an automatic save at that same frame boundary, using the slots and descriptions below. It works even when the timed interval is disabled, including multiplayer games started from the menu. Repeated trigger requests in one frame share one save. A pending multiplayer save keeps its filename, description, saving-box setting, and the notice it posts. A trigger-requested save posts no notice of its own and is reported only when it fails. Playback writes nothing.
+The [Create Autosave](/mapping/actions/taction-create-autosave/) trigger action requests an automatic save at that same frame boundary, using the stable names below. It works even when the timed interval is disabled, including multiplayer games started from the menu. Repeated trigger requests in one frame share one save. A pending multiplayer save keeps its filename, description, saving-box setting, and the notice it posts. A trigger-requested save posts no notice of its own and is reported only when it fails. Playback writes nothing.
 
 Once a connection is destroyed or a synchronized `REMOVEPLAYER` command executes, multiplayer saving is disabled for the rest of that match. Any pending request is cancelled. The options dialog disables its Save button in that state. Restarting the mission does not restore the button or accept another request. Selecting and starting a new game does.
 
@@ -55,7 +70,7 @@ A save reports its outcome in the message list rather than in a box. One the pla
 
 The game also saves on its own at a fixed interval of frames. A game started from the menu uses the interval [`AutoSaveInterval`](/keys/autosaveinterval/) names, and a [client-launched](/formats/spawn-ini/#automatic-saves) game uses the interval its launch file names. When the interval runs out, `Auto-saving...` is posted to the message list, and the save is written at the next frame boundary, after the notice has been drawn. It goes through the same request the synchronized multiplayer save uses. The same line then becomes `Game auto-saved.`, or says the save could not be written, so an automatic save leaves one line whatever its outcome. The interval starts over from any completed save, whoever asked for it, and from a load or a mission restart. A resumed or restarted game therefore waits a full interval before its first.
 
-A campaign writes `AUTOSAVE1.SAV` through `AUTOSAVE5.SAV` in turn and then starts over, and a skirmish writes `AUTOSAVE_SKIRMISH1.SAV` through `AUTOSAVE_SKIRMISH5.SAV` the same way. The two rings turn independently within each product's folder, so the same slot name in Tiberian Sun and Firestorm cannot overwrite the other product's save. Each is described as `Auto-Save`, its slot number and the scenario's description, so a listing tells it apart from a save the player named. Each save records the next slot for its own product's campaign and skirmish rings, and loading it resumes that product at those positions. The two product rings also stay independent while the game runs. A client-launched game starts where its launch file says. Once five saves fill a ring, each later autosave replaces the next slot in that ring, keeping its visible list bounded at five.
+Campaign autosaves use `AUTOSAVE_<digest>.SAV`, derived from the scenario filename held in `ScenarioName`. Skirmish autosaves use `AUTOSAVE_SKIRMISH_<digest>.SAV`, derived from the active map's scenario filename. Repeated autosaves for the same scenario overwrite that file; a different scenario filename resolves to a different autosave name, including after the game is reloaded. The filename does not depend on the displayed scenario description. Base Tiberian Sun and Firestorm keep these names in their separate product folders. Existing `AUTOSAVE1.SAV` through `AUTOSAVE5.SAV`, `AUTOSAVE_SKIRMISH1.SAV` through `AUTOSAVE_SKIRMISH5.SAV`, and other older saves remain in place and are not migrated or deduplicated.
 
 Timed saves in a game against other machines run only when a launch file set the interval. Every machine must write the same frame, and a match arranged from the menu leaves each machine with settings of its own. Each machine then writes the next [numbered save](#numbered-multiplayer-saves), described as `Multiplayer Game (Auto-Save)`. It goes through the pending request, without the saving box a manual save shows. Once multiplayer saving is disabled for the match, automatic saves stop with it.
 

@@ -11,16 +11,17 @@
 
 #include <array>
 #include <string>
+#include <string_view>
 
 /*
- * Bookkeeping for the rotating automatic saves. Frames are handed in, so it holds no engine
- * state and can be judged without the game running.
+ * Automatic-save timing and legacy slot metadata. File names are derived from the active
+ * scenario identity, so the stored slot values only preserve the existing save layout.
  */
 class AutosaveClass
 {
 	public:
 
-		// One ring per kind of game. The client reads a slot back as a single digit.
+		// Legacy save data carries one slot value for each product and game kind.
 		static constexpr int SLOT_COUNT = 5;
 
 		enum class KindType {
@@ -28,7 +29,7 @@ class AutosaveClass
 			Skirmish,
 		};
 
-		// Tiberian Sun and Firestorm use separate save folders and keep separate rings.
+		// Tiberian Sun and Firestorm save separate legacy slot values.
 		enum class ProductType {
 			TiberianSun,
 			Firestorm,
@@ -38,7 +39,7 @@ class AutosaveClass
 		void Set_Interval(int frames);
 		int Interval(void) const {return(IntervalFrames);}
 
-		// Slots are counted from zero; one the ring does not hold starts the ring over.
+		// Reads and writes the legacy next-slot values carried in existing saves and launch files.
 		void Seed_Slots(ProductType product, int campaign, int skirmish);
 		int Campaign_Slot(ProductType product) const;
 		int Skirmish_Slot(ProductType product) const;
@@ -49,10 +50,8 @@ class AutosaveClass
 		void Arm(void);
 		bool Take_Armed(void);
 
-		// Answers the slot to write and moves the ring on, so a save records the slot after it.
-		int Advance(ProductType product, KindType kind);
-
-		static std::string File_Name(KindType kind, int slot);
+		// Stable for the source scenario filename held by ScenarioName.
+		static std::string File_Name(KindType kind, std::string_view scenario_identity);
 
 	private:
 

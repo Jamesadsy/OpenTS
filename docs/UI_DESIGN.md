@@ -968,6 +968,14 @@ text beyond an ASCII test document.
     own geometry, converted from the `IDD_MISSION_LOAD`, `IDD_MISSION_SAVE` and
     `IDD_MISSION_DELETE` templates.
 
+    A successful load and save remember the exact filename for the active product
+    during the current session. Save selects that row while it remains in the list;
+    a new game or a missing file returns it to the empty slot. Up and Down move the
+    selected row in all three browsers, wrap at either end, and use RmlUi's
+    `ScrollIntoView` so the selection stays visible. Save selection also refreshes
+    the description field, including the caller's suggested description on the
+    empty slot.
+
     A row's cells stand where the owner-draw list put its columns, which the three
     dialog procedures register with `OD_ADDCOLUMN` at x 2, 255 and 315. The
     multiplayer star is absent from the documents because it was absent from the

@@ -10,6 +10,7 @@
 #include "always.h"
 
 #include "autosave.h"
+#include "sha.h"
 
 #include <cctype>
 #include <cstdio>
@@ -69,26 +70,41 @@ bool AutosaveClass::Take_Armed(void)
 }
 
 
-int AutosaveClass::Advance(ProductType product, KindType kind)
-{
-	std::array<int, 2> & slots = NextSlots[Product_Index(product)];
-	int & slot = slots[kind == KindType::Campaign ? 0 : 1];
-	int written = slot;
-
-	slot = (slot + 1) % SLOT_COUNT;
-
-	return(written);
-}
-
-
 /// <summary>
-/// The file a slot is written under, counted from one as the client counts it.
+/// The file an automatic save uses for a source scenario identity.
 /// </summary>
-std::string AutosaveClass::File_Name(KindType kind, int slot)
+std::string AutosaveClass::File_Name(KindType kind, std::string_view scenario_identity)
 {
-	char const * prefix = kind == KindType::Campaign ? "AUTOSAVE" : "AUTOSAVE_SKIRMISH";
+	std::string normalized;
+	normalized.reserve(scenario_identity.size());
+	for (unsigned char character : scenario_identity) {
+		if (character >= 'a' && character <= 'z') {
+			character = static_cast<unsigned char>(character - 'a' + 'A');
+		}
+		if (character == '\\') {
+			character = '/';
+		}
+		normalized.push_back(static_cast<char>(character));
+	}
+	if (normalized.empty()) {
+		normalized = "UNKNOWN_SCENARIO";
+	}
 
-	return(prefix + std::to_string(slot + 1) + ".SAV");
+	SHAEngine sha;
+	sha.Hash(normalized.data(), static_cast<int>(normalized.size()));
+	unsigned char digest[20];
+	sha.Result(digest);
+
+	char const * prefix = kind == KindType::Campaign ? "AUTOSAVE_" : "AUTOSAVE_SKIRMISH_";
+	std::string name(prefix);
+	for (unsigned char byte : digest) {
+		char encoded[3];
+		std::snprintf(encoded, sizeof(encoded), "%02X", static_cast<unsigned int>(byte));
+		name += encoded;
+	}
+	name += ".SAV";
+
+	return(name);
 }
 
 

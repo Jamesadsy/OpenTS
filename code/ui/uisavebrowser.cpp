@@ -22,9 +22,11 @@
 #include "always.h"
 
 #include "uisavebrowser.h"
+#include "savebrowsernavigation.h"
 
 #include "uirmlview.h"
 
+#include "addon.h"
 #include "campaign.h"
 #include "conquer.h"
 #include "data.h"
@@ -35,8 +37,10 @@
 #include "msgbox.h"
 #include "saveload.h"
 #include "saveidentity.h"
+#include "savemgr.h"
 #include "vector.h"
 
+#include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/Elements/ElementFormControlInput.h>
 #include <RmlUi/Core/Event.h>
@@ -52,6 +56,13 @@
 static bool Saved_Game_Exists(char const * name)
 {
 	return(GetFileAttributes(Saved_Game_Name(name).c_str()) != INVALID_FILE_ATTRIBUTES);
+}
+
+
+static AutosaveClass::ProductType Active_Save_Product(void)
+{
+	return(Addon_Enabled(ADDON_FIRESTORM) ? AutosaveClass::ProductType::Firestorm
+		: AutosaveClass::ProductType::TiberianSun);
 }
 
 
@@ -114,11 +125,10 @@ void UISaveBrowserPresenterClass::Refresh(void)
 		Entries.push_back(entry);
 	}
 
-	// The load list opens on the first game it could actually read; the other two open on
-	// their first row, which for a save is the empty slot.
+	// The load list opens on the first game it could actually read; a new save opens on its
+	// empty slot unless the exact current manual file is still present in this product list.
 	if (!Entries.empty()) {
 		Selected = 0;
-
 		if (Style == STYLE_LOAD) {
 			for (size_t index = 0; index < Entries.size(); index++) {
 				if (Entries[index].Valid) {
@@ -126,15 +136,26 @@ void UISaveBrowserPresenterClass::Refresh(void)
 					break;
 				}
 			}
+		} else if (Style == STYLE_SAVE) {
+			std::string const current = SaveManager.Current_Manual_Save_Identity(Active_Save_Product());
+			Selected = Initial_Save_Identity_Row(current, Entries);
+			if (!current.empty() && Find_Save_Identity_Row(current, Entries) < 0) {
+				SaveManager.Clear_Manual_Save_Identity(Active_Save_Product());
+			}
+		} else {
+			Selected = 0;
 		}
 	}
 
 	CanAct = !Entries.empty();
 	ListChanged = true;
+	SelectionChanged = true;
 
 	Description.clear();
-	if (Style == STYLE_SAVE && Options.Description != NULL) {
-		Description = Options.Description;
+	if (Style == STYLE_SAVE) {
+		std::string const new_save_description = Options.Description != NULL ? Options.Description : "";
+		Description = new_save_description;
+		Description = Save_Browser_Description(Selected, Entries, Description);
 	}
 }
 
@@ -181,10 +202,13 @@ void UISaveBrowserPresenterClass::Run_Pending(void)
 		return;
 	}
 
-	if (!Options.Load_File(Entries[Selected].Filename.c_str())) {
+	std::string const filename = Entries[Selected].Filename;
+	AutosaveClass::ProductType const product = Active_Save_Product();
+	if (!Options.Load_File(filename.c_str())) {
 		WWMessageBox().Process(TXT_ERROR_LOADING_GAME, TXT_OK, TXT_NONE, TXT_NONE);
 		return;
 	}
+	SaveManager.Record_Manual_Load(product, filename, true);
 
 	Finish(true);
 }
@@ -226,6 +250,7 @@ void UISaveBrowserPresenterClass::Accept(void)
 			}
 			std::string const target = Save_Target_Filename(entry.Valid, entry.Filename, new_filename);
 			filename = target.c_str();
+			AutosaveClass::ProductType const product = Active_Save_Product();
 
 			if (filename == NULL) {
 				return;
@@ -241,6 +266,7 @@ void UISaveBrowserPresenterClass::Accept(void)
 				WWMessageBox().Process(TXT_ERROR_SAVING_GAME, TXT_OK, TXT_NONE, TXT_NONE);
 				return;
 			}
+			SaveManager.Record_Manual_Save(product, target, true);
 
 			int const confirmation = Options.Save_Confirmation();
 			if (confirmation != TXT_NONE) {
@@ -279,23 +305,12 @@ void UISaveBrowserPresenterClass::Accept(void)
 void UISaveBrowserPresenterClass::Execute(UIIntent const & intent)
 {
 	if (intent.Action == UI_SAVEBROWSER_SELECT) {
-		if (intent.Value < 0 || intent.Value >= (int)Entries.size()) {
-			return;
-		}
+		Select_Row(intent.Value, true);
+		return;
+	}
 
-		Selected = intent.Value;
-
-		// Picking a row in the save list offers that game's description, so an existing
-		// game can be written over without typing its name out again; the empty slot offers
-		// the description the caller suggested.
-		if (Style == STYLE_SAVE) {
-			if (Entries[Selected].Valid) {
-				Description = Entries[Selected].Description;
-			} else if (Options.Description != NULL) {
-				Description = Options.Description;
-			}
-			FocusDescription = true;
-		}
+	if (intent.Action == UI_SAVEBROWSER_MOVE) {
+		Select_Row(Save_Browser_Next_Row(Selected, Entries.size(), intent.Value), true);
 		return;
 	}
 
@@ -315,6 +330,24 @@ void UISaveBrowserPresenterClass::Execute(UIIntent const & intent)
 	if (intent.Action == UI_SAVEBROWSER_CANCEL) {
 		Finish(false);
 		return;
+	}
+}
+
+
+void UISaveBrowserPresenterClass::Select_Row(int row, bool focus_description)
+{
+	if (row < 0 || row >= (int)Entries.size()) {
+		return;
+	}
+
+	Selected = row;
+	SelectionChanged = true;
+	if (Style == STYLE_SAVE) {
+		std::string const new_save_description = Options.Description != NULL ? Options.Description : "";
+		Description = Save_Browser_Description(Selected, Entries, new_save_description);
+		if (focus_description) {
+			FocusDescription = true;
+		}
 	}
 }
 
@@ -433,6 +466,10 @@ void SaveBrowserViewClass::Bind(Rml::DataModelConstructor & model)
 				Press(UI_SAVEBROWSER_CANCEL);
 			} else if (key == Rml::Input::KI_RETURN || key == Rml::Input::KI_NUMPADENTER) {
 				Press(UI_SAVEBROWSER_ACCEPT);
+			} else if (key == Rml::Input::KI_UP) {
+				Screen.Queue(UIIntent{UI_SAVEBROWSER_MOVE, "", -1});
+			} else if (key == Rml::Input::KI_DOWN) {
+				Screen.Queue(UIIntent{UI_SAVEBROWSER_MOVE, "", 1});
 			}
 		});
 }
@@ -446,6 +483,19 @@ void SaveBrowserViewClass::Sync(void)
 	Model.DirtyVariable("selected");
 	Model.DirtyVariable("description");
 	Model.DirtyVariable("canact");
+
+	if (Screen.SelectionChanged) {
+		Rml::Element * const list = Element != nullptr ? Element->GetElementById("games") : nullptr;
+		Save_Browser_Scroll_Selected_Row(Screen.Selected, Screen.Entries.size(), [list](int row) {
+			if (list != nullptr && row < list->GetNumChildren()) {
+				Rml::Element * const selected = list->GetChild(row);
+				if (selected != nullptr) {
+					selected->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest));
+				}
+			}
+		});
+		Screen.SelectionChanged = false;
+	}
 
 	// Picking a row, and a refused empty description, put the focus on the field with its
 	// text selected, which is what the dialog did with SetFocus and Edit_SetSel.

@@ -35,7 +35,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-040-cursor-sidebar-camera-reconcile" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-043-sol-integrated-recovery" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-045-luna-cursor-stabilization" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-048-integrated-polish"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-048-integrated-polish" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-049-save-ux-controller-nav"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -212,6 +213,24 @@ jobs:
           EOF
           cp proof/*.log "$ARTIFACT/"
           ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARTIFACT/OpenTS-app.zip"
+
+      - name: Package verified unsigned OpenTS IPA
+        shell: bash
+        run: |
+          set -euxo pipefail
+          STAGE=build/ios-ipa-stage
+          IPA=build/g3-proof/OpenTS-unsigned.ipa
+          rm -rf "$STAGE" "$IPA"
+          mkdir -p "$STAGE/Payload" build/g3-proof
+          ditto build/ios-ci-stage/OpenTS.app "$STAGE/Payload/OpenTS.app"
+          (cd "$STAGE" && ditto -c -k --sequesterRsrc --keepParent Payload "$GITHUB_WORKSPACE/$IPA")
+          unzip -Z1 "$IPA" | tee proof/ipa-inventory.log
+          unzip -Z1 "$IPA" | grep -Fxq 'Payload/OpenTS.app/OpenTS'
+          unzip -Z1 "$IPA" | grep -Fxq 'Payload/OpenTS.app/Info.plist'
+          test ! -e "$STAGE/Payload/OpenTS.app/_CodeSignature"
+          test ! -e "$STAGE/Payload/OpenTS.app/embedded.mobileprovision"
+          shasum -a 256 "$IPA" | tee proof/ipa-sha256.log
+          cp proof/ipa-inventory.log proof/ipa-sha256.log build/g3-proof/
 
       - name: Upload curated unsigned G3 proof artifact
         if: always()

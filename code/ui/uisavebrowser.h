@@ -24,6 +24,7 @@ class LoadOptionsClass;
 
 
 inline constexpr char const * UI_SAVEBROWSER_SELECT = "select";      // Value: row
+inline constexpr char const * UI_SAVEBROWSER_MOVE = "move";          // Value: -1 or +1
 inline constexpr char const * UI_SAVEBROWSER_DESCRIBE = "describe";  // Identity: the text
 inline constexpr char const * UI_SAVEBROWSER_ACCEPT = "accept";
 inline constexpr char const * UI_SAVEBROWSER_CANCEL = "cancel";
@@ -113,10 +114,12 @@ class UISaveBrowserPresenterClass : public UIPresenterClass
 		// Has the list itself changed since a view last drew it? Only a deletion moves it,
 		// so a view that rebuilds a control has one thing to test.
 		bool ListChanged = false;
+		bool SelectionChanged = false;
 
 	private:
 		void Accept(void);
 		void Finish(bool accepted);
+		void Select_Row(int row, bool focus_description);
 
 		LoadOptionsClass & Options;
 		bool Outcome = false;

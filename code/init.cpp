@@ -1287,6 +1287,7 @@ restart:
 	**	Load the scenario.
 	*/
 	if (!gameloaded && !Session.LoadGame) {
+		SaveManager.Clear_Manual_Save_Identity();
 		DebugString("About to load a %d player game.\n",Session.Players.Count());
 
 		/*
