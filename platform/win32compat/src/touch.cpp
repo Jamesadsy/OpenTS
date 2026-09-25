@@ -996,6 +996,7 @@ void Win32_Touch_Set_Movie_Mode(bool playing)
 	_MovieMode = playing;
 	_MovieSkipHold.Reset();
 	Log("movie %s", playing ? "started" : "ended");
+	Win32_Gamepad_Reset_Menu_Mode();
 
 	if (playing) {
 		Win32_Touch_Cancel();

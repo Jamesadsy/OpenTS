@@ -36,7 +36,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-043-sol-integrated-recovery" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-045-luna-cursor-stabilization" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-048-integrated-polish" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-049-save-ux-controller-nav"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-049-save-ux-controller-nav" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-050-menu-controller-parity"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -58,10 +59,10 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build/g3-host-tests \
-            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CursorStateContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SidebarFeedbackContract OpenTSDonorHostSmoke \
+            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CursorStateContract ControllerFocusContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SidebarFeedbackContract OpenTSDonorHostSmoke \
             --parallel 3 2>&1 | tee proof/host-tests-build.log
           ctest --test-dir build/g3-host-tests \
-            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cursor-scrollrate-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|sidebar-feedback-contract|donor-host-smoke)$' \
+            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cursor-scrollrate-contract|controller-focus-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|sidebar-feedback-contract|donor-host-smoke)$' \
             --output-on-failure 2>&1 | tee proof/host-tests-ctest.log
 
       - name: Configure unsigned iPhoneOS device route

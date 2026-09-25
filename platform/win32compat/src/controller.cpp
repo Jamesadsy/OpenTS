@@ -8,6 +8,7 @@
  ******************************************************************************/
 
 #include "win32compat.h"
+#include "controllerownership.h"
 
 #include <algorithm>
 #include <cmath>
@@ -32,6 +33,11 @@ bool _Buttons[SDL_GAMEPAD_BUTTON_COUNT];
 bool _ControllerControlHeld;
 bool _ControllerAltHeld;
 bool _MovieCircleOwned;
+ControllerMenuOwnershipModel _MenuOwnership;
+ControllerMenuRoute _CrossRoute = ControllerMenuRoute::POINTER;
+ControllerMenuRoute _CircleRoute = ControllerMenuRoute::POINTER;
+bool _CrossOwned;
+bool _CirclePressOwned;
 bool _Focused = true;
 bool _Initialized;
 bool _HaveServiceTime;
@@ -46,6 +52,14 @@ struct TestKeyEvent
 	bool Down;
 };
 
+struct TestMouseEvent
+{
+	Uint8 Button;
+	bool Down;
+	float X;
+	float Y;
+};
+
 bool _TestMode;
 bool _TestConnected;
 bool _TestWindowSizeEnabled;
@@ -53,9 +67,16 @@ float _TestWindowWidth;
 float _TestWindowHeight;
 Uint64 _TestNow;
 std::deque<TestKeyEvent> _TestKeyEvents;
+std::deque<TestMouseEvent> _TestMouseEvents;
 #endif
 
 std::deque<int> _Actions;
+
+
+void Update_Menu_Presentation(void)
+{
+	Win32_Pointer_Set_Menu_Focus(_MenuOwnership.Focus_Owns_Menu());
+}
 
 
 double Axis_Value(Sint16 value)
@@ -144,7 +165,39 @@ void Post_Controller_Key(int virtualkey, bool down)
 void Post_Controller_Mouse(Uint8 button, bool down, UINT message)
 {
 	if (Win32_Pointer_Controller_Button(button, down)) {
+#ifdef OPENTS_GAMEPAD_TEST
+		if (_TestMode) {
+			float x = 0.0f;
+			float y = 0.0f;
+			Win32_Pointer_Position(&x, &y);
+			_TestMouseEvents.push_back(TestMouseEvent{ button, down, x, y });
+		}
+#endif
 		Win32_Post_Pointer_Message(message);
+	}
+}
+
+
+void Post_Controller_Cross(bool down, ControllerMenuRoute route)
+{
+	if (route == ControllerMenuRoute::FOCUS) {
+		Post_Controller_Key(WIN32_VK_RETURN, down);
+	} else if (route == ControllerMenuRoute::POINTER) {
+		Post_Controller_Mouse(SDL_BUTTON_LEFT, down,
+			down ? WM_LBUTTONDOWN : WM_LBUTTONUP);
+	}
+}
+
+
+void Post_Controller_Circle(bool down, ControllerMenuRoute route)
+{
+	if (route == ControllerMenuRoute::MOVIE) {
+		Win32_Touch_Movie_Circle(down);
+	} else if (route == ControllerMenuRoute::FOCUS) {
+		Post_Controller_Key(WIN32_VK_ESCAPE, down);
+	} else {
+		Post_Controller_Mouse(SDL_BUTTON_RIGHT, down,
+			down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
 	}
 }
 
@@ -191,20 +244,28 @@ void Apply_Button(SDL_GamepadButton button, bool down)
 
 	switch (button) {
 		case SDL_GAMEPAD_BUTTON_SOUTH:
-			Post_Controller_Mouse(SDL_BUTTON_LEFT, down,
-				down ? WM_LBUTTONDOWN : WM_LBUTTONUP);
+			if (down) {
+				_CrossOwned = true;
+				_CrossRoute = _MenuOwnership.Cross_Route();
+				Post_Controller_Cross(true, _CrossRoute);
+			} else if (_CrossOwned) {
+				Post_Controller_Cross(false, _CrossRoute);
+				_CrossOwned = false;
+				_CrossRoute = ControllerMenuRoute::POINTER;
+			}
 			break;
 
 		case SDL_GAMEPAD_BUTTON_EAST:
-			if (down && Win32_Touch_Movie_Mode()) {
-				_MovieCircleOwned = true;
-				Win32_Touch_Movie_Circle(true);
-			} else if (!down && _MovieCircleOwned) {
-				Win32_Touch_Movie_Circle(false);
+			if (down) {
+				_CirclePressOwned = true;
+				_CircleRoute = _MenuOwnership.Circle_Route(Win32_Touch_Movie_Mode());
+				_MovieCircleOwned = _CircleRoute == ControllerMenuRoute::MOVIE;
+				Post_Controller_Circle(true, _CircleRoute);
+			} else if (_CirclePressOwned) {
+				Post_Controller_Circle(false, _CircleRoute);
+				_CirclePressOwned = false;
 				_MovieCircleOwned = false;
-			} else {
-				Post_Controller_Mouse(SDL_BUTTON_RIGHT, down,
-					down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
+				_CircleRoute = ControllerMenuRoute::POINTER;
 			}
 			break;
 
@@ -226,6 +287,10 @@ void Apply_Button(SDL_GamepadButton button, bool down)
 		case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: {
 			int const key = Dpad_Key(button);
 			if (key != 0) {
+				if (down) {
+					_MenuOwnership.Dpad_Navigated();
+					Update_Menu_Presentation();
+				}
 				Post_Controller_Key(key, down);
 			}
 			break;
@@ -257,6 +322,12 @@ void Reset_Device_State(void)
 	_ControllerControlHeld = false;
 	_ControllerAltHeld = false;
 	_MovieCircleOwned = false;
+	_CrossOwned = false;
+	_CirclePressOwned = false;
+	_CrossRoute = ControllerMenuRoute::POINTER;
+	_CircleRoute = ControllerMenuRoute::POINTER;
+	_MenuOwnership.Reset();
+	Update_Menu_Presentation();
 	_CameraPanX = 0.0;
 	_CameraPanY = 0.0;
 	_HaveServiceTime = false;
@@ -456,6 +527,8 @@ void Win32_Gamepad_Service(void)
 		y = std::clamp((double)y + lefty * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost,
 			0.0, (double)height - 1.0);
 		if (x != old_x || y != old_y) {
+			_MenuOwnership.Pointer_Moved();
+			Update_Menu_Presentation();
 			Win32_Pointer_Set_Direct_Touch(false);
 			Win32_Pointer_Move_Controller(x, y);
 			Win32_Post_Pointer_Message(WM_MOUSEMOVE);
@@ -480,6 +553,36 @@ void Win32_Gamepad_Set_Focus(bool focused)
 
 	_Focused = true;
 	_HaveServiceTime = false;
+}
+
+
+void Win32_Gamepad_Set_Menu_Surface(bool active)
+{
+	_MenuOwnership.Set_Menu_Surface(active);
+	Update_Menu_Presentation();
+}
+
+
+bool Win32_Gamepad_Menu_Focus_Owned(void)
+{
+	return(_MenuOwnership.Focus_Owns_Menu());
+}
+
+
+void Win32_Gamepad_Menu_Pointer_Moved(void)
+{
+	if (!_MenuOwnership.Menu_Surface_Active()) {
+		return;
+	}
+	_MenuOwnership.Pointer_Moved();
+	Update_Menu_Presentation();
+}
+
+
+void Win32_Gamepad_Reset_Menu_Mode(void)
+{
+	_MenuOwnership.Reset_Mode();
+	Update_Menu_Presentation();
 }
 
 
@@ -557,6 +660,8 @@ void Win32_Gamepad_Shutdown(void)
 void Win32_Gamepad_Test_Reset(void)
 {
 	Win32_Gamepad_Release_All();
+	_MenuOwnership.Set_Menu_Surface(false);
+	Update_Menu_Presentation();
 	if (_Gamepad != NULL) {
 		Close_Gamepad();
 	}
@@ -570,6 +675,7 @@ void Win32_Gamepad_Test_Reset(void)
 	_TestWindowHeight = 0.0f;
 	_TestNow = 0;
 	_TestKeyEvents.clear();
+	_TestMouseEvents.clear();
 	Reset_Device_State();
 	Win32_Pointer_Button(SDL_BUTTON_LEFT, false);
 	Win32_Pointer_Button(SDL_BUTTON_RIGHT, false);
@@ -633,6 +739,22 @@ bool Win32_Gamepad_Test_Take_Key_Event(int * virtualkey, bool * down)
 	_TestKeyEvents.pop_front();
 	if (virtualkey != NULL) *virtualkey = event.VirtualKey;
 	if (down != NULL) *down = event.Down;
+	return(true);
+}
+
+
+bool Win32_Gamepad_Test_Take_Mouse_Event(Uint8 * button, bool * down, float * x, float * y)
+{
+	if (_TestMouseEvents.empty()) {
+		return(false);
+	}
+
+	TestMouseEvent const event = _TestMouseEvents.front();
+	_TestMouseEvents.pop_front();
+	if (button != NULL) *button = event.Button;
+	if (down != NULL) *down = event.Down;
+	if (x != NULL) *x = event.X;
+	if (y != NULL) *y = event.Y;
 	return(true);
 }
 #endif

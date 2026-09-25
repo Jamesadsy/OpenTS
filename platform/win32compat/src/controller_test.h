@@ -22,3 +22,5 @@ void Win32_Gamepad_Test_Set_Axis(SDL_GamepadAxis axis, Sint16 value);
 void Win32_Gamepad_Test_Set_Button(SDL_GamepadButton button, bool down);
 void Win32_Gamepad_Test_Service(void);
 bool Win32_Gamepad_Test_Take_Key_Event(int * virtualkey, bool * down);
+bool Win32_Gamepad_Test_Take_Mouse_Event(Uint8 * button, bool * down,
+	float * x, float * y);

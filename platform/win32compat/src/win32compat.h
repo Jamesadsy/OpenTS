@@ -90,6 +90,9 @@ bool Win32_Pointer_Can_Warp(void);
 // Whether the host draws a pointer on screen at all. Where nothing does, what the shape of
 // a cursor would have told the player has to reach them some other way.
 bool Win32_Pointer_Is_Drawn(void);
+void Win32_Pointer_Set_Menu_Focus(bool focus);
+bool Win32_Pointer_Menu_Focus(void);
+void Win32_Input_Refresh_Cursor(void);
 
 // Posts a message carrying the pointer's current position and buttons, and a key message
 // the same shape the host's own keys arrive in.
@@ -104,6 +107,10 @@ void Win32_Gamepad_Handle_Event(SDL_Event const & event);
 void Win32_Gamepad_Service(void);
 void Win32_Gamepad_Set_Focus(bool focused);
 void Win32_Gamepad_Release_All(void);
+void Win32_Gamepad_Set_Menu_Surface(bool active);
+bool Win32_Gamepad_Menu_Focus_Owned(void);
+void Win32_Gamepad_Menu_Pointer_Moved(void);
+void Win32_Gamepad_Reset_Menu_Mode(void);
 bool Win32_Gamepad_Take_Camera_Pan(int * x, int * y);
 bool Win32_Gamepad_Camera_Pan_Active(void);
 Uint64 Win32_Monotonic_Time_Ms(void);

@@ -332,7 +332,7 @@ static void Apply_Cursor(void)
 #else
 	Win32Cursor * record = Lookup_Cursor(_CurrentCursor);
 
-	if (!_CursorShown || _CursorCount < 0) {
+	if (Win32_Pointer_Menu_Focus() || !_CursorShown || _CursorCount < 0) {
 		SDL_HideCursor();
 		return;
 	}
@@ -342,6 +342,12 @@ static void Apply_Cursor(void)
 	SDL_SetCursor(record != NULL ? record->Cursor : SDL_GetDefaultCursor());
 	SDL_ShowCursor();
 #endif
+}
+
+
+void Win32_Input_Refresh_Cursor(void)
+{
+	Apply_Cursor();
 }
 
 

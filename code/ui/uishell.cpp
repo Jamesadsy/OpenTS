@@ -22,6 +22,7 @@
 
 #include "uiinternal.h"
 #include "uimodalinput.h"
+#include "uicontrollerfocus.h"
 #include "uirmlview.h"
 
 #include "_keyboar.h"
@@ -47,6 +48,7 @@
 #include <windowsx.h>
 
 #include <algorithm>
+#include <vector>
 
 
 static bool _Initialized = false;
@@ -77,6 +79,14 @@ static int _RunningModal = 0;
 // The owner of a press owns its release, so a press that crossed into the game or out of
 // it still completes where it started.
 static int _CaptureButton = -1;
+static Rml::ElementDocument * _MenuDocument = nullptr;
+static std::vector<Rml::ElementDocument *> _MenuDocuments;
+static bool _MenuNavigationKeyDown[4];
+
+static void Set_Active_Menu_Document(Rml::ElementDocument * document);
+static void Activate_Menu_Document(Rml::ElementDocument * document);
+static void Deactivate_Menu_Document(Rml::ElementDocument * document);
+static void Sync_Controller_Focus_Style(void);
 
 #ifndef NDEBUG
 static Rml::ElementDocument * _TestDocument = nullptr;
@@ -443,6 +453,8 @@ void UI_Shutdown(void)
 	}
 
 	_Changing = true;
+	Set_Active_Menu_Document(nullptr);
+	_MenuDocuments.clear();
 
 #ifndef NDEBUG
 	_TestDocument = nullptr;
@@ -678,6 +690,225 @@ static void Leave_Modal_Scope(void)
 }
 
 
+static void Set_Active_Menu_Document(Rml::ElementDocument * document)
+{
+	if (_MenuDocument == document) {
+		Sync_Controller_Focus_Style();
+		return;
+	}
+	if (_MenuDocument != nullptr && _MenuDocument != document) {
+		_MenuDocument->SetClass("controller-focus", false);
+	}
+	_MenuDocument = document;
+	std::fill(&_MenuNavigationKeyDown[0], &_MenuNavigationKeyDown[4], false);
+	Win_Gamepad_Set_Menu_Surface(document != nullptr);
+	if (_MenuDocument != nullptr) {
+		_MenuDocument->SetClass("controller-focus", Win_Gamepad_Menu_Focus_Owned());
+	}
+}
+
+
+static void Activate_Menu_Document(Rml::ElementDocument * document)
+{
+	_MenuDocuments.erase(std::remove(_MenuDocuments.begin(), _MenuDocuments.end(), document),
+		_MenuDocuments.end());
+	_MenuDocuments.push_back(document);
+	Set_Active_Menu_Document(document);
+}
+
+
+static void Deactivate_Menu_Document(Rml::ElementDocument * document)
+{
+	_MenuDocuments.erase(std::remove(_MenuDocuments.begin(), _MenuDocuments.end(), document),
+		_MenuDocuments.end());
+	if (_MenuDocument != document) {
+		return;
+	}
+
+	Rml::ElementDocument * active = nullptr;
+	for (auto it = _MenuDocuments.rbegin(); it != _MenuDocuments.rend(); ++it) {
+		if (*it != nullptr && (*it)->IsVisible()) {
+			active = *it;
+			break;
+		}
+	}
+	Set_Active_Menu_Document(active);
+}
+
+
+static void Sync_Controller_Focus_Style(void)
+{
+	if (_MenuDocument != nullptr) {
+		_MenuDocument->SetClass("controller-focus", Win_Gamepad_Menu_Focus_Owned());
+	}
+}
+
+
+static int Navigation_Key_Index(Rml::Input::KeyIdentifier identifier)
+{
+	switch (identifier) {
+		case Rml::Input::KI_UP: return(0);
+		case Rml::Input::KI_DOWN: return(1);
+		case Rml::Input::KI_LEFT: return(2);
+		case Rml::Input::KI_RIGHT: return(3);
+		default: return(-1);
+	}
+}
+
+
+static bool Controller_Navigation_Is_Screen_Owned(void)
+{
+	return(_MenuDocument != nullptr
+		&& _MenuDocument->GetAttribute<Rml::String>("data-controller-navigation", "") == "screen");
+}
+
+
+static bool Is_Controller_Disabled(Rml::Element const * element)
+{
+	for (Rml::Element const * ancestor = element; ancestor != nullptr;
+		ancestor = ancestor->GetParentNode()) {
+		if (ancestor->IsClassSet("disabled") || ancestor->IsClassSet("locked")
+			|| ancestor->HasAttribute("disabled")) {
+			return(true);
+		}
+	}
+	return(false);
+}
+
+
+static bool Is_Controller_Action(Rml::Element const * element)
+{
+	return(!element->GetAttribute<Rml::String>("data-event-click", "").empty());
+}
+
+
+static bool Is_Controller_Form_Control(Rml::Element const * element)
+{
+	Rml::String const & tag = element->GetTagName();
+	return(tag == "input" || tag == "select" || tag == "textarea");
+}
+
+
+static bool Is_Text_Input(Rml::Element const * element)
+{
+	if (element == nullptr) {
+		return(false);
+	}
+	if (element->GetTagName() == "textarea") {
+		return(true);
+	}
+	return(element->GetTagName() == "input"
+		&& element->GetAttribute<Rml::String>("type", "text") == "text");
+}
+
+
+static void Collect_Controller_Focus_Targets(Rml::Element * parent,
+	std::vector<Rml::Element *> & targets)
+{
+	for (int index = 0; index < parent->GetNumChildren(); index++) {
+		Rml::Element * const element = parent->GetChild(index);
+		if (element == nullptr || element->GetTagName() == "#text") {
+			continue;
+		}
+
+		bool const action = Is_Controller_Action(element);
+		bool const control = Is_Controller_Form_Control(element);
+		bool const explicit_focus = element->HasAttribute("tabindex");
+		if (action || control || explicit_focus) {
+			bool const disabled = Is_Controller_Disabled(element);
+			element->SetProperty("tab-index", disabled ? "none" : "auto");
+			if (action) {
+				element->SetProperty("nav-left", "auto");
+				element->SetProperty("nav-right", "auto");
+			}
+			if (!disabled && element->IsVisible()) {
+				targets.push_back(element);
+			}
+		}
+
+		Collect_Controller_Focus_Targets(element, targets);
+	}
+}
+
+
+static bool Focus_Target(Rml::Element * target)
+{
+	if (target == nullptr || !target->Focus(true)) {
+		return(false);
+	}
+	target->ScrollIntoView(Rml::ScrollIntoViewOptions(Rml::ScrollAlignment::Nearest));
+	return(true);
+}
+
+
+static bool Move_Controller_Focus(Rml::Input::KeyIdentifier direction)
+{
+	if (_MenuDocument == nullptr || Controller_Navigation_Is_Screen_Owned()) {
+		return(false);
+	}
+
+	Rml::Element * current = _Context->GetFocusElement();
+	if (current != nullptr && current->GetOwnerDocument() != _MenuDocument) {
+		current = nullptr;
+	}
+	if (Is_Text_Input(current) || Is_Controller_Form_Control(current)) {
+		return(false);
+	}
+
+	_MenuDocument->UpdateDocument();
+	std::vector<Rml::Element *> targets;
+	Collect_Controller_Focus_Targets(_MenuDocument, targets);
+	_MenuDocument->UpdateDocument();
+	if (targets.empty()) {
+		return(true);
+	}
+
+	std::vector<Rml::Element *> visible_targets;
+	std::vector<UI_Controller_Focus::TargetPosition> positions;
+	positions.reserve(targets.size());
+	for (Rml::Element * target : targets) {
+		Rml::ComputedValues const & computed = target->GetComputedValues();
+		if (computed.display() == Rml::Style::Display::None
+			|| computed.visibility() != Rml::Style::Visibility::Visible) {
+			continue;
+		}
+		auto const position = target->GetAbsoluteOffset(Rml::BoxArea::Border);
+		auto const size = target->GetBox().GetSize(Rml::BoxArea::Border);
+		if (size.x <= 0.0f || size.y <= 0.0f) {
+			continue;
+		}
+		visible_targets.push_back(target);
+		positions.push_back(UI_Controller_Focus::TargetPosition{
+			position.x + size.x * 0.5f, position.y + size.y * 0.5f
+		});
+	}
+
+	int current_index = -1;
+	for (int index = 0; index < (int)visible_targets.size(); index++) {
+		if (visible_targets[index] == current) {
+			current_index = index;
+			break;
+		}
+	}
+
+	UI_Controller_Focus::Direction controller_direction = UI_Controller_Focus::Direction::DOWN;
+	switch (direction) {
+		case Rml::Input::KI_UP: controller_direction = UI_Controller_Focus::Direction::UP; break;
+		case Rml::Input::KI_DOWN: controller_direction = UI_Controller_Focus::Direction::DOWN; break;
+		case Rml::Input::KI_LEFT: controller_direction = UI_Controller_Focus::Direction::LEFT; break;
+		case Rml::Input::KI_RIGHT: controller_direction = UI_Controller_Focus::Direction::RIGHT; break;
+		default: return(false);
+	}
+
+	int const next_index = UI_Controller_Focus::Next_Target_Index(positions,
+		current_index, controller_direction);
+	if (next_index >= 0) {
+		Focus_Target(visible_targets[next_index]);
+	}
+	return(true);
+}
+
+
 /// <summary>
 /// Offers a window message to the toolkits before the game sees it.
 /// The order follows docs/UI_DESIGN.md: ImGui's capture flags first, then a modal
@@ -695,6 +926,7 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 	}
 
 	int const modifiers = Key_Modifiers();
+	Sync_Controller_Focus_Style();
 
 	switch (message) {
 		case WM_MOUSEMOVE: {
@@ -786,6 +1018,27 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 				return(_ModalDepth > 0);
 			}
 
+			if (_MenuDocument != nullptr && Win_Gamepad_Menu_Focus_Owned()) {
+				int const navigation_index = Navigation_Key_Index(identifier);
+				if (navigation_index >= 0 && Move_Controller_Focus(identifier)) {
+					_MenuNavigationKeyDown[navigation_index] = true;
+					return(true);
+				}
+
+				if (identifier == Rml::Input::KI_RETURN || identifier == Rml::Input::KI_NUMPADENTER) {
+					Rml::Element * const focused = _Context->GetFocusElement();
+					bool const current_action = focused != nullptr
+						&& focused->GetOwnerDocument() == _MenuDocument
+						&& Is_Controller_Action(focused);
+					if (UI_Controller_Focus::Activate_Focused_Action(
+						Win_Gamepad_Menu_Focus_Owned(), Controller_Navigation_Is_Screen_Owned(),
+						current_action, current_action && Is_Controller_Disabled(focused),
+						[focused]() { focused->Click(); })) {
+						return(true);
+					}
+				}
+			}
+
 			return(UI_Modal_Input::Key_Down_Consumed(*_Context, identifier, modifiers,
 				_ModalDepth > 0, false));
 		}
@@ -793,6 +1046,11 @@ bool UI_Handle_Window_Message(HWND window, UINT message, WPARAM wparam, LPARAM l
 		case WM_KEYUP:
 		case WM_SYSKEYUP: {
 			Rml::Input::KeyIdentifier const identifier = Key_Identifier(wparam);
+			int const navigation_index = Navigation_Key_Index(identifier);
+			if (navigation_index >= 0 && _MenuNavigationKeyDown[navigation_index]) {
+				_MenuNavigationKeyDown[navigation_index] = false;
+				return(true);
+			}
 			if (identifier == Rml::Input::KI_UNKNOWN) {
 				return(_ModalDepth > 0);
 			}
@@ -910,6 +1168,7 @@ bool UIRmlViewClass::Prepare(bool modal)
 	Element->AddEventListener(Rml::EventId::Blur, &_TextFieldFocus, true);
 
 	Element->Show(modal ? Rml::ModalFlag::Modal : Rml::ModalFlag::None);
+	Activate_Menu_Document(Element);
 
 	Release_Pointer_To_Host();
 
@@ -936,6 +1195,7 @@ void UIRmlViewClass::Hide(void)
 	}
 
 	Element->Hide();
+	Deactivate_Menu_Document(Element);
 
 	Recapture_Pointer();
 
@@ -957,6 +1217,7 @@ void UIRmlViewClass::Show(void)
 	}
 
 	Element->Show(IsModal ? Rml::ModalFlag::Modal : Rml::ModalFlag::None);
+	Activate_Menu_Document(Element);
 
 	Release_Pointer_To_Host();
 
@@ -981,6 +1242,8 @@ void UIRmlViewClass::Close(void)
 	Presenter.Discard();
 
 	bool const wasvisible = Element->IsVisible();
+	Rml::ElementDocument * const closing = Element;
+	Deactivate_Menu_Document(closing);
 
 	Element->Close();
 	Element = nullptr;

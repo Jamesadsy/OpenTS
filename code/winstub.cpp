@@ -396,6 +396,9 @@ uint64_t Win32_Monotonic_Time_Ms(void);
 void Win32_Gamepad_Service(void);
 bool Win32_Gamepad_Take_Action(int * action);
 void Win32_Gamepad_Discard_Actions(void);
+void Win32_Gamepad_Set_Menu_Surface(bool active);
+bool Win32_Gamepad_Menu_Focus_Owned(void);
+void Win32_Gamepad_Reset_Menu_Mode(void);
 void Win32_Touch_Set_Movie_Mode(bool playing);
 #endif
 
@@ -578,6 +581,34 @@ void Win_Gamepad_Service(void)
 {
 #ifndef _WIN32
 	Win32_Gamepad_Service();
+#endif
+}
+
+
+void Win_Gamepad_Set_Menu_Surface(bool active)
+{
+#ifndef _WIN32
+	Win32_Gamepad_Set_Menu_Surface(active);
+#else
+	(void)active;
+#endif
+}
+
+
+bool Win_Gamepad_Menu_Focus_Owned(void)
+{
+#ifdef _WIN32
+	return(false);
+#else
+	return(Win32_Gamepad_Menu_Focus_Owned());
+#endif
+}
+
+
+void Win_Gamepad_Reset_Menu_Mode(void)
+{
+#ifndef _WIN32
+	Win32_Gamepad_Reset_Menu_Mode();
 #endif
 }
 

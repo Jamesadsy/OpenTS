@@ -24,6 +24,7 @@ static bool _PointerStarted;
 static bool _DirectTouch;
 static bool _SuppressEdgeScroll;
 static bool _ControllerOwnsPointer;
+static bool _MenuFocus;
 
 
 static SDL_MouseButtonFlags Button_Mask(Uint8 button)
@@ -65,6 +66,9 @@ void Win32_Pointer_Move(float x, float y)
 
 void Win32_Pointer_Move_Host(float x, float y)
 {
+	if (x != _PointerX || y != _PointerY) {
+		Win32_Gamepad_Menu_Pointer_Moved();
+	}
 	Win32_Pointer_Set_Controller_Owner(false);
 	Win32_Pointer_Move(x, y);
 }
@@ -137,7 +141,23 @@ bool Win32_Pointer_Can_Warp(void)
 // what lets the game decide.
 bool Win32_Pointer_Is_Drawn(void)
 {
-	return(true);
+	return(!_MenuFocus);
+}
+
+
+void Win32_Pointer_Set_Menu_Focus(bool focus)
+{
+	if (_MenuFocus == focus) {
+		return;
+	}
+	_MenuFocus = focus;
+	Win32_Input_Refresh_Cursor();
+}
+
+
+bool Win32_Pointer_Menu_Focus(void)
+{
+	return(_MenuFocus);
 }
 
 
@@ -190,6 +210,7 @@ void Win32_Pointer_Set_Direct_Touch(bool direct)
 {
 	_DirectTouch = direct;
 	if (direct) {
+		Win32_Gamepad_Menu_Pointer_Moved();
 		Win32_Pointer_Set_Controller_Owner(false);
 	}
 }

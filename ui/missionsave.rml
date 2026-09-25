@@ -5,7 +5,7 @@
 	<link type="text/rcss" href="savebrowser.rcss"/>
 	<link type="text/rcss" href="missionsave.rcss"/>
 </head>
-<body data-model="missionsave" data-event-keydown="key()">
+<body data-model="missionsave" data-controller-navigation="screen" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="title">SAVE</div>
 

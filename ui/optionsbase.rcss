@@ -92,6 +92,22 @@ body
 	decorator: tiled-horizontal(bde_li24.pcx, bde_mi24.pcx, bde_ri24.pcx);
 }
 
+/* Controller focus is shown only while a menu screen owns focus navigation. */
+.controller-focus .button:focus,
+.controller-focus .check:focus,
+.controller-focus .field:focus
+{
+	border-width: 1dp;
+	border-color: #4eb6dc;
+	color: #ffffff;
+}
+
+.controller-focus .row:focus
+{
+	background-color: #225061;
+	color: #ffffff;
+}
+
 .button.disabled,
 .disabled .button
 {

@@ -47,6 +47,28 @@ bool Take_Key(int expected, bool expected_down)
 }
 
 
+bool Take_Mouse(Uint8 expected_button, bool expected_down, float expected_x, float expected_y)
+{
+	Uint8 button = 0;
+	bool down = false;
+	float x = 0.0f;
+	float y = 0.0f;
+	return(Win32_Gamepad_Test_Take_Mouse_Event(&button, &down, &x, &y)
+		&& button == expected_button && down == expected_down
+		&& x == expected_x && y == expected_y);
+}
+
+
+void Drain_Mouse_Events(void)
+{
+	Uint8 button = 0;
+	bool down = false;
+	float x = 0.0f;
+	float y = 0.0f;
+	while (Win32_Gamepad_Test_Take_Mouse_Event(&button, &down, &x, &y)) {}
+}
+
+
 void Service(Uint64 now)
 {
 	Win32_Gamepad_Test_Set_Now(now);
@@ -228,6 +250,105 @@ void Test_Face_Buttons_And_Modifiers(void)
 	Check((GetAsyncKeyState(WIN32_VK_MENU) & 0x8000) == 0,
 		"R1 release clears the synthetic Alt modifier");
 	Drain_Key_Events();
+}
+
+
+void Test_Menu_Focus_And_Pointer_Ownership(void)
+{
+	Setup();
+	Win32_Gamepad_Set_Menu_Surface(true);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+	Check(Win32_Gamepad_Menu_Focus_Owned() && Win32_Pointer_Menu_Focus()
+		&& !Win32_Pointer_Is_Drawn(),
+		"D-pad navigation transfers menu ownership to visible focus and hides the pointer");
+	Check(Take_Key(WIN32_VK_DOWN, true), "focus-mode D-pad continues to deliver Down to the active screen");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+	Check(Take_Key(WIN32_VK_DOWN, false), "focus-mode D-pad emits the matching Down release");
+
+	Drain_Key_Events();
+	Drain_Mouse_Events();
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, true);
+	Check(Take_Key(WIN32_VK_RETURN, true)
+		&& (Win32_Pointer_Buttons() & SDL_BUTTON_LMASK) == 0
+		&& !Win32_Gamepad_Test_Take_Mouse_Event(NULL, NULL, NULL, NULL),
+		"Cross in Focus Mode emits semantic Enter with no stale-coordinate mouse activation");
+
+	Win32_Pointer_Move(100.0f, 120.0f);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 10000);
+	Service(FRAME_60);
+	float pointer_x = 0.0f;
+	float pointer_y = 0.0f;
+	Win32_Pointer_Position(&pointer_x, &pointer_y);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && !Win32_Pointer_Menu_Focus()
+		&& Win32_Pointer_Is_Drawn() && pointer_x > 100.0f && pointer_y == 120.0f,
+		"meaningful left-stick motion immediately restores authoritative pointer mode");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, false);
+	Check(Take_Key(WIN32_VK_RETURN, false)
+		&& !Win32_Gamepad_Test_Take_Mouse_Event(NULL, NULL, NULL, NULL),
+		"a Cross press begun in Focus Mode retains semantic release after a stick switch");
+
+	Drain_Key_Events();
+	Drain_Mouse_Events();
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, true);
+	Check(!Win32_Gamepad_Test_Take_Key_Event(NULL, NULL)
+		&& Take_Mouse(SDL_BUTTON_LEFT, true, pointer_x, pointer_y),
+		"Cross in Pointer Mode presses left mouse at the actual virtual-pointer position");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, false);
+	Check(Take_Mouse(SDL_BUTTON_LEFT, false, pointer_x, pointer_y),
+		"pointer-mode Cross releases left mouse at the actual virtual-pointer position");
+
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
+	Check(Win32_Gamepad_Menu_Focus_Owned(), "D-pad to stick to D-pad returns to Focus Mode");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+	Drain_Key_Events();
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
+	Check(Take_Key(WIN32_VK_ESCAPE, true)
+		&& (Win32_Pointer_Buttons() & SDL_BUTTON_RMASK) == 0,
+		"Circle in Focus Mode sends Escape and never right-clicks the pointer");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, false);
+	Check(Take_Key(WIN32_VK_ESCAPE, false), "focus-mode Circle emits the matching Escape release");
+
+	Win32_Gamepad_Menu_Pointer_Moved();
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
+	Check(Take_Mouse(SDL_BUTTON_RIGHT, true, pointer_x, pointer_y),
+		"Circle in Pointer Mode preserves right-click at the current pointer position");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, false);
+	Check(Take_Mouse(SDL_BUTTON_RIGHT, false, pointer_x, pointer_y),
+		"pointer-mode Circle releases right mouse at the same pointer position");
+
+	Win32_Touch_Set_Movie_Mode(true);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
+	Check(!Win32_Gamepad_Test_Take_Key_Event(NULL, NULL)
+		&& !Win32_Gamepad_Test_Take_Mouse_Event(NULL, NULL, NULL, NULL),
+		"movie Circle remains held by the movie-skip route instead of UI or pointer input");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, false);
+	Win32_Touch_Set_Movie_Mode(false);
+
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_UP, true);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+	Win32_Gamepad_Test_Set_Connected(false);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && !Win32_Pointer_Menu_Focus()
+		&& Win32_Pointer_Is_Drawn(),
+		"controller disconnect safely clears Focus Mode and restores the pointer presentation");
+
+	Win32_Gamepad_Set_Menu_Surface(false);
+	Win32_Gamepad_Test_Set_Connected(true);
+	float tactical_x = 0.0f;
+	float tactical_y = 0.0f;
+	Win32_Pointer_Position(&tactical_x, &tactical_y);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_UP, true);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+	float tactical_x_after = 0.0f;
+	float tactical_y_after = 0.0f;
+	Win32_Pointer_Position(&tactical_x_after, &tactical_y_after);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && Win32_Pointer_Is_Drawn()
+		&& tactical_x_after == tactical_x && tactical_y_after == tactical_y,
+		"leaving the menu restores the unchanged tactical pointer presentation");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, true);
+	int action = 0;
+	Check(Win32_Gamepad_Take_Action(&action) && action == WIN32_GAMEPAD_ACTION_SQUARE,
+		"Square gameplay action remains mapped to the existing Repair/Sell endpoint");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, false);
 }
 
 
@@ -457,6 +578,7 @@ int main(void)
 	Test_Cadence_And_Stall();
 	Test_Action_Edges();
 	Test_Face_Buttons_And_Modifiers();
+	Test_Menu_Focus_And_Pointer_Ownership();
 	Test_Start_And_Dpad();
 	Test_Right_Stick_Camera_Pan();
 	Test_Left_Stick_Edge_With_Right_Stick_Camera();

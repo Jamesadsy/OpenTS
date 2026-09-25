@@ -464,12 +464,16 @@ void SaveBrowserViewClass::Bind(Rml::DataModelConstructor & model)
 			int const key = event.GetParameter<int>("key_identifier", Rml::Input::KI_UNKNOWN);
 			if (key == Rml::Input::KI_ESCAPE) {
 				Press(UI_SAVEBROWSER_CANCEL);
+				event.StopPropagation();
 			} else if (key == Rml::Input::KI_RETURN || key == Rml::Input::KI_NUMPADENTER) {
 				Press(UI_SAVEBROWSER_ACCEPT);
+				event.StopPropagation();
 			} else if (key == Rml::Input::KI_UP) {
 				Screen.Queue(UIIntent{UI_SAVEBROWSER_MOVE, "", -1});
+				event.StopPropagation();
 			} else if (key == Rml::Input::KI_DOWN) {
 				Screen.Queue(UIIntent{UI_SAVEBROWSER_MOVE, "", 1});
+				event.StopPropagation();
 			}
 		});
 }

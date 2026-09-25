@@ -73,6 +73,9 @@ enum WinGamepadAction {
 void Win_Gamepad_Service(void);
 bool Win_Gamepad_Take_Action(WinGamepadAction & action);
 void Win_Gamepad_Discard_Actions(void);
+void Win_Gamepad_Set_Menu_Surface(bool active);
+bool Win_Gamepad_Menu_Focus_Owned(void);
+void Win_Gamepad_Reset_Menu_Mode(void);
 
 void Win_Set_Movie_Playing(bool playing);
 void Set_Window_Fullscreen(bool fullscreen);
