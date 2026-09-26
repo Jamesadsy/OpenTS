@@ -396,6 +396,8 @@ uint64_t Win32_Monotonic_Time_Ms(void);
 void Win32_Gamepad_Service(void);
 bool Win32_Gamepad_Take_Action(int * action);
 void Win32_Gamepad_Discard_Actions(void);
+bool Win32_Gamepad_Take_Menu_Back_Action(void);
+void Win32_Gamepad_Discard_Menu_Back_Actions(void);
 void Win32_Gamepad_Set_Menu_Surface(bool active);
 bool Win32_Gamepad_Menu_Focus_Owned(void);
 void Win32_Gamepad_Reset_Menu_Mode(void);
