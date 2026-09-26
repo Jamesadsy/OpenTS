@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="optionsbase.rcss"/>
 	<link type="text/rcss" href="skirmish.rcss"/>
 </head>
-<body data-model="skirmish" data-event-keydown="key()">
+<body data-model="skirmish" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="namelabel">Name:</div>
 		<input type="text" id="name" maxlength="19" data-attr-value="handle" data-event-change="rename()"/>

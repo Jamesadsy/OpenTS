@@ -76,6 +76,74 @@ void Service(Uint64 now)
 }
 
 
+void Test_Cold_Boot_Menu_Pointer(void)
+{
+	float x = -1.0f;
+	float y = -1.0f;
+	Win32_Pointer_Position(&x, &y);
+	Check(x == 0.0f && y == 0.0f,
+		"cold-boot controller proof begins with no gameplay-seeded pointer position");
+
+	Win32_Gamepad_Test_Reset();
+	Win32_Gamepad_Test_Set_Window_Size(640.0f, 480.0f);
+	Win32_Gamepad_Test_Set_Connected(true);
+	Win32_Gamepad_Set_Menu_Surface(true);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && Win32_Pointer_Is_Drawn(),
+		"the first interactive frontend begins in the existing Pointer Mode");
+
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, -32768);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTY, -32768);
+	Service(0);
+	Win32_Pointer_Position(&x, &y);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && !Win32_Pointer_Menu_Focus()
+		&& Win32_Pointer_Is_Drawn() && Win32_Pointer_Is_Controller_Owner()
+		&& x == 319.5f && y == 239.5f,
+		"first cold-boot stick input immediately enters Pointer Mode at a live viewport-derived position");
+	Service(FRAME_60);
+	Win32_Pointer_Position(&x, &y);
+	Check(x > 0.0f && y > 0.0f && x < 319.5f && y < 239.5f,
+		"the first controller pointer moves correctly from its cold-boot position");
+
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, true);
+	Check(Take_Mouse(SDL_BUTTON_LEFT, true, x, y),
+		"cold-boot Cross presses the current authoritative pointer coordinate");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_SOUTH, false);
+	Check(Take_Mouse(SDL_BUTTON_LEFT, false, x, y),
+		"cold-boot Cross releases at the same pointer coordinate");
+
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
+	Check(Win32_Gamepad_Menu_Focus_Owned() && !Win32_Pointer_Is_Drawn(),
+		"D-pad enters Focus Mode after cold-boot pointer movement");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 12000);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTY, 0);
+	Service(2 * FRAME_60);
+	Win32_Pointer_Position(&x, &y);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && Win32_Pointer_Is_Drawn()
+		&& x > 0.0f && y > 0.0f,
+		"D-pad to stick switching remains deterministic at the current pointer position");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+	Check(Win32_Gamepad_Menu_Focus_Owned() && !Win32_Pointer_Is_Drawn(),
+		"D-pad returns to Focus Mode after another stick movement");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 0);
+	Win32_Gamepad_Set_Menu_Surface(false);
+	Win32_Pointer_Move(500.0f, 350.0f);
+	Win32_Gamepad_Set_Menu_Surface(true);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 12000);
+	Service(3 * FRAME_60);
+	Win32_Pointer_Position(&x, &y);
+	Check(!Win32_Gamepad_Menu_Focus_Owned() && Win32_Pointer_Is_Drawn()
+		&& x > 500.0f && y == 350.0f,
+		"a gameplay-returned frontend preserves its established pointer and the same D-pad-to-stick behavior");
+	Win32_Gamepad_Test_Set_Axis(SDL_GAMEPAD_AXIS_LEFTX, 0);
+	Win32_Gamepad_Set_Menu_Surface(false);
+}
+
+
 void Setup(void)
 {
 	Win32_Gamepad_Test_Reset();
@@ -302,11 +370,15 @@ void Test_Menu_Focus_And_Pointer_Ownership(void)
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
 	Drain_Key_Events();
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
-	Check(Take_Key(WIN32_VK_ESCAPE, true)
+	Check(Win32_Gamepad_Take_Menu_Back_Action()
+		&& !Win32_Gamepad_Take_Menu_Back_Action()
+		&& !Win32_Gamepad_Test_Take_Key_Event(NULL, NULL)
 		&& (Win32_Pointer_Buttons() & SDL_BUTTON_RMASK) == 0,
-		"Circle in Focus Mode sends Escape and never right-clicks the pointer");
+		"Circle in Focus Mode queues one semantic Back edge without Escape or right-click");
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, false);
-	Check(Take_Key(WIN32_VK_ESCAPE, false), "focus-mode Circle emits the matching Escape release");
+	Check(!Win32_Gamepad_Take_Menu_Back_Action()
+		&& !Win32_Gamepad_Test_Take_Key_Event(NULL, NULL),
+		"focus-mode Circle release does not enqueue another Back or key edge");
 
 	Win32_Gamepad_Menu_Pointer_Moved();
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
@@ -344,6 +416,12 @@ void Test_Menu_Focus_And_Pointer_Ownership(void)
 	Check(!Win32_Gamepad_Menu_Focus_Owned() && Win32_Pointer_Is_Drawn()
 		&& tactical_x_after == tactical_x && tactical_y_after == tactical_y,
 		"leaving the menu restores the unchanged tactical pointer presentation");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, true);
+	Check(Take_Mouse(SDL_BUTTON_RIGHT, true, tactical_x, tactical_y),
+		"tactical Circle sends right-button down for native Repair/Sell cancellation");
+	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_EAST, false);
+	Check(Take_Mouse(SDL_BUTTON_RIGHT, false, tactical_x, tactical_y),
+		"tactical Circle release preserves the existing native cancel path");
 	Win32_Gamepad_Test_Set_Button(SDL_GAMEPAD_BUTTON_WEST, true);
 	int action = 0;
 	Check(Win32_Gamepad_Take_Action(&action) && action == WIN32_GAMEPAD_ACTION_SQUARE,
@@ -573,6 +651,7 @@ void Test_Lifecycle_Release_And_Reconnect(void)
 
 int main(void)
 {
+	Test_Cold_Boot_Menu_Pointer();
 	Test_Stick_Dead_Zone_And_Bounds();
 	Test_Speed_Boost();
 	Test_Cadence_And_Stall();

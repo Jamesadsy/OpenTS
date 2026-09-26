@@ -649,6 +649,24 @@ void Win_Gamepad_Discard_Actions(void)
 }
 
 
+bool Win_Gamepad_Take_Menu_Back_Action(void)
+{
+#ifdef _WIN32
+	return(false);
+#else
+	return(Win32_Gamepad_Take_Menu_Back_Action());
+#endif
+}
+
+
+void Win_Gamepad_Discard_Menu_Back_Actions(void)
+{
+#ifndef _WIN32
+	Win32_Gamepad_Discard_Menu_Back_Actions();
+#endif
+}
+
+
 /// <summary>
 /// Answers whether the host draws a pointer on the display.
 /// The shape of the pointer is where the game says what a click would do, so a display that

@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="optionsbase.rcss"/>
 	<link type="text/rcss" href="display.rcss"/>
 </head>
-<body data-model="display" data-event-keydown="key()">
+<body data-model="display" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="title">Display Options:</div>
 		<div class="caption" id="reslabel">Resolution Modes</div>

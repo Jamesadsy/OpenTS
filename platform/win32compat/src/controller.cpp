@@ -71,6 +71,7 @@ std::deque<TestMouseEvent> _TestMouseEvents;
 #endif
 
 std::deque<int> _Actions;
+std::deque<int> _MenuBackActions;
 
 
 void Update_Menu_Presentation(void)
@@ -194,7 +195,9 @@ void Post_Controller_Circle(bool down, ControllerMenuRoute route)
 	if (route == ControllerMenuRoute::MOVIE) {
 		Win32_Touch_Movie_Circle(down);
 	} else if (route == ControllerMenuRoute::FOCUS) {
-		Post_Controller_Key(WIN32_VK_ESCAPE, down);
+		if (down) {
+			_MenuBackActions.push_back(0);
+		}
 	} else {
 		Post_Controller_Mouse(SDL_BUTTON_RIGHT, down,
 			down ? WM_RBUTTONDOWN : WM_RBUTTONUP);
@@ -333,6 +336,7 @@ void Reset_Device_State(void)
 	_HaveServiceTime = false;
 	_LastService = 0;
 	_Actions.clear();
+	_MenuBackActions.clear();
 }
 
 
@@ -481,16 +485,18 @@ void Win32_Gamepad_Service(void)
 	}
 
 	Uint64 const now = Controller_Now();
+	bool const first_service = !_HaveServiceTime;
+	bool const service_interval_elapsed = _HaveServiceTime && now != _LastService;
+	double elapsed = 0.0;
 	if (!_HaveServiceTime) {
 		_LastService = now;
 		_HaveServiceTime = true;
-		return;
-	}
-
-	double elapsed = (double)(now - _LastService) / 1000000000.0;
-	_LastService = now;
-	if (elapsed <= 0.0) {
-		return;
+	} else {
+		elapsed = (double)(now - _LastService) / 1000000000.0;
+		_LastService = now;
+		if (elapsed <= 0.0) {
+			elapsed = 0.0;
+		}
 	}
 	if (elapsed > GAMEPAD_STALL_RESET_SECONDS) {
 		// A service gap means the host was not presenting. Do not turn the whole gap into
@@ -502,9 +508,11 @@ void Win32_Gamepad_Service(void)
 		for (int axis = 0; axis < SDL_GAMEPAD_AXIS_COUNT; axis++) {
 			_Axes[axis] = SDL_GetGamepadAxis(_Gamepad, (SDL_GamepadAxis)axis);
 		}
-		for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; button++) {
-			Apply_Button((SDL_GamepadButton)button,
-				SDL_GetGamepadButton(_Gamepad, (SDL_GamepadButton)button));
+		if (!first_service && service_interval_elapsed) {
+			for (int button = 0; button < SDL_GAMEPAD_BUTTON_COUNT; button++) {
+				Apply_Button((SDL_GamepadButton)button,
+					SDL_GetGamepadButton(_Gamepad, (SDL_GamepadButton)button));
+			}
 		}
 	}
 
@@ -517,6 +525,16 @@ void Win32_Gamepad_Service(void)
 	float width = 0.0f;
 	float height = 0.0f;
 	if ((leftx != 0.0 || lefty != 0.0) && Window_Size(width, height)) {
+		bool const menu_surface = _MenuOwnership.Menu_Surface_Active();
+		bool const initialized = menu_surface
+			&& Win32_Pointer_Initialize_Menu_Position(width, height);
+		if (menu_surface) {
+			_MenuOwnership.Pointer_Moved();
+			Update_Menu_Presentation();
+			Win32_Pointer_Set_Direct_Touch(false);
+			Win32_Pointer_Set_Controller_Owner(true);
+		}
+
 		float x = 0.0f;
 		float y = 0.0f;
 		Win32_Pointer_Position(&x, &y);
@@ -526,16 +544,18 @@ void Win32_Gamepad_Service(void)
 			0.0, (double)width - 1.0);
 		y = std::clamp((double)y + lefty * GAMEPAD_CURSOR_SPEED * elapsed * pointer_boost,
 			0.0, (double)height - 1.0);
-		if (x != old_x || y != old_y) {
-			_MenuOwnership.Pointer_Moved();
-			Update_Menu_Presentation();
+		if (x != old_x || y != old_y || initialized) {
+			if (!menu_surface) {
+				_MenuOwnership.Pointer_Moved();
+				Update_Menu_Presentation();
+			}
 			Win32_Pointer_Set_Direct_Touch(false);
 			Win32_Pointer_Move_Controller(x, y);
 			Win32_Post_Pointer_Message(WM_MOUSEMOVE);
 		}
 	}
 
-	if (rightx != 0.0 || righty != 0.0) {
+	if (service_interval_elapsed && (rightx != 0.0 || righty != 0.0)) {
 		Win32_Pointer_Set_Direct_Touch(false);
 		_CameraPanX += rightx * GAMEPAD_CAMERA_SPEED * elapsed;
 		_CameraPanY += righty * GAMEPAD_CAMERA_SPEED * elapsed;
@@ -558,6 +578,7 @@ void Win32_Gamepad_Set_Focus(bool focused)
 
 void Win32_Gamepad_Set_Menu_Surface(bool active)
 {
+	_MenuBackActions.clear();
 	_MenuOwnership.Set_Menu_Surface(active);
 	Update_Menu_Presentation();
 }
@@ -644,6 +665,22 @@ bool Win32_Gamepad_Take_Action(int * action)
 void Win32_Gamepad_Discard_Actions(void)
 {
 	_Actions.clear();
+}
+
+
+bool Win32_Gamepad_Take_Menu_Back_Action(void)
+{
+	if (_MenuBackActions.empty()) {
+		return(false);
+	}
+	_MenuBackActions.pop_front();
+	return(true);
+}
+
+
+void Win32_Gamepad_Discard_Menu_Back_Actions(void)
+{
+	_MenuBackActions.clear();
 }
 
 

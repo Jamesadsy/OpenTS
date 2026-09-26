@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="optionsbase.rcss"/>
 	<link type="text/rcss" href="gameoptions.rcss"/>
 </head>
-<body data-model="gameoptions" data-event-keydown="key()">
+<body data-model="gameoptions" data-controller-back="resume" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="button" id="settings" data-event-click="press('settings')">Game Controls</div>
 		<div class="button" id="briefing" data-class-disabled="!canbrief" data-event-click="press('briefing')">Restate Briefing</div>

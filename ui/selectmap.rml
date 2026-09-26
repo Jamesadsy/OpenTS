@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="optionsbase.rcss"/>
 	<link type="text/rcss" href="selectmap.rcss"/>
 </head>
-<body data-model="selectmap" data-event-keydown="key()">
+<body data-model="selectmap" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="title">Select Multiplayer Map</div>
 

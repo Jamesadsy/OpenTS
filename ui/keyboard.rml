@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="optionsbase.rcss"/>
 	<link type="text/rcss" href="keyboard.rcss"/>
 </head>
-<body data-model="keyboard" data-event-keydown="key()">
+<body data-model="keyboard" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="title">Customize Keyboard</div>
 

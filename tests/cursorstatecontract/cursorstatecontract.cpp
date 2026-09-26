@@ -41,6 +41,17 @@ void Check(bool condition, char const * what)
 }
 
 
+void Test_Menu_Pointer_Overlay_Ownership(void)
+{
+	Check(Cursor_Overlay_Should_Draw(true, true),
+		"iOS draws the retained software cursor while Pointer Mode owns the menu");
+	Check(!Cursor_Overlay_Should_Draw(true, false),
+		"Focus Mode hides the software cursor when focus owns the menu");
+	Check(!Cursor_Overlay_Should_Draw(false, true),
+		"the ownership policy does not show a software cursor that is otherwise hidden");
+}
+
+
 void Test_Action_Cursor_Resolution(void)
 {
 	Check(Action_Cursor_Shape(ACTION_NONE, false, false, false) == MOUSE_NORMAL,
@@ -323,6 +334,7 @@ void Test_Native_Cursor_And_Action_Continuity(void)
 		&& cursor_header_source.find("Win_Cursor_Set_Semantic_Mouse_Type(MouseType semantic_mouse_type)") != std::string::npos
 		&& cursor_source.find("static MouseType _SemanticMouseType = MOUSE_NORMAL;") != std::string::npos
 		&& !overlay_body.empty()
+		&& overlay_body.find("Cursor_Overlay_Should_Draw(_CursorVisible, Win_Pointer_Is_Drawn())") != std::string::npos
 		&& overlay_body.find("Build_Cursor_Image(_CurrentShape, STATIC_POINTER_FRAME, _CacheScale, _StaticPointerImage)") != std::string::npos
 		&& overlay_body.find("STATIC_POINTER_FRAME, STATIC_POINTER_HOT_X, STATIC_POINTER_HOT_Y") != std::string::npos
 		&& overlay_body.find("front_end ? (int)MOUSE_NORMAL : (int)_SemanticMouseType") != std::string::npos
@@ -650,18 +662,30 @@ void Test_Cursor_Sequences_Reach_Presentation(void)
 	std::size_t const controller_move_end = pointer_source.find("\n}\n", controller_move_start);
 	std::string const controller_move_body = controller_move_start == std::string::npos || controller_move_end == std::string::npos
 		? std::string() : pointer_source.substr(controller_move_start, controller_move_end - controller_move_start);
+	std::size_t const initialize_start = pointer_source.find("bool Win32_Pointer_Initialize_Menu_Position(float width, float height)");
+	std::size_t const initialize_end = pointer_source.find("\n}\n", initialize_start);
+	std::string const initialize_body = initialize_start == std::string::npos || initialize_end == std::string::npos
+		? std::string() : pointer_source.substr(initialize_start, initialize_end - initialize_start);
+	std::size_t const menu_seed = controller_source.find("Win32_Pointer_Initialize_Menu_Position(width, height)");
+	std::size_t const menu_move = controller_source.find("if (x != old_x || y != old_y || initialized)", menu_seed);
+	std::size_t const menu_move_event = controller_source.find("Win32_Post_Pointer_Message(WM_MOUSEMOVE);", menu_move);
 	std::size_t const overlay_position_start = cursor_source.find("static bool Current_Overlay_Position(int * x, int * y)");
 	std::size_t const overlay_position_end = cursor_source.find("static void Trace_Cursor_Presentation", overlay_position_start);
 	std::string const overlay_position_body = overlay_position_start == std::string::npos || overlay_position_end == std::string::npos
 		? std::string() : cursor_source.substr(overlay_position_start, overlay_position_end - overlay_position_start);
 	Check(!move_body.empty() && move_body.find("_PointerX = x;") != std::string::npos
 		&& move_body.find("_PointerY = y;") != std::string::npos
+		&& move_body.find("_PointerPositionInitialized = true;") != std::string::npos
 		&& !controller_move_body.empty() && controller_move_body.find("_PointerX = x;") != std::string::npos
 		&& controller_move_body.find("_PointerY = y;") != std::string::npos
+		&& !initialize_body.empty() && initialize_body.find("_PointerPositionInitialized || width <= 0.0f || height <= 0.0f") != std::string::npos
+		&& initialize_body.find("(width - 1.0f) * 0.5f") != std::string::npos
+		&& menu_seed != std::string::npos && menu_move > menu_seed && menu_move_event > menu_move
+		&& controller_source.find("Win32_Touch_Movie_Circle(down);") != std::string::npos
 		&& touch_source.find("Win32_Pointer_Move(x, y);") != std::string::npos
 		&& controller_source.find("Win32_Pointer_Move_Controller(x, y);") != std::string::npos
 		&& !overlay_position_body.empty() && overlay_position_body.find("MouseCursor->Get_Mouse_Point()") != std::string::npos,
-		"touch, controller and the static overlay share the authoritative engine pointer coordinate");
+		"touch, cold-boot menu stick, movie Circle and the static overlay keep their shared pointer and hold routes");
 }
 
 
@@ -706,6 +730,7 @@ void Test_Legacy_Controller_Service_Order(void)
 
 int main(void)
 {
+	Test_Menu_Pointer_Overlay_Ownership();
 	Test_Action_Cursor_Resolution();
 	Test_Repair_Sell_Seeds_And_Hover();
 	Test_Square_Mode_Cycle();

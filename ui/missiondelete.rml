@@ -5,7 +5,7 @@
 	<link type="text/rcss" href="savebrowser.rcss"/>
 	<link type="text/rcss" href="missiondelete.rcss"/>
 </head>
-<body data-model="missiondelete" data-controller-navigation="screen" data-event-keydown="key()">
+<body data-model="missiondelete" data-controller-navigation="screen" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="title">DELETE</div>
 

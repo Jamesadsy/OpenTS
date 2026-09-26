@@ -5,7 +5,7 @@
 	<link type="text/rcss" href="mapgenbase.rcss"/>
 	<link type="text/rcss" href="mapgenwdt.rcss"/>
 </head>
-<body data-model="mapgenwdt" data-event-keydown="key()">
+<body data-model="mapgenwdt" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="environmentlabel">Environment:</div>
 		<select id="biome" class="combo" data-class-locked="!biomeon" data-attr-value="biome" data-event-change="change('biome')">

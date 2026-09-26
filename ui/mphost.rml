@@ -5,7 +5,7 @@
 	<link type="text/rcss" href="lobbybase.rcss"/>
 	<link type="text/rcss" href="mphost.rcss"/>
 </head>
-<body data-model="mphost" data-event-keydown="key()">
+<body data-model="mphost" data-controller-back="cancel" data-event-keydown="key()">
 	<div id="dialog" class="panel">
 		<div class="caption" id="sidelabel">Your Side:</div>
 		<select id="side" class="combo" data-attr-value="selectedside" data-event-change="chooseside()">

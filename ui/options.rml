@@ -4,7 +4,7 @@
 	<link type="text/rcss" href="optionsbase.rcss"/>
 	<link type="text/rcss" href="options.rcss"/>
 </head>
-<body data-model="options" data-event-keydown="key()">
+<body data-model="options" data-controller-back="exit" data-event-keydown="key()">
 	<div id="dialog" class="panel raised">
 		<div class="button" id="settings" data-event-click="press('settings')">Game Settings</div>
 		<div class="button" id="display" data-event-click="press('display')">Display</div>

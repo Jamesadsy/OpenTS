@@ -22,6 +22,7 @@
 
 #include "uiinternal.h"
 #include "uimodalinput.h"
+#include "uicontrollerback.h"
 #include "uicontrollerfocus.h"
 #include "uirmlview.h"
 
@@ -87,6 +88,8 @@ static void Set_Active_Menu_Document(Rml::ElementDocument * document);
 static void Activate_Menu_Document(Rml::ElementDocument * document);
 static void Deactivate_Menu_Document(Rml::ElementDocument * document);
 static void Sync_Controller_Focus_Style(void);
+static void Service_Controller_Back_Action(void);
+static bool Is_Controller_Disabled(Rml::Element const * element);
 
 #ifndef NDEBUG
 static Rml::ElementDocument * _TestDocument = nullptr;
@@ -519,6 +522,7 @@ void UI_Tick(void)
 	_LastTickTime = now;
 
 	_Context->Update();
+	Service_Controller_Back_Action();
 	UI_Message_Box_Service();
 
 	// RmlUi cannot say whether it needs redrawing, so anything on screen marks the overlay
@@ -699,6 +703,7 @@ static void Set_Active_Menu_Document(Rml::ElementDocument * document)
 	if (_MenuDocument != nullptr && _MenuDocument != document) {
 		_MenuDocument->SetClass("controller-focus", false);
 	}
+	Win_Gamepad_Discard_Menu_Back_Actions();
 	_MenuDocument = document;
 	std::fill(&_MenuNavigationKeyDown[0], &_MenuNavigationKeyDown[4], false);
 	Win_Gamepad_Set_Menu_Surface(document != nullptr);
@@ -779,6 +784,34 @@ static bool Is_Controller_Disabled(Rml::Element const * element)
 static bool Is_Controller_Action(Rml::Element const * element)
 {
 	return(!element->GetAttribute<Rml::String>("data-event-click", "").empty());
+}
+
+
+static void Service_Controller_Back_Action(void)
+{
+	if (!Win_Gamepad_Take_Menu_Back_Action() || _MenuDocument == nullptr) {
+		return;
+	}
+
+	Rml::String const target_id = _MenuDocument->GetAttribute<Rml::String>("data-controller-back", "");
+	if (target_id.empty()) {
+		return;
+	}
+
+	Rml::Element * const target = _MenuDocument->GetElementById(target_id);
+	if (target == nullptr) {
+		return;
+	}
+
+	_MenuDocument->UpdateDocument();
+	Rml::ComputedValues const & computed = target->GetComputedValues();
+	auto const size = target->GetBox().GetSize(Rml::BoxArea::Border);
+	bool const visible = target->IsVisible()
+		&& computed.display() != Rml::Style::Display::None
+		&& computed.visibility() == Rml::Style::Visibility::Visible
+		&& size.x > 0.0f && size.y > 0.0f;
+	UI_Controller_Back::Activate_Declared_Target(true, Is_Controller_Action(target), visible,
+		Is_Controller_Disabled(target), [target]() { target->Click(); });
 }
 
 
@@ -1303,6 +1336,7 @@ UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view)
 		// message drain can dispatch its WM_MOUSEMOVE to RmlUi.
 		Win_Gamepad_Service();
 		Windows_Message_Handler();
+		Service_Controller_Back_Action();
 
 		if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && !Session.NetOpen && !Session.Suspended) {
 			if (!inmainloop) {

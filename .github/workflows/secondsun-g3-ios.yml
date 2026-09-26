@@ -37,7 +37,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g5-045-luna-cursor-stabilization" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-048-integrated-polish" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-049-save-ux-controller-nav" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-050-menu-controller-parity"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-050-menu-controller-parity" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-051-coldboot-pointer-circle-back"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log

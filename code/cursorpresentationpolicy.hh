@@ -12,6 +12,12 @@
 #include <cstdint>
 
 
+inline bool Cursor_Overlay_Should_Draw(bool cursor_visible, bool pointer_drawn)
+{
+	return(cursor_visible && pointer_drawn);
+}
+
+
 struct CursorContentSelection
 {
 	int Width = 0;

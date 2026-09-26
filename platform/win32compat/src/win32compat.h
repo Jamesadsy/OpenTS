@@ -72,6 +72,7 @@ float Win32_Pixel_Density(void);
 void Win32_Pointer_Move(float x, float y);
 void Win32_Pointer_Move_Host(float x, float y);
 void Win32_Pointer_Move_Controller(float x, float y);
+bool Win32_Pointer_Initialize_Menu_Position(float width, float height);
 void Win32_Pointer_Set_Controller_Owner(bool controller_owns_pointer);
 bool Win32_Pointer_Is_Controller_Owner(void);
 void Win32_Pointer_Button(Uint8 button, bool down);
@@ -117,6 +118,8 @@ bool Win32_Gamepad_Camera_Pan_Active(void);
 Uint64 Win32_Monotonic_Time_Ms(void);
 bool Win32_Gamepad_Take_Action(int * action);
 void Win32_Gamepad_Discard_Actions(void);
+bool Win32_Gamepad_Take_Menu_Back_Action(void);
+void Win32_Gamepad_Discard_Menu_Back_Actions(void);
 void Win32_Gamepad_Shutdown(void);
 void Win32_Controller_Key(int virtualkey, bool down);
 

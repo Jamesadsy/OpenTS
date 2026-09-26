@@ -17,6 +17,7 @@
 
 static float _PointerX;
 static float _PointerY;
+static bool _PointerPositionInitialized;
 static SDL_MouseButtonFlags _PointerButtons;
 static SDL_MouseButtonFlags _HostButtons;
 static SDL_MouseButtonFlags _ControllerButtons;
@@ -60,7 +61,19 @@ void Win32_Pointer_Move(float x, float y)
 {
 	_PointerX = x;
 	_PointerY = y;
+	_PointerPositionInitialized = true;
 	_SuppressEdgeScroll = false;
+}
+
+
+bool Win32_Pointer_Initialize_Menu_Position(float width, float height)
+{
+	if (_PointerPositionInitialized || width <= 0.0f || height <= 0.0f) {
+		return(false);
+	}
+
+	Win32_Pointer_Move((width - 1.0f) * 0.5f, (height - 1.0f) * 0.5f);
+	return(true);
 }
 
 
@@ -78,6 +91,7 @@ void Win32_Pointer_Move_Controller(float x, float y)
 {
 	_PointerX = x;
 	_PointerY = y;
+	_PointerPositionInitialized = true;
 	_SuppressEdgeScroll = false;
 	_ControllerOwnsPointer = true;
 }

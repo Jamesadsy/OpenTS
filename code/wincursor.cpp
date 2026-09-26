@@ -483,7 +483,8 @@ static void Trace_Cursor_Presentation(CursorPresentationSnapshot const & snapsho
 bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 {
 #ifdef OPENTS_IOS
-	if (overlay == NULL || !_CursorVisible || MouseCursor == NULL) {
+	if (overlay == NULL || !Cursor_Overlay_Should_Draw(_CursorVisible, Win_Pointer_Is_Drawn())
+		|| MouseCursor == NULL) {
 		return(false);
 	}
 	bool const front_end = !MouseCursor->Is_Captured();
