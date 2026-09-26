@@ -103,9 +103,15 @@ void __cdecl CPU_Id(void)
 	}
 
 	CPUType = cputype;
-#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+#elif (defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))) || defined(__EMSCRIPTEN__)
 	CPUType = (char)0xFF;
-	std::strcpy(VendorID, "Apple ARM64");
+	std::strcpy(VendorID,
+#if defined(__EMSCRIPTEN__)
+		"WebAssembly"
+#else
+		"Apple ARM64"
+#endif
+	);
 #else
 #error "CPU detection is only defined for Windows and Apple ARM64 targets."
 #endif
@@ -119,7 +125,7 @@ void Get_CPU_Type(int & cpu_type, char * vendor_id, int vendor_id_length)
 	/*
 	**	Return the promised results
 	*/
-#if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+#if (defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))) || defined(__EMSCRIPTEN__)
 	cpu_type = CPU_UNKNOWN;
 #else
 	cpu_type = (int)CPUType;

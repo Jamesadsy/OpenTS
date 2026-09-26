@@ -36,7 +36,7 @@
 /// </summary>
 MillisecondTimerClass::MillisecondTimerClass(void)
 {
-	// Apple ARM64 exposes a monotonic diagnostic counter, not a CPU-frequency contract.
+	// Non-Windows hosts expose a monotonic diagnostic counter, not a CPU-frequency contract.
 	// The timer therefore uses the common host clock instead of pretending that nanoseconds
 	// are processor cycles which can be scaled by QueryPerformanceFrequency.
 #if !defined(_WIN32)

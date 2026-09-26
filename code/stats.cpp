@@ -66,8 +66,10 @@ int WestwoodOnline_PortNumber = 1234;
 
 #ifndef _WIN32
 #include <sys/stat.h>
-#include <sys/sysctl.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
 #endif
 
 namespace {

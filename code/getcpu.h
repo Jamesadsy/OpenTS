@@ -23,7 +23,8 @@ extern "C" {
 }
 
 // Processor family constants. On Windows, Get_CPU_Type reports the CPUID base family through
-// its cpu_type parameter. Apple ARM64 reports CPU_UNKNOWN because these are x86 families.
+// its cpu_type parameter. Apple ARM64 and WebAssembly report CPU_UNKNOWN because these are
+// x86 families.
 // PROC_80386 and PROC_80486 are unreachable on the supported minimum Windows hardware.
 #define	PROC_80386			0
 #define	PROC_80486			1

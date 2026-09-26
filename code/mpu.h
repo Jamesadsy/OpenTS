@@ -39,7 +39,7 @@ enum class CpuTimingProfile {
 };
 
 // Get_CPU_Clock returns a diagnostic counter. It is RDTSC on Windows and a process-relative
-// steady-clock count on Apple ARM64.
+// steady-clock count on Apple ARM64 and WebAssembly.
 extern "C" {
 	unsigned int __cdecl Get_CPU_Clock(unsigned int & high);
 }

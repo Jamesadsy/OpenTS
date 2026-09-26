@@ -39,7 +39,7 @@
 
 #include <intrin.h>
 #include <math.h>
-#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+#elif (defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))) || defined(__EMSCRIPTEN__)
 #include <chrono>
 #endif
 
@@ -120,7 +120,7 @@ unsigned int Get_CPU_Clock(unsigned int & high)
 {
 #if defined(_WIN32)
 	unsigned long long const stamp = __rdtsc();
-#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+#elif (defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))) || defined(__EMSCRIPTEN__)
 	static std::chrono::steady_clock::time_point const origin = std::chrono::steady_clock::now();
 	unsigned long long const stamp = (unsigned long long)std::chrono::duration_cast<std::chrono::nanoseconds>(
 		std::chrono::steady_clock::now() - origin).count();

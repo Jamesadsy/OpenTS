@@ -20,6 +20,7 @@
 
 # CMake and Visual Studio 2022
 [Bb]uild/
+/build-emscripten*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

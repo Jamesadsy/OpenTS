@@ -10,7 +10,9 @@
 #include "iospaths.h"
 #include "win32compat.h"
 
+#ifndef __EMSCRIPTEN__
 #include <mach-o/dyld.h>
+#endif
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
@@ -127,6 +129,10 @@ extern "C" HMODULE LoadLibrary(LPCSTR name)
 	// module the game loads is the language library, which holds no code on this host. The
 	// caller gets the handle that stands for the running program, as GetModuleHandle returns.
 	return((HMODULE)(ULONG_PTR)1);
+#elif defined(__EMSCRIPTEN__)
+	// WebAssembly builds use the generated Language.dat string table rather than a runtime
+	// language module. The compatibility LoadString implementation ignores this handle.
+	return((HMODULE)(ULONG_PTR)1);
 #else
 	std::string const library = Host_Library_Name(name);
 
@@ -175,12 +181,32 @@ extern "C" DWORD GetModuleFileName(HMODULE module, LPSTR name, DWORD size)
 
 	name[0] = '\0';
 
+#ifdef __EMSCRIPTEN__
+	// A browser executable has no filesystem path of its own. SDL supplies the browser
+	// package base path; the synthetic name is used only to find package-adjacent files.
+	char const * base_path = SDL_GetBasePath();
+	if (base_path == NULL || base_path[0] == '\0') {
+		base_path = "/";
+	}
+
+	std::string executable(base_path);
+	if (executable.back() != '/' && executable.back() != '\\') {
+		executable.push_back('/');
+	}
+	executable.append("OpenTS");
+	if (executable.length() >= size) {
+		return(0);
+	}
+	std::memcpy(name, executable.c_str(), executable.length() + 1);
+	return((DWORD)executable.length());
+#else
 	uint32_t length = size;
 	if (_NSGetExecutablePath(name, &length) != 0) {
 		return(0);
 	}
 
 	return((DWORD)strlen(name));
+#endif
 }
 
 

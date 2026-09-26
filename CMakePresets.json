@@ -44,6 +44,18 @@
       "inherits": "ios-device",
       "generator": "Xcode",
       "binaryDir": "${sourceDir}/build/ios-device-xcode"
+    },
+    {
+      "name": "emscripten-webgl",
+      "displayName": "OpenTS Emscripten WebGL",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-emscripten-wasm32",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/emscripten-wasm32.cmake",
+      "cacheVariables": {
+        "OPENTS_EXPERIMENTAL_NATIVE": "ON",
+        "BGFX_BUILD_TOOLS": "OFF",
+        "BGFX_BUILD_EXAMPLES": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -65,6 +77,13 @@
       "name": "ios-device-xcode",
       "configurePreset": "ios-device-xcode",
       "configuration": "Release",
+      "targets": [
+        "OpenTS"
+      ]
+    },
+    {
+      "name": "emscripten-webgl",
+      "configurePreset": "emscripten-webgl",
       "targets": [
         "OpenTS"
       ]

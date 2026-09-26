@@ -3996,7 +3996,7 @@ int Adjust_To_CPU_Timing(int time)
 	CpuTimingProfile const profile = cpu_type > PROC_PENTIUM_PRO ?
 		CpuTimingProfile::LegacyX86P6OrLater : CpuTimingProfile::LegacyX86PreP6;
 	return(Adjust_To_CPU_Timing_Profile(time, profile, lo, hi));
-#elif defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+#elif (defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))) || defined(__EMSCRIPTEN__)
 	return(Adjust_To_CPU_Timing_Profile(time, CpuTimingProfile::Neutral, 0, 0));
 #else
 	#error "CPU timing is only defined for Windows and Apple ARM64 targets."

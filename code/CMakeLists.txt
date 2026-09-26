@@ -202,8 +202,11 @@ if(NOT WIN32)
     target_link_libraries(OpenTS PRIVATE win32compat)
 
     # Windows answers code page questions from the kernel; everywhere else that service is
-    # libiconv, which Apple ships as a separate library rather than inside libc.
-    target_link_libraries(OpenTS PRIVATE iconv)
+    # libiconv, which Apple ships as a separate library rather than inside libc. Emscripten
+    # provides iconv through its C library, so it has no separate -liconv to link.
+    if(NOT EMSCRIPTEN)
+        target_link_libraries(OpenTS PRIVATE iconv)
+    endif()
 endif()
 
 # The generated build stamp has to exist before anything compiles.
