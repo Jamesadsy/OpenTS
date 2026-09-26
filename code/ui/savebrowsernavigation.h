@@ -40,6 +40,13 @@ std::string Save_Browser_Description(int selected, EntryVector const & entries,
 }
 
 
+template <typename TextField>
+std::string Save_Browser_Field_Text(TextField const & field)
+{
+	return(field.GetValue());
+}
+
+
 template <typename ScrollFunction>
 void Save_Browser_Scroll_Selected_Row(int selected, std::size_t row_count, ScrollFunction scroll)
 {

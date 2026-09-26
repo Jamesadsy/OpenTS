@@ -399,7 +399,7 @@ std::string SaveBrowserViewClass::Field_Text(void) const
 	if (field == nullptr) {
 		return(Screen.Description);
 	}
-	return(field->GetValue());
+	return(Save_Browser_Field_Text(*field));
 }
 
 
@@ -440,15 +440,6 @@ void SaveBrowserViewClass::Bind(Rml::DataModelConstructor & model)
 		[this](Rml::DataModelHandle, Rml::Event &, Rml::VariantList const & arguments) {
 			if (arguments.empty()) return;
 			Screen.Queue(UIIntent{UI_SAVEBROWSER_SELECT, "", (int)arguments[0].Get<float>()});
-		});
-
-	// The field is bound one way, so a value the model already holds is never queued back as
-	// a change the player did not type.
-	model.BindEventCallback("describe",
-		[this](Rml::DataModelHandle, Rml::Event & event, Rml::VariantList const &) {
-			Rml::String const value = event.GetParameter<Rml::String>("value", Rml::String());
-			if (value == Screen.Description) return;
-			Screen.Queue(UIIntent{UI_SAVEBROWSER_DESCRIBE, value, 0});
 		});
 
 	model.BindEventCallback("press",
@@ -506,6 +497,9 @@ void SaveBrowserViewClass::Sync(void)
 	if (Screen.FocusDescription) {
 		Screen.FocusDescription = false;
 		if (Rml::ElementFormControlInput * const field = Field()) {
+			// Row selection changes the bound value after this pass's Context::Update.
+			// Set it before selecting so an existing selection length cannot cross rows.
+			field->SetValue(Screen.Description);
 			field->Focus();
 			field->Select();
 		}
