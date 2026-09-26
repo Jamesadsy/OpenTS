@@ -40,6 +40,8 @@ The event pool turns a sound type into a sequence and hands it to a voice. It en
 
 `VocClass` owns one sound type per SOUND.INI section and plays it as an event; the positional model, the placed-sound pool and the ambient table live beside it in `voc.cpp` and `ambient.cpp`. Speech queues lines and plays each as a stream; the theme plays a score as a stream; the option sliders are the group levels; the radar movie ducks the other groups. Focus loss flips one atomic flag that the render callback consumes, so it is safe from whichever thread delivers the window message.
 
+On iOS, the output-only device uses miniaudio's `soloAmbient` session category. The Ring/Silent switch silences game audio, and iOS continues to select the available speaker or connected headphone route.
+
 ## Invariants
 
 The mixer writes a voice's playback state; the game allocates and frees the voice and reads that state. A sequence is written by the game before the play command and never changed while the voice runs it. A stream ring is written by one thread and read by one thread. The random draws for pitch and loudness come from the non-critical generator, so audio never touches the simulation's random sequence. Every engine member is a no-op when no device could be opened. A group or master gain is the exception: it is recorded and applied if a device opens later.

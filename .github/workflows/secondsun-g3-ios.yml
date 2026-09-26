@@ -39,7 +39,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-049-save-ux-controller-nav" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-050-menu-controller-parity" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-051-coldboot-pointer-circle-back" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-052-save-description-order"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-052-save-description-order" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g7-053-ios-name-silent-audio"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -61,10 +62,10 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build/g3-host-tests \
-            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract CursorStateContract ControllerFocusContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SaveTextContract SidebarFeedbackContract OpenTSDonorHostSmoke \
+            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract IOSProductIdentityContract CursorStateContract ControllerFocusContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SaveTextContract SidebarFeedbackContract OpenTSDonorHostSmoke \
             --parallel 3 2>&1 | tee proof/host-tests-build.log
           ctest --test-dir build/g3-host-tests \
-            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|cursor-scrollrate-contract|controller-focus-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|save-text-contract|sidebar-feedback-contract|donor-host-smoke)$' \
+            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|ios-product-identity-contract|cursor-scrollrate-contract|controller-focus-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|save-text-contract|sidebar-feedback-contract|donor-host-smoke)$' \
             --output-on-failure 2>&1 | tee proof/host-tests-ctest.log
 
       - name: Configure unsigned iPhoneOS device route
@@ -156,6 +157,8 @@ jobs:
           plutil -lint "$PLIST" | tee proof/plist-lint.log
           plist_value() { /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST"; }
           test "$(plist_value CFBundleExecutable)" = OpenTS
+          test "$(plist_value CFBundleIdentifier)" = org.opents.OpenTS
+          test "$(plist_value CFBundleDisplayName)" = "CnC TS"
           test "$(plist_value CFBundleSupportedPlatforms:0)" = iPhoneOS
           test "$(plist_value LSRequiresIPhoneOS)" = true
           test "$(plist_value MinimumOSVersion)" = 16.0
