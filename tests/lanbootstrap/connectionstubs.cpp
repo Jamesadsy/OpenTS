@@ -9,6 +9,7 @@
 #include "mono.h"
 #include "utf8.h"
 
+#include <cstddef>
 #include <cstring>
 
 TTimerClass<SystemTimerClass> TickCount;
@@ -18,12 +19,12 @@ int SystemTimerClass::operator () (void) const { return(0); }
 SystemTimerClass::operator int(void) const { return(0); }
 void __cdecl DebugString(char const *, ...) {}
 void __cdecl DebugStringNoPrefix(char const *, ...) {}
-unsigned int UTF8::Copy(char *destination, unsigned int capacity, char const *source)
+std::size_t UTF8::Copy(char *destination, std::size_t capacity, char const *source)
 {
 	if (capacity == 0) return(0);
 	std::strncpy(destination, source, capacity - 1);
 	destination[capacity - 1] = '\0';
-	return(static_cast<unsigned int>(std::strlen(destination)));
+	return(std::strlen(destination));
 }
 MonoClass::MonoClass(void) {}
 MonoClass::~MonoClass(void) {}
