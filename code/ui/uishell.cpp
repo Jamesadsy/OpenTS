@@ -1181,7 +1181,7 @@ bool UIRmlViewClass::Prepare(bool modal)
 		return(false);
 	}
 
-	Rml::DataModelConstructor constructor = _Context->CreateDataModel(ModelName);
+	Rml::DataModelConstructor constructor = _Context->CreateDataModel(ModelName, &DataTypes);
 	if (!constructor) {
 		DebugString("[UI] The data model for %s could not be created.\n", Document.c_str());
 		return(false);

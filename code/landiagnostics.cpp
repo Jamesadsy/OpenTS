@@ -20,7 +20,6 @@ std::mutex EventMutex;
 std::array<Event, CAPACITY> Events{};
 std::uint32_t NextSequence = 1;
 std::size_t EventCount = 0;
-std::size_t TraceRecords = 0;
 }
 
 void Record(Layer layer, Code code, std::int32_t detail0, std::int32_t detail1) noexcept
@@ -31,17 +30,18 @@ void Record(Layer layer, Code code, std::int32_t detail0, std::int32_t detail1) 
 	if (EventCount < CAPACITY) ++EventCount;
 
 	char const * const trace_path = std::getenv("OPENTS_LAN_TRACE_PATH");
-	if (trace_path != nullptr && trace_path[0] != '\0' && TraceRecords < CAPACITY) {
-		FILE * const trace = std::fopen(trace_path, TraceRecords == 0 ? "wb" : "ab");
+	if (trace_path != nullptr && trace_path[0] != '\0') {
+		FILE * const trace = std::fopen(trace_path, "wb");
 		if (trace != nullptr) {
-			if (TraceRecords == 0) {
-				std::fputs("sequence\tlayer\tcode\tdetail0\tdetail1\n", trace);
+			std::fputs("sequence\tlayer\tcode\tdetail0\tdetail1\n", trace);
+			std::uint32_t const first = NextSequence - static_cast<std::uint32_t>(EventCount);
+			for (std::size_t index = 0; index < EventCount; ++index) {
+				Event const & retained = Events[(first + static_cast<std::uint32_t>(index) - 1) % CAPACITY];
+				std::fprintf(trace, "%u\t%s\t%s\t%d\t%d\n", retained.Sequence,
+					Layer_Name(retained.EventLayer), Code_Name(retained.EventCode),
+					retained.Detail0, retained.Detail1);
 			}
-			std::fprintf(trace, "%u\t%s\t%s\t%d\t%d\n", event.Sequence,
-				Layer_Name(event.EventLayer), Code_Name(event.EventCode),
-				event.Detail0, event.Detail1);
 			std::fclose(trace);
-			++TraceRecords;
 		}
 	}
 }
@@ -64,7 +64,6 @@ void Reset_For_Test() noexcept
 	Events = {};
 	NextSequence = 1;
 	EventCount = 0;
-	TraceRecords = 0;
 }
 
 char const * Layer_Name(Layer layer) noexcept

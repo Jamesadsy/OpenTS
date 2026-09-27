@@ -218,10 +218,8 @@ static bool Lobby_Seat_Is_Valid(int house, int color)
 static void Record_LAN_Peer_Event(LANDiagnostics::Layer layer,
 	LANDiagnostics::Code code, IPXAddressClass const & address)
 {
-	std::int32_t address_detail = 0;
-	std::uint32_t const address_bits = address.Get_IP();
-	std::memcpy(&address_detail, &address_bits, sizeof(address_detail));
-	LANDiagnostics::Record(layer, code, address_detail,
+	int const address_class = LANBootstrap::Address_Class(address.Get_IP());
+	LANDiagnostics::Record(layer, code, address_class,
 		Socket_Network_Port(address.Get_Port()));
 }
 

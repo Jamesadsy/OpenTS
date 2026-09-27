@@ -60,6 +60,8 @@ class UIRmlViewClass
 
 		Rml::ElementDocument * Element = nullptr;
 		Rml::DataModelHandle Model;
+		// The Context's default register is shared, so each view needs its own type registry.
+		Rml::DataTypeRegister DataTypes;
 
 		// Was the document shown exclusively? The shell's input scope is opened and closed
 		// with it, so this records what to undo rather than being asked again at close.

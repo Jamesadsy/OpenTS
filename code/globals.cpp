@@ -119,6 +119,8 @@ bool Debug_Console = false;
 bool Debug_MultipleInstances = false;
 #endif
 unsigned short Debug_L1LocalListenPort = 0;
+std::uint32_t Debug_L1PeerAddress = 0;
+unsigned short Debug_L1PeerPort = 0;
 
 
 ParticleSystemClass * GasSystem;

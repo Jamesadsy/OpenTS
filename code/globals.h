@@ -127,6 +127,8 @@ extern bool Debug_Console;
 extern bool Debug_MultipleInstances;
 #endif
 extern unsigned short Debug_L1LocalListenPort;
+extern std::uint32_t Debug_L1PeerAddress;
+extern unsigned short Debug_L1PeerPort;
 
 extern ParticleSystemClass *GasSystem;
 

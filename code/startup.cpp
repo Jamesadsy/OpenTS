@@ -80,6 +80,7 @@
 #include "goptions.h"
 #include "house.h"
 #include "houstype.h"
+#include "lanbootstrap.h"
 #include "hover.h"
 #include "infantry.h"
 #include "infatype.h"
@@ -350,6 +351,7 @@ static int Filter_L1_Arguments(int argc, char ** argv, char ** & filtered_argv)
 	static std::vector<char *> filtered;
 	filtered.clear();
 	filtered.push_back(argv[0]);
+	bool peer_option_seen = false;
 
 	for (int index = 1; index < argc; ++index) {
 		if (stricmp(argv[index], "-MULTIINSTANCE") == 0) {
@@ -372,8 +374,36 @@ static int Filter_L1_Arguments(int argc, char ** argv, char ** & filtered_argv)
 			continue;
 		}
 
+		constexpr char peer_option[] = "-L1PEER=";
+		if (strnicmp(argv[index], peer_option, sizeof(peer_option) - 1) == 0) {
+			if (peer_option_seen) return(-1);
+			char const * value = argv[index] + sizeof(peer_option) - 1;
+			char const * separator = strchr(value, ':');
+			if (separator == nullptr || strchr(separator + 1, ':') != nullptr) return(-1);
+
+			unsigned long port = 0;
+			char const * port_text = separator + 1;
+			if (*port_text == '\0') return(-1);
+			for (; *port_text != '\0'; ++port_text) {
+				if (!isdigit(static_cast<unsigned char>(*port_text))) return(-1);
+				port = port * 10UL + static_cast<unsigned long>(*port_text - '0');
+				if (port > 65535UL) return(-1);
+			}
+			if (port == 0) return(-1);
+
+			LANBootstrap::Endpoint endpoint;
+			if (!LANBootstrap::Parse_Private_IPv4(
+				std::string_view(value, static_cast<std::size_t>(separator - value)),
+				static_cast<std::uint16_t>(port), endpoint)) return(-1);
+			Debug_L1PeerAddress = endpoint.Address;
+			Debug_L1PeerPort = endpoint.Port;
+			peer_option_seen = true;
+			continue;
+		}
+
 		filtered.push_back(argv[index]);
 	}
+	if (peer_option_seen && Debug_L1LocalListenPort == 0) return(-1);
 
 	filtered_argv = filtered.data();
 	return(static_cast<int>(filtered.size()));
@@ -497,7 +527,7 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 	char ** filtered_argv = nullptr;
 	int const filtered_argc = Filter_L1_Arguments(argc, argv, filtered_argv);
 	if (filtered_argc < 0) {
-		DebugString("Invalid LAN L1 local listen port.\n");
+		DebugString("Invalid LAN L1 local listen port or peer endpoint.\n");
 		return(EXIT_FAILURE);
 	}
 	argc = filtered_argc;

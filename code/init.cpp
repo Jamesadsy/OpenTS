@@ -57,6 +57,8 @@
 #include "always.h"
 
 #include "init.h"
+#include "landiagnostics.h"
+#include "lanbootstrap.h"
 
 #include "_bench.h"
 #include "_command.h"
@@ -1172,7 +1174,16 @@ restart:
 							if (Debug_L1LocalListenPort != 0) {
 								Ipx.Configure_Direct_Peers(Debug_L1LocalListenPort);
 							} else
-							Ipx.Configure_LAN();
+								Ipx.Configure_LAN();
+#endif
+
+#if defined(_DEBUG) && !defined(OPENTS_IOS)
+							if (Debug_L1PeerPort != 0) {
+								LANBootstrap::Endpoint const endpoint{Debug_L1PeerAddress, Debug_L1PeerPort};
+								LANBootstrap::Inject_Direct_Peer(Ipx, endpoint);
+								LANDiagnostics::Record(LANDiagnostics::Layer::ADDRESS_SELECTION,
+									LANDiagnostics::Code::ENDPOINT_FOUND, endpoint.Port, 1);
+							}
 #endif
 
 							/*
