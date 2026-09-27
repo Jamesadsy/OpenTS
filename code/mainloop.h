@@ -32,6 +32,7 @@
 #pragma once
 
 #include "keyboard.h"
+#include "mainloopsession.h"
 
 bool Main_Loop(void);
 void Keyboard_Process(KeyNumType & input);

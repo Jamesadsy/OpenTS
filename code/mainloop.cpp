@@ -153,27 +153,6 @@ void Motion_Capture(void)
 }
 
 
-/// <summary>
-/// Handles the game losing the input focus.
-/// This routine parks the main loop while another application holds the focus, pumping
-/// the Windows message queue so that the game can be restored. A network game cannot
-/// afford to stall, so it pumps the queue once and lets play carry on regardless.
-/// </summary>
-static void Check_For_Focus_Loss(void)
-{
-	while (!GameInFocus) {
-		if (Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH) {
-			Host_Sleep(500);
-			Windows_Message_Handler();
-		} else {
-			Host_Sleep(10);
-			Windows_Message_Handler();
-			break;
-		}
-	}
-	return;
-}
-
 bool InMainLoop = false;
 
 /***********************************************************************************************
@@ -190,7 +169,7 @@ bool InMainLoop = false;
  * HISTORY:                                                                                    *
  *   10/01/1994 JLB : Created.                                                                 *
  *=============================================================================================*/
-bool Main_Loop(void)
+static bool Run_Main_Loop_Frame(void)
 {
 	KeyNumType	input;					// Player input.
 	int x;
@@ -198,28 +177,6 @@ bool Main_Loop(void)
 	int framedelay;
 
 	//Mono_Set_Cursor(0,0);
-
-	if (!GameActive) {return(!GameActive);}
-
-	InMainLoop = true;
-
-	/*
-	**	Call the focus loss handler
-	*/
-	#if 0
-	Check_For_Focus_Loss();
-	#else
-	while (!GameInFocus) {
-		if (Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH) {
-			Host_Sleep(500);
-			Windows_Message_Handler();
-		} else {
-			Host_Sleep(10);
-			Windows_Message_Handler();
-			break;
-		}
-	}
-	#endif
 
 	/*
 	**	Sync-bug trapping code
@@ -426,16 +383,216 @@ bool Main_Loop(void)
 		}
 #endif
 
-		Sync_Delay();
+	}
+
+	return(done);
+}
+
+
+static bool MainLoop_Game_Active(void *)
+{
+	return(GameActive);
+}
+
+
+static void MainLoop_Enter(void *)
+{
+	InMainLoop = true;
+}
+
+
+static bool MainLoop_Focus_Ready(void *)
+{
+	if (!GameInFocus) {
+		Windows_Message_Handler();
+	}
+	// Local play used to keep waiting until focus returned. Network and other
+	// non-local sessions pumped once and continued even if focus stayed away.
+	return(GameInFocus || (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH));
+}
+
+
+static bool MainLoop_Run_Frame(void *)
+{
+	return(Run_Main_Loop_Frame());
+}
+
+
+static bool SyncDelay_Is_Network_Wait(void *)
+{
+	return(Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH);
+}
+
+
+static void SyncDelay_Accumulate_Spare_Ticks(void *)
+{
+	SpareTicks += FrameTimer;
+}
+
+
+static void SyncDelay_Service_Once(void *, OpenTS_MainLoop::SyncDelaySession & session)
+{
+	Call_Back();
+	if (session.NetworkWait) {
+		// The network loop always yielded at its tail unless its focused timer
+		// check observed completion and broke out before reaching the tail.
+		session.NativeTailYield = true;
+	}
+	if (SpecialDialog != SDLG_NONE || !GameInFocus) {
+		return;
+	}
+
+	if (session.NetworkWait) {
+		session.NativeTimerCheckInService = true;
+	}
+	if (session.NetworkWait && NetFrameTimer.Value() <= 10) {
+		// The old native loop yielded here and again at its loop tail while the
+		// network timer remained active. The blocking adapter preserves both yields.
+		session.NativeInnerYield = true;
+		return;
+	}
+
+	KeyNumType input = KN_NONE;
+	int x;
+	int y;
+	Map.Input(input, x, y);
+	Keyboard_Process(input);
+	TacticalMap->AI();
+	Map.Render();
+}
+
+
+static int SyncDelay_Time_Remaining(void *, bool network_wait)
+{
+	return(network_wait ? NetFrameTimer.Value() : FrameTimer.Value());
+}
+
+
+static void SyncDelay_On_Complete(void *)
+{
+	static CDTimerClass<SystemTimerClass> fps_timer;
+	if (!fps_timer) {
+		LastFramesPerSecond = FramesThisSecond;
+		FramesThisSecond = 0;
+		TotalFrames += LastFramesPerSecond;
+		SecondsPassed++;
+		if (TotalFrames > 0x7FFFFFFF) {
+			TotalFrames = 0;
+			SecondsPassed = 0;
+		}
+		fps_timer = TIMER_SECOND;
+	}
+}
+
+
+static OpenTS_MainLoop::SyncDelaySessionOps Make_Sync_Delay_Ops(void)
+{
+	OpenTS_MainLoop::SyncDelaySessionOps ops;
+	ops.Context = nullptr;
+	ops.IsNetworkWait = SyncDelay_Is_Network_Wait;
+	ops.AccumulateSpareTicks = SyncDelay_Accumulate_Spare_Ticks;
+	ops.ServiceOnce = SyncDelay_Service_Once;
+	ops.TimeRemaining = SyncDelay_Time_Remaining;
+	ops.OnComplete = SyncDelay_On_Complete;
+	return(ops);
+}
+
+
+static void MainLoop_Post_Frame(void *, bool done)
+{
+	if (!done) {
 		Process_Deferred_Deletion();
 		SaveManager.Service();
 	}
-
 	BEnd(BENCH_GAME_FRAME);
-
 	InMainLoop = false;
+}
 
+
+static bool MainLoop_Game_Ended(void *)
+{
 	return(!GameActive);
+}
+
+
+static OpenTS_MainLoop::MainLoopSessionOps Make_Main_Loop_Ops(void)
+{
+	OpenTS_MainLoop::MainLoopSessionOps ops;
+	ops.Context = nullptr;
+	ops.GameActive = MainLoop_Game_Active;
+	ops.EnterMainLoop = MainLoop_Enter;
+	ops.FocusReady = MainLoop_Focus_Ready;
+	ops.RunFrameLogic = MainLoop_Run_Frame;
+	ops.Pacing = Make_Sync_Delay_Ops();
+	ops.PostFrame = MainLoop_Post_Frame;
+	ops.GameEnded = MainLoop_Game_Ended;
+	return(ops);
+}
+
+
+static void Native_Sync_Delay_Wait(OpenTS_MainLoop::SyncDelaySession const & session)
+{
+	if (session.NetworkWait) {
+		unsigned int yield_count = static_cast<unsigned int>(session.NativeInnerYield)
+			+ static_cast<unsigned int>(session.NativeTailYield);
+		while (yield_count--) {
+			Host_Sleep(0);
+		}
+	} else if (GameInFocus || (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH)) {
+		Host_Sleep(Video_Milliseconds_Until_Present());
+	} else {
+		Host_Sleep(16 * FrameTimer.Value());
+	}
+}
+
+
+static void Native_Sync_Delay_Complete_Wait(OpenTS_MainLoop::SyncDelaySession const & session)
+{
+	if (!session.NetworkWait) {
+		return;
+	}
+	unsigned int yield_count = static_cast<unsigned int>(session.NativeInnerYield)
+		+ static_cast<unsigned int>(session.NativeTailYield);
+	while (yield_count--) {
+		Host_Sleep(0);
+	}
+}
+
+
+bool Main_Loop(void)
+{
+	OpenTS_MainLoop::MainLoopSession session;
+	OpenTS_MainLoop::MainLoopSession_Begin(session);
+	OpenTS_MainLoop::MainLoopSessionOps const ops = Make_Main_Loop_Ops();
+
+	for (;;) {
+		// Preserve the old sleep-before-message-pump order while keeping the
+		// cooperative Step itself free of blocking waits.
+		if (session.Phase == OpenTS_MainLoop::MainLoopPhase::FrameLogic
+			&& !GameInFocus && (session.LoopStarted || GameActive)) {
+			unsigned int wait = 500;
+			if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH) {
+				wait = 10;
+			}
+			Host_Sleep(wait);
+		}
+
+		OpenTS_MainLoop::CooperativeResult const result = OpenTS_MainLoop::MainLoopSession_Step(session, ops);
+		if (result == OpenTS_MainLoop::CooperativeResult::Complete) {
+			if (!session.Done && session.Pacing.BeginOwned) {
+				Native_Sync_Delay_Complete_Wait(session.Pacing);
+			}
+			OpenTS_MainLoop::MainLoopSession_Finish(session);
+			return(session.Result);
+		}
+		if (result == OpenTS_MainLoop::CooperativeResult::Fault) {
+			return(!GameActive);
+		}
+		if (result == OpenTS_MainLoop::CooperativeResult::Waiting
+			&& session.Phase == OpenTS_MainLoop::MainLoopPhase::Pace) {
+			Native_Sync_Delay_Wait(session.Pacing);
+		}
+	}
 }
 
 
@@ -565,72 +722,27 @@ void Keyboard_Process(KeyNumType & input)
  *=============================================================================================*/
 void Sync_Delay(void)
 {
-	/*
-	**	Accumulate the number of 'spare' ticks that are frittered away here.
-	*/
-	SpareTicks += FrameTimer;
+	OpenTS_MainLoop::SyncDelaySession session;
+	OpenTS_MainLoop::SyncDelaySessionOps const ops = Make_Sync_Delay_Ops();
+	if (!OpenTS_MainLoop::SyncDelaySession_Begin(session, ops)) {
+		return;
+	}
 
-	if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH) {
-		while (NetFrameTimer) {
-			Call_Back();
-			if (SpecialDialog == SDLG_NONE && GameInFocus == true) {
-				KeyNumType input = KN_NONE;
-				int x, y;
-				if (NetFrameTimer > 10) {
-					Map.Input(input, x, y);
-					Keyboard_Process(input);
-					TacticalMap->AI();
-					Map.Render();
-				} else {
-					Host_Sleep(0);
-				}
-				if (!NetFrameTimer()) {
-					break;
-				}
-			}
-			Host_Sleep(0);
+	for (;;) {
+		OpenTS_MainLoop::CooperativeResult const result = OpenTS_MainLoop::SyncDelaySession_Step(session, ops);
+		if (result == OpenTS_MainLoop::CooperativeResult::Complete) {
+			Native_Sync_Delay_Complete_Wait(session);
+			break;
 		}
-	} else {
-		while (FrameTimer) {
-			Call_Back();
-			if (SpecialDialog == SDLG_NONE && GameInFocus == true) {
-				KeyNumType input = KN_NONE;
-				int x, y;
-				Map.Input(input, x, y);
-				Keyboard_Process(input);
-				TacticalMap->AI();
-				Map.Render();
-				if (!FrameTimer) {
-					break;
-				}
-			}
-			/*
-			 * The wait for the frame timer is spent drawing, so that the view keeps up with
-			 * the player between simulation frames. Once the display has a frame and will
-			 * not take another yet, there is nothing left to draw, and yielding in a tight
-			 * loop instead of waiting for it costs a whole processor and the battery behind
-			 * it for pictures that are never shown.
-			 */
-			if (GameInFocus || (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH)) {
-				Host_Sleep(Video_Milliseconds_Until_Present());
-			} else {
-				Host_Sleep(16 * FrameTimer);
-			}
+		if (result == OpenTS_MainLoop::CooperativeResult::Fault) {
+			break;
+		}
+		if (result == OpenTS_MainLoop::CooperativeResult::Waiting) {
+			Native_Sync_Delay_Wait(session);
 		}
 	}
 
-	static CDTimerClass<SystemTimerClass> fps_timer;
-	if (!fps_timer) {
-		LastFramesPerSecond = FramesThisSecond;
-		FramesThisSecond = 0;
-		TotalFrames += LastFramesPerSecond;
-		SecondsPassed++;
-		if (TotalFrames > 0x7FFFFFFF) {
-			TotalFrames = 0;
-			SecondsPassed = 0;
-		}
-		fps_timer = TIMER_SECOND;
-	}
+	OpenTS_MainLoop::SyncDelaySession_Finish(session);
 }
 
 
