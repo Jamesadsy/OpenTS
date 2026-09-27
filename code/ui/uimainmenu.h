@@ -17,6 +17,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 
 inline constexpr char const * UI_MAINMENU_CAMPAIGN = "campaign";
 inline constexpr char const * UI_MAINMENU_LOAD = "load";
@@ -64,6 +68,7 @@ class UIMainMenuPresenterClass : public UIPresenterClass
 		// Is the version screen waiting to be run? It is a screen of a different kind, so
 		// it nests, and the view gets out of its way the way the dialog's ShowWindow did.
 		bool VersionPending = false;
+		bool Take_Version_Pending(void);
 		void Run_Pending(void);
 
 		/*
@@ -81,3 +86,6 @@ class UIMainMenuPresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown to the
 // caller, which retains the donor fallback contract at the menu-selection boundary.
 UIResult UI_Main_Menu_Screen(UIMainMenuPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Main_Menu_Screen_Continuation(
+	UIMainMenuPresenterClass & presenter,
+	bool native_blocking_adapter = false);

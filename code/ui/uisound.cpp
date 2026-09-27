@@ -26,6 +26,7 @@
 #include "uisound.h"
 
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "audio/audioengine.h"
 #include "globals.h"
@@ -317,17 +318,18 @@ void SoundViewClass::Sync(void)
 /// </summary>
 UIResult UI_Sound_Screen(UISoundPresenterClass & presenter)
 {
-	SoundViewClass view(presenter, presenter.Is_Lite() ? "soundlite.rml" : "sound.rml");
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Sound_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	view.Settle();
-
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Sound_Screen_Continuation(
+	UISoundPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	char const * const document = presenter.Is_Lite() ? "soundlite.rml" : "sound.rml";
+	return(std::make_unique<UITypedFrontendContinuation<UISoundPresenterClass, SoundViewClass>>(
+		presenter, native_blocking_adapter,
+		[](SoundViewClass & view) { view.Settle(); }, document));
 }

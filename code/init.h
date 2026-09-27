@@ -19,6 +19,9 @@
 #include "theater.hh"
 #include "theme.hh"
 
+#include <cstdint>
+#include <memory>
+
 template<class T> class TRect;
 typedef TRect<int> Rect;
 class Surface;
@@ -28,6 +31,74 @@ bool Parse_Command_Line(int argc, char * argv[]);
 
 int Init_Game(int argc, char * argv[]);
 bool Select_Game(bool fade);
+
+enum class SelectGamePhase : std::uint8_t {
+	Idle,
+	Reset,
+	MainMenu,
+	ChildModal,
+	ThemeDrain,
+	IntroMovie,
+	ScenarioPrepare,
+	ScenarioChild,
+	ConnectionSetup,
+	InitialPresentation,
+	NativeChild,
+	ReadyForGameplay,
+	Exit,
+	Fault,
+};
+
+enum class SelectGameStepResult : std::uint8_t {
+	Waiting,
+	NativeChild,
+	ReadyForGameplay,
+	Exited,
+	Fault,
+};
+
+enum class SelectGameCampaignOutcome : std::uint8_t {
+	Pending,
+	Accepted,
+	Cancelled,
+	PresentationFailure,
+};
+
+// Native owner for the frontend selection parent. The browser host retains this object
+// between callbacks; its typed screen child and every value crossing a Step live here.
+class SelectGameSession
+{
+	public:
+		SelectGameSession(void);
+		~SelectGameSession(void);
+
+		SelectGameSession(SelectGameSession const &) = delete;
+		SelectGameSession & operator=(SelectGameSession const &) = delete;
+
+		void Begin(bool fade, bool native_blocking_adapter = false);
+		void Reset(void);
+		SelectGameStepResult Step(void);
+		bool Complete_Native_Child(
+			bool process,
+			int selection,
+			bool game_loaded,
+			bool selection_from_menu = false);
+
+		bool GameLoaded = false;
+		int Selection = 0;
+		bool Process = true;
+		bool Fade = false;
+		std::uint32_t WaitDeadlineMs = 0;
+		int Campaign = -1;
+		int Difficulty = 0;
+		SelectGameCampaignOutcome CampaignOutcome = SelectGameCampaignOutcome::Pending;
+		SelectGamePhase Phase = SelectGamePhase::Idle;
+
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> m_Impl;
+		friend bool Select_Game(bool fade);
+};
 
 int Main_Menu(unsigned int timeout);
 

@@ -28,6 +28,7 @@
 
 #include "uiinternal.h"
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "_keyboar.h"
 #include "globals.h"
@@ -207,50 +208,48 @@ UIResult UI_Message_Box_Screen(char const * message, int defresponse,
 	char const * b1txt, char const * b2txt, char const * b3txt,
 	bool (*service)(void))
 {
-	// The presenter is declared first so that it is destroyed last: the data model the view
-	// binds reads the presenter's view-model, and must not outlive it.
-	MessageBoxPresenterClass presenter;
-	MessageBoxViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation = UI_Message_Box_Screen_Continuation(
+		message, defresponse, b1txt, b2txt, b3txt, service, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
+
+std::unique_ptr<UIFrontendContinuation> UI_Message_Box_Screen_Continuation(
+	char const * message,
+	int defresponse,
+	char const * b1txt,
+	char const * b2txt,
+	char const * b3txt,
+	bool (*service)(void),
+	bool native_blocking_adapter)
+{
+	// The owned presenter precedes the typed view in UITypedFrontendContinuation, keeping
+	// the presenter's view-model alive through view destruction.
+	std::unique_ptr<MessageBoxPresenterClass> presenter = std::make_unique<MessageBoxPresenterClass>();
 	char const * const captions[3] = { b1txt, b2txt, b3txt };
-
-	// The dialog counted its buttons this way: each caption that is present raises the count
-	// to its own slot, so a box that skips a slot still counts by the highest one filled.
 	int count = 0;
 	for (int index = 0; index < 3; index++) {
 		if (captions[index] != nullptr && captions[index][0] != '\0') {
-			presenter.Buttons[index] = captions[index];
-			presenter.Shown[index] = true;
+			presenter->Buttons[index] = captions[index];
+			presenter->Shown[index] = true;
 			count = index + 1;
 		}
 	}
 
-	// A box with nothing to press is answered for the player, without a pass of the loop and
-	// so without a frame in which it could be seen.
 	if (count == 0) {
 		UIResult result;
 		result.Outcome = UIResult::OUTCOME_ACCEPTED;
 		result.Value = 0;
-		return(result);
+		return(std::make_unique<UIImmediateFrontendContinuation>(result));
 	}
 
-	presenter.FirstIsCentred = (count == 1);
-	presenter.DefaultResponse = defresponse;
-	presenter.ServiceRoutine = service;
+	presenter->FirstIsCentred = (count == 1);
+	presenter->DefaultResponse = defresponse;
+	presenter->ServiceRoutine = service;
+	if (message != nullptr) presenter->Message = message;
 
-	if (message != nullptr) {
-		presenter.Message = message;
-	}
-
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
-
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+	return(std::make_unique<UITypedFrontendContinuation<MessageBoxPresenterClass, MessageBoxViewClass>>(
+		std::move(presenter), native_blocking_adapter, nullptr));
 }
 
 

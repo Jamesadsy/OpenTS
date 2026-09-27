@@ -18,6 +18,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 #include "stimer.h"
 #include "timer.h"
 
@@ -61,3 +65,6 @@ class UIDisplayConfirmPresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Display_Confirm_Screen(UIDisplayConfirmPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Display_Confirm_Screen_Continuation(
+	UIDisplayConfirmPresenterClass & presenter,
+	bool native_blocking_adapter = false);

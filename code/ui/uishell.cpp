@@ -23,6 +23,7 @@
 #include "uiinternal.h"
 #include "uimodalinput.h"
 #include "uimodalsession.h"
+#include "uifrontendcontinuation.h"
 #include "uicontrollerback.h"
 #include "uicontrollerfocus.h"
 #include "uirmlview.h"
@@ -1420,6 +1421,16 @@ bool UI_Modal_Session_Begin(
 }
 
 
+bool UI_Modal_Session_Begin_Mode(
+	OpenTS_UIModal::UIModalSession & session,
+	UIPresenterClass & presenter,
+	UIRmlViewClass & view,
+	bool native_blocking_adapter)
+{
+	return(Begin_Modal_Session(session, presenter, view, native_blocking_adapter));
+}
+
+
 OpenTS_UIModal::UIModalStepResult UI_Modal_Session_Step(OpenTS_UIModal::UIModalSession & session)
 {
 	OpenTS_UIModal::UIModalSessionOps const ops = Make_Modal_Session_Ops(session);
@@ -1459,4 +1470,21 @@ UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view)
 
 	UI_Modal_Session_Finish(session);
 	return(session.Result);
+}
+
+
+UIResult UI_Run_Frontend_Continuation(UIFrontendContinuation & continuation)
+{
+	for (;;) {
+		OpenTS_UIModal::UIModalStepResult const result = continuation.Step();
+		if (result == OpenTS_UIModal::UIModalStepResult::Active
+			|| result == OpenTS_UIModal::UIModalStepResult::Waiting) {
+			Host_Sleep(Video_Milliseconds_Until_Present());
+			continue;
+		}
+		break;
+	}
+
+	continuation.Finish();
+	return(continuation.Result());
 }

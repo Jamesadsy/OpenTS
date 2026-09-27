@@ -17,6 +17,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 #include <string>
 #include <vector>
 
@@ -114,3 +118,6 @@ inline void UI_Campaign_Commit_Difficulty(UICampaignSelectionResult const & resu
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller receives an explicit presentation failure.
 UIResult UI_Campaign_Screen(UICampaignPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Campaign_Screen_Continuation(
+	UICampaignPresenterClass & presenter,
+	bool native_blocking_adapter = false);

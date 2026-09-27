@@ -16,6 +16,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 
 inline constexpr char const * UI_GAMETYPE_ORIGINAL = "original";
 inline constexpr char const * UI_GAMETYPE_FIRESTORM = "firestorm";
@@ -48,3 +52,6 @@ class UIGameTypePresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Game_Type_Screen(UIGameTypePresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Game_Type_Screen_Continuation(
+	UIGameTypePresenterClass & presenter,
+	bool native_blocking_adapter = false);

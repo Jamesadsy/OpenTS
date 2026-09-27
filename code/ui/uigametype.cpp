@@ -22,6 +22,7 @@
 #include "uigametype.h"
 
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "addon.h"
 #include "init.h"
@@ -139,15 +140,16 @@ void GameTypeViewClass::Bind(Rml::DataModelConstructor & model)
 /// </summary>
 UIResult UI_Game_Type_Screen(UIGameTypePresenterClass & presenter)
 {
-	GameTypeViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Game_Type_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Game_Type_Screen_Continuation(
+	UIGameTypePresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UITypedFrontendContinuation<UIGameTypePresenterClass, GameTypeViewClass>>(
+		presenter, native_blocking_adapter, nullptr));
 }

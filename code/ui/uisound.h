@@ -16,6 +16,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 #include <string>
 #include <vector>
 
@@ -79,3 +83,6 @@ class UISoundPresenterClass : public UIPresenterClass
 // the player accepts it. A OUTCOME_FAILED_TO_OPEN result means the document could not be
 // prepared and nothing was shown, which is the caller's cue to open the legacy dialog.
 UIResult UI_Sound_Screen(UISoundPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Sound_Screen_Continuation(
+	UISoundPresenterClass & presenter,
+	bool native_blocking_adapter = false);

@@ -16,8 +16,14 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 
 // Shows the version information and does not return until the player dismisses it. A
 // OUTCOME_FAILED_TO_OPEN result means the documents could not be prepared and nothing was
 // shown, which is the caller's cue to open the legacy dialog instead.
 UIResult UI_Version_Screen(void);
+std::unique_ptr<UIFrontendContinuation> UI_Version_Screen_Continuation(
+	bool native_blocking_adapter = false);

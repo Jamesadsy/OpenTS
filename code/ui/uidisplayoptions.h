@@ -18,6 +18,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 #include <string>
 #include <vector>
 
@@ -88,3 +92,6 @@ class UIDisplayOptionsPresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Display_Options_Screen(UIDisplayOptionsPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Display_Options_Screen_Continuation(
+	UIDisplayOptionsPresenterClass & presenter,
+	bool native_blocking_adapter = false);

@@ -121,6 +121,7 @@
 #include "ui/uiversion.h"
 #include "globals.h"
 #include "hostclock.h"
+#include "video.h"
 #include "houstype.h"
 #include "incdec.h"
 #include "infatype.h"
@@ -199,6 +200,7 @@
 #include "scrnsel.hh"
 #include "ui/uicampaign.h"
 #include "ui/uimainmenu.h"
+#include "ui/uifrontendcontinuation.h"
 
 #include <algorithm>
 #include <conio.h>
@@ -250,7 +252,6 @@ static bool Init_Bulk_Data(void);
 static void Init_Keys(void);
 static bool Init_Rules(void);
 static void Init_Commands(void);
-static UICampaignSelectionResult Choose_Campaign(void);
 static void Init_Threads(void);
 void Draw_Version_Text(Surface * surface);
 void Version_Dialog(void);
@@ -726,32 +727,6 @@ void Prepare_Side_Roster(void)
 
 
 /// <summary>
-/// Asks the player which campaign to play.
-/// This routine reads the campaign list first if that has not already happened, and then
-/// runs the campaign dialog until the player either commits or backs out.
-/// </summary>
-/// <returns>Returns an explicit accepted, cancelled, or presentation-failure result.</returns>
-static UICampaignSelectionResult Choose_Campaign(void)
-{
-	if (Campaigns.Count() == 0) {
-		Init_Campaigns();
-
-		if (Campaigns.Count() == 0) {
-			DebugString("[UI] Campaign selection unavailable: no campaigns were loaded.\n");
-			return(UICampaignSelectionResult{});
-		}
-	}
-
-	UICampaignPresenterClass screen;
-	screen.Refresh();
-
-	UIResult const result = UI_Campaign_Screen(screen);
-
-	return(UI_Campaign_Selection_Result(result, screen.Chosen(), screen.Difficulty));
-}
-
-
-/// <summary>
 /// Loads the rules and the art control files.
 /// This routine gathers every rules file it can find and, should there be more than one,
 /// asks the player which of them to play with. It then loads the art, expansion, AI and
@@ -898,140 +873,395 @@ static bool Init_Rules(void)
  * HISTORY:                                                                                    *
  *   06/05/1995 BRR : Created.                                                                 *
  *=============================================================================================*/
-bool Select_Game(bool )
+static void Draw_Title_Screen(void);
+static void Seed_Crypto_Random(void);
+
+
+struct SelectGameSession::Impl
 {
-	bool gameloaded;				// Has the game been loaded from the menu?
-	int selection;					// the default selection
-	bool process;					// false = break out of while loop
+	enum class ChildType : std::uint8_t {
+		None,
+		MainMenu,
+		Campaign,
+	};
 
-	static int protocol = -1;
+	std::unique_ptr<UIFrontendContinuation> Child;
+	UIMainMenuPresenterClass MainMenuPresenter;
+	UICampaignPresenterClass CampaignPresenter;
+	ChildType ActiveChild = ChildType::None;
+	bool NativeBlockingAdapter = false;
+	bool AtIterationStart = true;
+	bool NeedsMenuCallback = false;
+	bool ImmediateExit = false;
+};
 
-	/// RA2 calls this here, bugfix?
-	//Theme.Play_Song(Fetch_Main_Menu_Theme());
 
-	Show_Mouse();
+SelectGameSession::SelectGameSession(void) : m_Impl(std::make_unique<Impl>())
+{
+}
 
-restart:
-	gameloaded = false;
-	process = true;
 
-	/*
-	**	[Re]set any globals that need it, in preparation for a new scenario
-	*/
-	GameActive = true;
-	PlayerPtr = NULL;
-	DoList.clear();
-	OutList.clear();
-	Frame = 0;
-	Scen->MissionTimer = 0;
-	Scen->MissionTimer.Stop();
-	Scen->CDifficulty = DIFF_NORMAL;
-	Scen->Difficulty = DIFF_NORMAL;
-	PlayerWins = false;
-	PlayerLoses = false;
-	PlayerRestarts = false;
-	PlayerAborts = false;
-	Session.ObiWan = false;
-	Session.AIOnly = false;
-#ifdef _DEBUG
-	Debug_Unshroud = false;
-#endif
-	Map.Set_Cursor_Shape(NULL);
-	Map.PendingObjectPtr = 0;
-	Map.PendingObject = 0;
-	Map.PendingHouse = HOUSE_NONE;
+SelectGameSession::~SelectGameSession(void) = default;
 
-	Session.ProcessTicks = 0;
-	Session.ProcessFrames = 0;
-	Session.DesiredFrameRate = 30;
-	NewMaxAheadFrame1 = 0;
-	NewMaxAheadFrame2 = 0;
 
-	/*
-	**	Init multiplayer game scores.  Let Wins accumulate; just init the current
-	**	Kills for this game.  Kills of -1 means this player didn't play this round.
-	*/
-	for (int i = 0; i < MAX_MULTI_GAMES; i++) {
-		Session.Score[i].Kills[Session.CurGame] = -1;
+void SelectGameSession::Begin(bool fade, bool native_blocking_adapter)
+{
+	m_Impl->NativeBlockingAdapter = native_blocking_adapter;
+	Fade = fade;
+	Reset();
+}
+
+
+void SelectGameSession::Reset(void)
+{
+	if (m_Impl->Child != nullptr) {
+		m_Impl->Child->Finish();
+		m_Impl->Child.reset();
 	}
+	GameLoaded = false;
+	Selection = SEL_NONE;
+	Process = true;
+	WaitDeadlineMs = 0;
+	Campaign = -1;
+	Difficulty = 0;
+	CampaignOutcome = SelectGameCampaignOutcome::Pending;
+	Phase = SelectGamePhase::Reset;
+	m_Impl->ActiveChild = Impl::ChildType::None;
+	m_Impl->AtIterationStart = true;
+	m_Impl->NeedsMenuCallback = false;
+	m_Impl->ImmediateExit = false;
+}
 
-	/*
-	**	Set default mouse shape
-	*/
-	Map.Set_Default_Mouse(MOUSE_NORMAL, false);
 
-	if (ToolTips != NULL) {
-		ToolTips->Activate(false);
-	}
-
-	/*
-	**	If the last game we played was a multiplayer game, jump right to that
-	**	menu by pre-setting 'selection'.
-	*/
-	if (Session.Type == GAME_NORMAL) {
-		selection = SEL_NONE;
+bool SelectGameSession::Complete_Native_Child(
+	bool process,
+	int selection,
+	bool game_loaded,
+	bool selection_from_menu)
+{
+	if (Phase != SelectGamePhase::NativeChild) return(false);
+	Process = process;
+	Selection = selection;
+	GameLoaded = game_loaded;
+	m_Impl->ActiveChild = Impl::ChildType::None;
+	if (!Process) {
+		Phase = SelectGamePhase::ScenarioPrepare;
 	} else {
-		selection = SEL_MULTIPLAYER_GAME;
+		Phase = SelectGamePhase::MainMenu;
+		m_Impl->AtIterationStart = !selection_from_menu;
+		m_Impl->NeedsMenuCallback = selection_from_menu;
 	}
+	return(true);
+}
 
-	/*
-	**	Main menu processing; only do this if we're not in editor mode.
-	*/
-	if (!Debug_Map) {
 
-		/*
-		**	Menu selection processing loop
-		*/
-		Theme.Play_Song(Fetch_Main_Menu_Theme());
-
-		/*
-		**	If we're playing back a recording, load all pertinent values & skip
-		**	the menu loop.  Hide the now-useless mouse pointer.
-		*/
-		if (Session.Play && Session.RecordFile.Is_Available()) {
-			if (Session.RecordFile.Open(FileClass::READ)) {
-				Load_Recording_Values(Session.RecordFile);
-				process = false;
+SelectGameStepResult SelectGameSession::Step(void)
+{
+	auto begin_campaign = [this]() -> SelectGameStepResult {
+		new (&Environment) EnvironmentClass;
+		if (Campaigns.Count() == 0) {
+			Init_Campaigns();
+			if (Campaigns.Count() == 0) {
+				CampaignOutcome = SelectGameCampaignOutcome::PresentationFailure;
+				DebugString("[UI] Campaign selection unavailable: no campaigns were loaded.\n");
 				Theme.Stop(true);
-			} else {
-				Session.Play = false;
+				Process = false;
+				Phase = SelectGamePhase::Exit;
+				m_Impl->ImmediateExit = true;
+				return(SelectGameStepResult::Exited);
 			}
 		}
 
-		/*
-		 * A launch replaces the menu once. An ended match or a refusal answers false, so the
-		 * process exits and the client sees it go.
-		 */
-		if (Spawner_Is_Requested()) {
-			if (!Spawner_Prepare(gameloaded)) {
-				return(false);
-			}
-			process = false;
+		m_Impl->CampaignPresenter.Result.reset();
+		m_Impl->CampaignPresenter.IsClosing = false;
+		m_Impl->CampaignPresenter.Choice = UICampaignPresenterClass::CHOICE_NONE;
+		m_Impl->CampaignPresenter.Refresh();
+		m_Impl->Child = UI_Campaign_Screen_Continuation(
+			m_Impl->CampaignPresenter, m_Impl->NativeBlockingAdapter);
+		m_Impl->ActiveChild = Impl::ChildType::Campaign;
+		Phase = SelectGamePhase::ChildModal;
+		return(SelectGameStepResult::Waiting);
+	};
+
+	auto dispatch_selection = [this, &begin_campaign]() -> SelectGameStepResult {
+		if (!Process) {
+			Phase = SelectGamePhase::ReadyForGameplay;
+			return(SelectGameStepResult::ReadyForGameplay);
+		}
+		if (Selection == SEL_CAMPAIGN_GAME) return(begin_campaign());
+		if (Selection == SEL_EXIT) {
 			Theme.Stop(true);
+			WaitDeadlineMs = (std::uint32_t)(TickCount + 50 * TIMER_SECOND);
+			Phase = SelectGamePhase::Exit;
+			return(SelectGameStepResult::Waiting);
 		}
+		if (Selection == SEL_NONE) {
+			Phase = SelectGamePhase::MainMenu;
+			m_Impl->AtIterationStart = true;
+			return(SelectGameStepResult::Waiting);
+		}
+		Phase = SelectGamePhase::NativeChild;
+		return(SelectGameStepResult::NativeChild);
+	};
 
-		while (process) {
+	switch (Phase) {
+		case SelectGamePhase::Idle:
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
 
-			/*
-			**	Display menu and fetch selection from player.
-			*/
-			if (PacketTransport) {
-				Ipx.Shutdown();
+		case SelectGamePhase::Reset:
+			Show_Mouse();
+			GameActive = true;
+			PlayerPtr = NULL;
+			DoList.clear();
+			OutList.clear();
+			Frame = 0;
+			Scen->MissionTimer = 0;
+			Scen->MissionTimer.Stop();
+			Scen->CDifficulty = DIFF_NORMAL;
+			Scen->Difficulty = DIFF_NORMAL;
+			PlayerWins = false;
+			PlayerLoses = false;
+			PlayerRestarts = false;
+			PlayerAborts = false;
+			Session.ObiWan = false;
+			Session.AIOnly = false;
+#ifdef _DEBUG
+			Debug_Unshroud = false;
+#endif
+			Map.Set_Cursor_Shape(NULL);
+			Map.PendingObjectPtr = 0;
+			Map.PendingObject = 0;
+			Map.PendingHouse = HOUSE_NONE;
+
+			Session.ProcessTicks = 0;
+			Session.ProcessFrames = 0;
+			Session.DesiredFrameRate = 30;
+			NewMaxAheadFrame1 = 0;
+			NewMaxAheadFrame2 = 0;
+
+			for (int i = 0; i < MAX_MULTI_GAMES; i++) {
+				Session.Score[i].Kills[Session.CurGame] = -1;
 			}
 
-			if ((selection == SEL_NONE) && !Debug_ForceScenario) {
-				if (Get_New_Menu()->MixFile) {
-					selection = New_Main_Menu();
-				} else {
-					selection = Main_Menu(ATTRACT_MODE_TIMEOUT);
+			Map.Set_Default_Mouse(MOUSE_NORMAL, false);
+			if (ToolTips != NULL) ToolTips->Activate(false);
+			Selection = Session.Type == GAME_NORMAL ? SEL_NONE : SEL_MULTIPLAYER_GAME;
+
+			if (!Debug_Map) {
+				Theme.Play_Song(Fetch_Main_Menu_Theme());
+				if (Session.Play && Session.RecordFile.Is_Available()) {
+					if (Session.RecordFile.Open(FileClass::READ)) {
+						Load_Recording_Values(Session.RecordFile);
+						Process = false;
+						Theme.Stop(true);
+					} else {
+						Session.Play = false;
+					}
+				}
+				if (Spawner_Is_Requested()) {
+					if (!Spawner_Prepare(GameLoaded)) {
+						Phase = SelectGamePhase::Exit;
+						m_Impl->ImmediateExit = true;
+						return(SelectGameStepResult::Exited);
+					}
+					Process = false;
+					Theme.Stop(true);
 				}
 			}
 
-			if (Debug_ForceScenario) {
-				selection = SEL_CAMPAIGN_GAME;
+			if (!Process || Debug_Map) {
+				Phase = SelectGamePhase::ScenarioPrepare;
+				return(SelectGameStepResult::NativeChild);
+			}
+			Phase = SelectGamePhase::MainMenu;
+			m_Impl->AtIterationStart = true;
+			return(SelectGameStepResult::Waiting);
+
+		case SelectGamePhase::MainMenu:
+			if (m_Impl->NeedsMenuCallback) {
+				m_Impl->NeedsMenuCallback = false;
+				Call_Back();
+				return(dispatch_selection());
+			}
+			if (m_Impl->AtIterationStart) {
+				m_Impl->AtIterationStart = false;
+				if (PacketTransport) Ipx.Shutdown();
+				if ((Selection == SEL_NONE) && !Debug_ForceScenario) {
+					if (Get_New_Menu()->MixFile) {
+						Phase = SelectGamePhase::NativeChild;
+						return(SelectGameStepResult::NativeChild);
+					}
+					m_Impl->MainMenuPresenter.Result.reset();
+					m_Impl->MainMenuPresenter.IsClosing = false;
+					m_Impl->MainMenuPresenter.VersionPending = false;
+					m_Impl->MainMenuPresenter.Choice = UIMainMenuPresenterClass::CHOICE_NONE;
+					m_Impl->MainMenuPresenter.Refresh();
+					Draw_Title_Screen();
+					m_Impl->Child = UI_Main_Menu_Screen_Continuation(
+						m_Impl->MainMenuPresenter, m_Impl->NativeBlockingAdapter);
+					m_Impl->ActiveChild = Impl::ChildType::MainMenu;
+					Phase = SelectGamePhase::ChildModal;
+					return(SelectGameStepResult::Waiting);
+				}
+				if (Debug_ForceScenario) Selection = SEL_CAMPAIGN_GAME;
+				Call_Back();
+				return(dispatch_selection());
+			}
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+
+		case SelectGamePhase::ChildModal: {
+			if (m_Impl->Child == nullptr) {
+				Phase = SelectGamePhase::Fault;
+				return(SelectGameStepResult::Fault);
+			}
+			OpenTS_UIModal::UIModalStepResult const child_step = m_Impl->Child->Step();
+			if (child_step == OpenTS_UIModal::UIModalStepResult::Active
+				|| child_step == OpenTS_UIModal::UIModalStepResult::Waiting) {
+				return(SelectGameStepResult::Waiting);
+			}
+			if (child_step == OpenTS_UIModal::UIModalStepResult::Fault) {
+				Phase = SelectGamePhase::Fault;
+				return(SelectGameStepResult::Fault);
 			}
 
-			Call_Back();
+			UIResult const child_result = m_Impl->Child->Result();
+			if (m_Impl->ActiveChild == Impl::ChildType::MainMenu) {
+				if (child_result.Outcome == UIResult::OUTCOME_SESSION_ENDED) {
+					m_Impl->MainMenuPresenter.Choice = UIMainMenuPresenterClass::CHOICE_EXIT;
+				}
+				Selection = m_Impl->MainMenuPresenter.Selection();
+				if (!m_Impl->Child->Finish()) {
+					Phase = SelectGamePhase::Fault;
+					return(SelectGameStepResult::Fault);
+				}
+				m_Impl->Child.reset();
+				m_Impl->ActiveChild = Impl::ChildType::None;
+				Seed_Crypto_Random();
+				SetFocus(MainWindow);
+				Call_Back();
+				return(dispatch_selection());
+			}
+
+			if (m_Impl->ActiveChild == Impl::ChildType::Campaign) {
+				UICampaignSelectionResult const result = UI_Campaign_Selection_Result(
+					child_result,
+					m_Impl->CampaignPresenter.Chosen(),
+					m_Impl->CampaignPresenter.Difficulty);
+				if (!m_Impl->Child->Finish()) {
+					Phase = SelectGamePhase::Fault;
+					return(SelectGameStepResult::Fault);
+				}
+				m_Impl->Child.reset();
+				m_Impl->ActiveChild = Impl::ChildType::None;
+				Campaign = result.Campaign;
+				Difficulty = result.Difficulty;
+				switch (result.Outcome) {
+					case UICampaignSelectionOutcome::CANCELLED:
+						CampaignOutcome = SelectGameCampaignOutcome::Cancelled;
+						Process = true;
+						Selection = SEL_NONE;
+						Phase = SelectGamePhase::MainMenu;
+						m_Impl->AtIterationStart = true;
+						return(SelectGameStepResult::Waiting);
+
+					case UICampaignSelectionOutcome::PRESENTATION_FAILURE:
+						CampaignOutcome = SelectGameCampaignOutcome::PresentationFailure;
+						DebugString("[UI] Campaign presentation failed to open; ending selection attempt.\n");
+						Theme.Stop(true);
+						Process = false;
+						Phase = SelectGamePhase::Exit;
+						m_Impl->ImmediateExit = true;
+						return(SelectGameStepResult::Exited);
+
+					case UICampaignSelectionOutcome::ACCEPTED:
+						CampaignOutcome = SelectGameCampaignOutcome::Accepted;
+						Scen->Campaign = (CampaignType)result.Campaign;
+						UI_Campaign_Commit_Difficulty(result, Options.Difficulty);
+						Theme.Stop(true);
+						WaitDeadlineMs = (std::uint32_t)(TickCount + 5 * TIMER_SECOND);
+						Phase = SelectGamePhase::ThemeDrain;
+						return(SelectGameStepResult::Waiting);
+				}
+			}
+
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+
+		case SelectGamePhase::ThemeDrain:
+			if (Theme.Still_Playing() && WaitDeadlineMs > TickCount) {
+				Call_Back();
+				return(SelectGameStepResult::Waiting);
+			}
+			Theme.Stop();
+			Session.Type = GAME_NORMAL;
+			Process = false;
+			Phase = SelectGamePhase::ScenarioPrepare;
+			return(SelectGameStepResult::NativeChild);
+
+		case SelectGamePhase::Exit:
+			if (m_Impl->ImmediateExit) return(SelectGameStepResult::Exited);
+			if (Theme.Still_Playing() && Is_Speaking() && WaitDeadlineMs > TickCount) {
+				Call_Back();
+				return(SelectGameStepResult::Waiting);
+			}
+			Theme.Stop();
+			Process = false;
+			return(SelectGameStepResult::Exited);
+
+		case SelectGamePhase::NativeChild:
+			return(SelectGameStepResult::NativeChild);
+
+		case SelectGamePhase::ScenarioPrepare:
+			return(SelectGameStepResult::NativeChild);
+
+		case SelectGamePhase::ReadyForGameplay:
+			return(SelectGameStepResult::ReadyForGameplay);
+
+		case SelectGamePhase::IntroMovie:
+		case SelectGamePhase::ScenarioChild:
+		case SelectGamePhase::ConnectionSetup:
+		case SelectGamePhase::InitialPresentation:
+		case SelectGamePhase::Fault:
+			return(SelectGameStepResult::Fault);
+	}
+
+	Phase = SelectGamePhase::Fault;
+	return(SelectGameStepResult::Fault);
+}
+
+
+bool Select_Game(bool fade)
+{
+	static int protocol = -1;
+	SelectGameSession select_game;
+	select_game.Begin(fade, true);
+	bool & gameloaded = select_game.GameLoaded;
+	int & selection = select_game.Selection;
+	bool & process = select_game.Process;
+
+	for (;;) {
+		for (;;) {
+			SelectGameStepResult const step = select_game.Step();
+			if (step == SelectGameStepResult::Waiting) {
+				Host_Sleep(Video_Milliseconds_Until_Present());
+				continue;
+			}
+			if (step == SelectGameStepResult::ReadyForGameplay
+				|| (step == SelectGameStepResult::NativeChild
+					&& select_game.Phase == SelectGamePhase::ScenarioPrepare)) {
+				break;
+			}
+			if (step == SelectGameStepResult::Exited || step == SelectGameStepResult::Fault) return(false);
+			if (step != SelectGameStepResult::NativeChild) return(false);
+
+			if (selection == SEL_NONE) {
+				selection = New_Main_Menu();
+				select_game.Complete_Native_Child(process, selection, gameloaded, true);
+				continue;
+			}
 
 			switch (selection) {
 
@@ -1042,50 +1272,6 @@ restart:
 					Session.Type = GAME_NORMAL;
 					process = false;
 					break;
-
-				/*
-				 * SEL_CAMPAIGN_GAME: Play the game
-				 */
-				case SEL_CAMPAIGN_GAME: {
-					new (&Environment) EnvironmentClass;
-
-					UICampaignSelectionResult const campaign = Choose_Campaign();
-					switch (campaign.Outcome) {
-						case UICampaignSelectionOutcome::CANCELLED:
-							process = true;
-							selection = SEL_NONE;
-							break;
-
-						case UICampaignSelectionOutcome::PRESENTATION_FAILURE:
-							// This is an explicit failed selection attempt, not a menu cancel and
-							// not SEL_EXIT. Do not start a scenario or spin back through SEL_NONE.
-							DebugString("[UI] Campaign presentation failed to open; ending selection attempt.\n");
-							Theme.Stop(true);
-							return(false);
-
-						case UICampaignSelectionOutcome::ACCEPTED:
-							Scen->Campaign = (CampaignType)campaign.Campaign;
-							UI_Campaign_Commit_Difficulty(campaign, Options.Difficulty);
-							break;
-					}
-
-					if (campaign.Outcome != UICampaignSelectionOutcome::ACCEPTED) {
-						break;
-					}
-
-					Theme.Stop(true);
-
-					int timeout = (TickCount + 5 * TIMER_SECOND);
-
-					while (Theme.Still_Playing() && (timeout > TickCount)) {
-						Call_Back();
-					}
-
-					Theme.Stop();
-					Session.Type = GAME_NORMAL;
-					process = false;
-					break;
-				}
 
 				/*
 				**	Load a saved game.
@@ -1124,10 +1310,12 @@ restart:
 									selection = SEL_NONE;
 								}
 								if (Session.Type == GAME_SKIRMISH) {
+									select_game.Complete_Native_Child(process, selection, gameloaded);
 									continue;
 								}
 							} else {
 								selection = SEL_NONE;
+								select_game.Complete_Native_Child(process, selection, gameloaded);
 								continue;
 							}
 							break;
@@ -1220,23 +1408,6 @@ restart:
 					break;
 
 				/*
-				**	Exit to DOS.
-				*/
-				case SEL_EXIT: {
-						Theme.Stop(true);
-
-						int timeout = (TickCount + 50 * TIMER_SECOND);
-
-						while (Theme.Still_Playing() && Is_Speaking() && (timeout > TickCount)) {
-							Call_Back();
-						}
-
-						Theme.Stop();
-
-						return(false);
-					}
-
-				/*
 				**	Display the hall of fame.
 				*/
 				case SEL_FAME:
@@ -1263,14 +1434,8 @@ restart:
 				default:
 					break;
 			}
+			select_game.Complete_Native_Child(process, selection, gameloaded);
 		}
-	} else {
-
-		/*
-		** For Debug_Map (editor) mode to load scenario
-		*/
-		//Scen.Set_Scenario_Name("SCG01EA.INI");
-	}
 
 	/*
 	**	Don't carry stray keystrokes into game.
@@ -1318,7 +1483,8 @@ restart:
 				if (Debug_Map) {
 					return(false);
 				} else {
-					goto restart;
+					select_game.Reset();
+					continue;
 				}
 			}
 		} else {
@@ -1326,7 +1492,8 @@ restart:
 				if (Debug_Map) {
 					return(false);
 				} else {
-					goto restart;
+					select_game.Reset();
+					continue;
 				}
 			}
 		}
@@ -1406,6 +1573,7 @@ restart:
 	Hide_Mouse();
 
 	return(true);
+	}
 }
 
 

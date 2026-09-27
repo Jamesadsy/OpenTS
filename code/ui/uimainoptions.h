@@ -18,6 +18,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 
 inline constexpr char const * UI_MAINOPT_SOUND = "sound";
 inline constexpr char const * UI_MAINOPT_DISPLAY = "display";
@@ -76,3 +80,6 @@ class UIMainOptionsPresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Main_Options_Screen(UIMainOptionsPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Main_Options_Screen_Continuation(
+	UIMainOptionsPresenterClass & presenter,
+	bool native_blocking_adapter = false);

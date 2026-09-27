@@ -32,6 +32,7 @@
 
 #include "uiinternal.h"
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "_command.h"
 #include "ccfile.h"
@@ -458,15 +459,16 @@ void KeyboardViewClass::Sync(void)
 /// </summary>
 UIResult UI_Keyboard_Screen(UIKeyboardPresenterClass & presenter)
 {
-	KeyboardViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Keyboard_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Keyboard_Screen_Continuation(
+	UIKeyboardPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UITypedFrontendContinuation<UIKeyboardPresenterClass, KeyboardViewClass>>(
+		presenter, native_blocking_adapter, nullptr));
 }

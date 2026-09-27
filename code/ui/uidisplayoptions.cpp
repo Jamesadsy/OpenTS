@@ -26,6 +26,7 @@
 #include "uidisplayoptions.h"
 
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "globals.h"
 #include "init.h"
@@ -229,15 +230,16 @@ void DisplayOptionsViewClass::Sync(void)
 /// </summary>
 UIResult UI_Display_Options_Screen(UIDisplayOptionsPresenterClass & presenter)
 {
-	DisplayOptionsViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Display_Options_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Display_Options_Screen_Continuation(
+	UIDisplayOptionsPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UITypedFrontendContinuation<UIDisplayOptionsPresenterClass, DisplayOptionsViewClass>>(
+		presenter, native_blocking_adapter, nullptr));
 }

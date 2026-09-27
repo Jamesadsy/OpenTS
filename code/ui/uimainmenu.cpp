@@ -24,6 +24,8 @@
 #include "uimainmenu.h"
 
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
+#include "uiversion.h"
 
 #include "voc.h"
 #include "globals.h"
@@ -78,12 +80,16 @@ int UIMainMenuPresenterClass::Selection(void) const
 /// </summary>
 void UIMainMenuPresenterClass::Run_Pending(void)
 {
-	if (!VersionPending) {
-		return;
-	}
-
-	VersionPending = false;
+	if (!Take_Version_Pending()) return;
 	Version_Dialog();
+}
+
+
+bool UIMainMenuPresenterClass::Take_Version_Pending(void)
+{
+	if (!VersionPending) return(false);
+	VersionPending = false;
+	return(true);
 }
 
 
@@ -223,35 +229,111 @@ void MainMenuViewClass::Sync(void)
 /// </summary>
 UIResult UI_Main_Menu_Screen(UIMainMenuPresenterClass & presenter)
 {
-	MainMenuViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Main_Menu_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	// The version screen is a screen of a different kind, so it nests; getting out of the
-	// way of it is hiding this document, which is what the dialog's ShowWindow did.
-	while (!presenter.Result.has_value()) {
-		UIResult const pass = UI_Run_Modal(presenter, view);
+namespace
+{
 
-		if (pass.GameEnded) {
-			view.Close();
-			return(pass);
+class MainMenuContinuation final : public UIFrontendContinuation
+{
+	public:
+		explicit MainMenuContinuation(UIMainMenuPresenterClass & presenter, bool native_blocking_adapter) :
+			Parent(presenter, native_blocking_adapter, nullptr),
+			Presenter(presenter),
+			NativeBlockingAdapter(native_blocking_adapter)
+		{
 		}
 
-		if (!presenter.VersionPending) {
-			break;
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			using OpenTS_UIModal::UIModalStepResult;
+			if (Finished) return(LastStep);
+
+			if (Child != nullptr) {
+				UIModalStepResult const child_step = Child->Step();
+				if (child_step == UIModalStepResult::Active
+					|| child_step == UIModalStepResult::Waiting) {
+					return(child_step);
+				}
+				if (!Child->Finish()) {
+					LastStep = UIModalStepResult::Fault;
+					return(LastStep);
+				}
+				Child.reset();
+				MainMenuViewClass * const view = Parent.ViewPtr();
+				if (view == nullptr) {
+					LastStep = UIModalStepResult::Fault;
+					return(LastStep);
+				}
+				view->Show();
+				view->Sync();
+				if (!Parent.BeginModalAgain(NativeBlockingAdapter)) {
+					LastStep = UIModalStepResult::Fault;
+					return(LastStep);
+				}
+				LastStep = UIModalStepResult::Waiting;
+				return(LastStep);
+			}
+
+			LastStep = Parent.Step();
+			if (LastStep != UIModalStepResult::Suspended || !Presenter.VersionPending) {
+				return(LastStep);
+			}
+
+			MainMenuViewClass * const view = Parent.ViewPtr();
+			if (view == nullptr || !Parent.FinishModalOnly()) {
+				LastStep = UIModalStepResult::Fault;
+				return(LastStep);
+			}
+			view->Hide();
+			if (!Presenter.Take_Version_Pending()) {
+				LastStep = UIModalStepResult::Fault;
+				return(LastStep);
+			}
+			Child = UI_Version_Screen_Continuation(NativeBlockingAdapter);
+			if (Child == nullptr) {
+				LastStep = UIModalStepResult::Fault;
+				return(LastStep);
+			}
+			LastStep = UIModalStepResult::Waiting;
+			return(LastStep);
 		}
 
-		view.Hide();
-		presenter.Run_Pending();
-		view.Show();
-		view.Sync();
-	}
+		UIResult const & Result(void) const noexcept override
+		{
+			return(Parent.Result());
+		}
 
-	UIResult const result = presenter.Result.value_or(UIResult{});
-	view.Close();
-	return(result);
+		bool Finish(void) noexcept override
+		{
+			if (Finished) return(true);
+			bool success = true;
+			if (Child != nullptr) success = Child->Finish() && success;
+			Child.reset();
+			success = Parent.Finish() && success;
+			Finished = true;
+			return(success);
+		}
+
+	private:
+		UITypedFrontendContinuation<UIMainMenuPresenterClass, MainMenuViewClass> Parent;
+		UIMainMenuPresenterClass & Presenter;
+		bool NativeBlockingAdapter = false;
+		OpenTS_UIModal::UIModalStepResult LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		std::unique_ptr<UIFrontendContinuation> Child;
+		bool Finished = false;
+};
+
+} // namespace
+
+
+std::unique_ptr<UIFrontendContinuation> UI_Main_Menu_Screen_Continuation(
+	UIMainMenuPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<MainMenuContinuation>(presenter, native_blocking_adapter));
 }

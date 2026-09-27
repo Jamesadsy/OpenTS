@@ -71,6 +71,11 @@ class UIRmlViewClass
 // Runs a screen to a result the way the legacy dialog drivers do. uishell.cpp owns it; it
 // is declared here because it names both halves of a screen.
 bool UI_Modal_Session_Begin(OpenTS_UIModal::UIModalSession & session, UIPresenterClass & presenter, UIRmlViewClass & view);
+bool UI_Modal_Session_Begin_Mode(
+	OpenTS_UIModal::UIModalSession & session,
+	UIPresenterClass & presenter,
+	UIRmlViewClass & view,
+	bool native_blocking_adapter);
 OpenTS_UIModal::UIModalStepResult UI_Modal_Session_Step(OpenTS_UIModal::UIModalSession & session);
 bool UI_Modal_Session_Finish(OpenTS_UIModal::UIModalSession & session);
 UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view);

@@ -23,6 +23,7 @@
 #include "uimainoptions.h"
 
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "audio/audioengine.h"
 #include "gamedlg.h"
@@ -178,15 +179,16 @@ void MainOptionsViewClass::Bind(Rml::DataModelConstructor & model)
 /// </summary>
 UIResult UI_Main_Options_Screen(UIMainOptionsPresenterClass & presenter)
 {
-	MainOptionsViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Main_Options_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Main_Options_Screen_Continuation(
+	UIMainOptionsPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UITypedFrontendContinuation<UIMainOptionsPresenterClass, MainOptionsViewClass>>(
+		presenter, native_blocking_adapter, nullptr));
 }

@@ -19,6 +19,7 @@
 #include "uiversion.h"
 
 #include "uirmlview.h"
+#include "uifrontendcontinuation.h"
 
 #include "addon.h"
 #include "data.h"
@@ -196,20 +197,17 @@ void VersionViewClass::Sync(void)
 /// <returns>The screen's result. OUTCOME_FAILED_TO_OPEN means nothing was shown.</returns>
 UIResult UI_Version_Screen(void)
 {
-	// The presenter is declared first so that it is destroyed last: the data model the view
-	// binds reads the presenter's view-model, and must not outlive it.
-	VersionPresenterClass presenter;
-	VersionViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation = UI_Version_Screen_Continuation(true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	presenter.Refresh();
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
-
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Version_Screen_Continuation(bool native_blocking_adapter)
+{
+	// UITypedFrontendContinuation declares its owned presenter before its view, so the data
+	// model is destroyed while the view-model it reads is still alive.
+	std::unique_ptr<VersionPresenterClass> presenter = std::make_unique<VersionPresenterClass>();
+	presenter->Refresh();
+	return(std::make_unique<UITypedFrontendContinuation<VersionPresenterClass, VersionViewClass>>(
+		std::move(presenter), native_blocking_adapter, nullptr));
 }

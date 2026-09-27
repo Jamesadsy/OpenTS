@@ -16,6 +16,10 @@
 
 #include "uiscreen.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 
 // Shows a message with up to three buttons and does not return until one is answered. The
 // result's Value is the index of the button the player picked, counted the way
@@ -27,6 +31,14 @@
 UIResult UI_Message_Box_Screen(char const * message, int defresponse,
 	char const * b1txt, char const * b2txt, char const * b3txt,
 	bool (*service)(void) = nullptr);
+std::unique_ptr<UIFrontendContinuation> UI_Message_Box_Screen_Continuation(
+	char const * message,
+	int defresponse,
+	char const * b1txt,
+	char const * b2txt,
+	char const * b3txt,
+	bool (*service)(void) = nullptr,
+	bool native_blocking_adapter = false);
 
 
 // Opens the box that stands over a long operation. It is not modal: the caller keeps
