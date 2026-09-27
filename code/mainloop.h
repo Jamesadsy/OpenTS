@@ -35,5 +35,8 @@
 #include "mainloopsession.h"
 
 bool Main_Loop(void);
+bool Main_Loop_Session_Begin(OpenTS_MainLoop::MainLoopSession & session);
+OpenTS_MainLoop::CooperativeResult Main_Loop_Session_Step(OpenTS_MainLoop::MainLoopSession & session);
+bool Main_Loop_Session_Finish(OpenTS_MainLoop::MainLoopSession & session);
 void Keyboard_Process(KeyNumType & input);
 void Multiplayer_Debug_Print(bool noframecheck);

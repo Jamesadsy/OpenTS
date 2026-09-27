@@ -22,6 +22,7 @@
 
 #include "uiinternal.h"
 #include "uimodalinput.h"
+#include "uimodalsession.h"
 #include "uicontrollerback.h"
 #include "uicontrollerfocus.h"
 #include "uirmlview.h"
@@ -74,6 +75,7 @@ static int _ModalDepth = 0;
 // passes, so the tick that Main_Loop and Call_Back make from inside one is dropped rather
 // than updating the context a second time in the same pass.
 static int _RunningModal = 0;
+static OpenTS_UIModal::UIModalSession * _ModalMainLoopOwner = nullptr;
 
 
 // The window holds the mouse capture while a gesture a toolkit consumed is in progress.
@@ -1303,83 +1305,158 @@ bool UIRmlViewClass::Is_Visible(void) const
 }
 
 
-/// <summary>
-/// Runs a screen to a result, the way OwnerDraw::Dialog_Message_Handler runs a dialog.
-/// The loop keeps the shape the legacy drivers have: it pumps messages, then steps the
-/// game where a network session needs stepping and calls back where it does not, and only
-/// then updates the toolkit and executes what the screen's events queued. An event handler
-/// never acts directly, so a nested screen starts from the queue one level up.
-/// </summary>
-/// <param name="presenter">The screen to run. It carries the result it produces.</param>
-/// <param name="view">The view bound to it, updated after each pass.</param>
-/// <returns>The screen's result. GameEnded carries what the legacy driver returns when
-/// the session ended underneath it.</returns>
+// Adapts the generic pass operations to the current shell and its one accepted frame-core
+// child. The session object owns only the frame state and references, not screen semantics.
+static OpenTS_UIModal::UIModalSessionOps Make_Modal_Session_Ops(OpenTS_UIModal::UIModalSession & session)
+{
+	OpenTS_UIModal::UIModalSessionOps ops;
+	ops.Context = &session;
+	ops.Ready = [](void *) { return(_Initialized && _Context != nullptr); };
+	ops.EnterRunningModal = [](void *) { ++_RunningModal; };
+	ops.LeaveRunningModal = [](void *) { if (_RunningModal > 0) --_RunningModal; };
+	ops.PresenterResult = [](void * context, UIResult & result) {
+		OpenTS_UIModal::UIModalSession & current = *static_cast<OpenTS_UIModal::UIModalSession *>(context);
+		if (current.Presenter == nullptr || !current.Presenter->Result.has_value()) return(false);
+		result = current.Presenter->Result.value();
+		return(true);
+	};
+	ops.PresenterSuspends = [](void * context) {
+		OpenTS_UIModal::UIModalSession & current = *static_cast<OpenTS_UIModal::UIModalSession *>(context);
+		return(current.Presenter != nullptr && current.Presenter->Suspends());
+	};
+	ops.MainLoopEligible = [](void *) {
+		return(Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && !Session.NetOpen && !Session.Suspended);
+	};
+	ops.MainLoopAlreadyActive = [](void * context) {
+		OpenTS_UIModal::UIModalSession & current = *static_cast<OpenTS_UIModal::UIModalSession *>(context);
+		return(_ModalMainLoopOwner != nullptr && _ModalMainLoopOwner != &current);
+	};
+	ops.BeginMainLoop = [](void * context, OpenTS_UIModal::UIModalSession & current) {
+		if (_ModalMainLoopOwner != nullptr && _ModalMainLoopOwner != &current) return(false);
+		_ModalMainLoopOwner = &current;
+		if (!current.NativeBlockingAdapter && !Main_Loop_Session_Begin(current.MainLoopChild)) {
+			_ModalMainLoopOwner = nullptr;
+			return(false);
+		}
+		return(true);
+	};
+	ops.StepMainLoop = [](void *, OpenTS_UIModal::UIModalSession & current) {
+		if (current.NativeBlockingAdapter) {
+			current.NativeChildEnded = Main_Loop();
+			return(current.NativeChildEnded
+				? OpenTS_UIModal::UIModalChildResult::SessionEnded
+				: OpenTS_UIModal::UIModalChildResult::Complete);
+		}
+		switch (Main_Loop_Session_Step(current.MainLoopChild)) {
+			case OpenTS_MainLoop::CooperativeResult::Active:
+				return(OpenTS_UIModal::UIModalChildResult::Active);
+			case OpenTS_MainLoop::CooperativeResult::Waiting:
+				return(OpenTS_UIModal::UIModalChildResult::Waiting);
+			case OpenTS_MainLoop::CooperativeResult::Complete:
+				return(current.MainLoopChild.Result
+					? OpenTS_UIModal::UIModalChildResult::SessionEnded
+					: OpenTS_UIModal::UIModalChildResult::Complete);
+			case OpenTS_MainLoop::CooperativeResult::Fault:
+				return(OpenTS_UIModal::UIModalChildResult::Fault);
+		}
+		return(OpenTS_UIModal::UIModalChildResult::Fault);
+	};
+	ops.FinishMainLoop = [](void * context, OpenTS_UIModal::UIModalSession & current) {
+		bool finished = true;
+		if (!current.NativeBlockingAdapter) {
+			finished = Main_Loop_Session_Finish(current.MainLoopChild);
+			if (finished) current.MainLoopChild = OpenTS_MainLoop::MainLoopSession{};
+		}
+		if (_ModalMainLoopOwner == &current) _ModalMainLoopOwner = nullptr;
+		return(finished);
+	};
+	ops.CallBack = [](void *) {
+		// Square/Triangle are gameplay actions. A frontend or modal surface consumes their
+		// edges without letting them leak into the next scenario.
+		Win_Gamepad_Discard_Actions();
+		Call_Back();
+	};
+	ops.WinGamepadService = [](void *) { Win_Gamepad_Service(); };
+	ops.WindowsMessageHandler = [](void *) { Windows_Message_Handler(); };
+	ops.ServiceControllerBackAction = [](void *) { Service_Controller_Back_Action(); };
+	ops.PresenterService = [](void * context) {
+		OpenTS_UIModal::UIModalSession & current = *static_cast<OpenTS_UIModal::UIModalSession *>(context);
+		if (current.Presenter != nullptr) current.Presenter->Service();
+	};
+	ops.ContextUpdate = [](void *) { if (_Context != nullptr) _Context->Update(); };
+	ops.PresenterDrain = [](void * context) {
+		OpenTS_UIModal::UIModalSession & current = *static_cast<OpenTS_UIModal::UIModalSession *>(context);
+		if (current.Presenter != nullptr) current.Presenter->Drain();
+	};
+	ops.ViewSync = [](void * context) {
+		OpenTS_UIModal::UIModalSession & current = *static_cast<OpenTS_UIModal::UIModalSession *>(context);
+		if (current.View != nullptr) current.View->Sync();
+	};
+	ops.MessageBoxService = [](void *) { UI_Message_Box_Service(); };
+	ops.MarkDirty = [](void *) { Mark_Overlay_Dirty(); };
+	ops.PresentIfDirty = [](void *) { Video_Present_If_Dirty(); };
+	return(ops);
+}
+
+
+static bool Begin_Modal_Session(
+	OpenTS_UIModal::UIModalSession & session,
+	UIPresenterClass & presenter,
+	UIRmlViewClass & view,
+	bool native_blocking_adapter)
+{
+	session.NativeBlockingAdapter = native_blocking_adapter;
+	OpenTS_UIModal::UIModalSessionOps const ops = Make_Modal_Session_Ops(session);
+	return(OpenTS_UIModal::UIModalSession_Begin(session, presenter, view, native_blocking_adapter, ops));
+}
+
+
+bool UI_Modal_Session_Begin(
+	OpenTS_UIModal::UIModalSession & session,
+	UIPresenterClass & presenter,
+	UIRmlViewClass & view)
+{
+	return(Begin_Modal_Session(session, presenter, view, false));
+}
+
+
+OpenTS_UIModal::UIModalStepResult UI_Modal_Session_Step(OpenTS_UIModal::UIModalSession & session)
+{
+	OpenTS_UIModal::UIModalSessionOps const ops = Make_Modal_Session_Ops(session);
+	return(OpenTS_UIModal::UIModalSession_Step(session, ops));
+}
+
+
+bool UI_Modal_Session_Finish(OpenTS_UIModal::UIModalSession & session)
+{
+	OpenTS_UIModal::UIModalSessionOps const ops = Make_Modal_Session_Ops(session);
+	return(OpenTS_UIModal::UIModalSession_Finish(session, ops));
+}
+
+
 UIResult UI_Run_Modal(UIPresenterClass & presenter, UIRmlViewClass & view)
 {
-	UIResult result;
-	result.Outcome = UIResult::OUTCOME_CANCELLED;
-
-	if (!_Initialized || _Context == nullptr) {
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
+	// Preserve the legacy blocking entry point by driving the same session from native code.
+	// Its sleep is outside Step; browser-owned continuations call the bounded public Step API.
+	OpenTS_UIModal::UIModalSession session;
+	if (!Begin_Modal_Session(session, presenter, view, true)) {
+		UIResult failed;
+		failed.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+		return(failed);
 	}
 
-	// Main_Loop can reach a screen of its own, and the guard is the one
-	// OwnerDraw::Dialog_Message_Handler keeps for the same reason: the inner driver services
-	// the game with a callback rather than stepping it twice.
-	static bool inmainloop = false;
-
-	_RunningModal++;
-
-	while (!presenter.Result.has_value() && !presenter.Suspends()) {
-		// Service the shared virtual pointer once per modal/front-end cycle, before the
-		// message drain can dispatch its WM_MOUSEMOVE to RmlUi.
-		Win_Gamepad_Service();
-		Windows_Message_Handler();
-		Service_Controller_Back_Action();
-
-		if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && !Session.NetOpen && !Session.Suspended) {
-			if (!inmainloop) {
-				inmainloop = true;
-				bool const ended = Main_Loop();
-				inmainloop = false;
-
-				if (ended) {
-					_RunningModal--;
-					result.Outcome = UIResult::OUTCOME_SESSION_ENDED;
-					result.GameEnded = true;
-					return(result);
-				}
-			}
-		} else {
-			// Square/Triangle are gameplay actions. A frontend or modal surface consumes
-			// their edges without letting them leak into the next scenario.
-			Win_Gamepad_Discard_Actions();
-			Call_Back();
+	for (;;) {
+		OpenTS_UIModal::UIModalStepResult const result = UI_Modal_Session_Step(session);
+		if (result == OpenTS_UIModal::UIModalStepResult::Active
+			|| result == OpenTS_UIModal::UIModalStepResult::Waiting) {
+			// The blocking native compatibility adapter retains its historical wait around
+			// the same bounded session Step. Cooperative callers never enter this adapter.
+			Host_Sleep(Video_Milliseconds_Until_Present());
+			continue;
 		}
-
-		presenter.Service();
-
-		_Context->Update();
-		presenter.Drain();
-		view.Sync();
-		UI_Message_Box_Service();
-
-		Mark_Overlay_Dirty();
-		Video_Present_If_Dirty();
-
-		// The screen is finished until the display will take another frame, and spinning
-		// through it again in the meantime costs a whole processor for nothing.
-		Host_Sleep(Video_Milliseconds_Until_Present());
+		break;
 	}
 
-	_RunningModal--;
-
-	// A screen that asked to be stepped aside has no result yet; its owner runs the screen
-	// it opened and calls back in.
-	if (!presenter.Result.has_value()) {
-		return(result);
-	}
-
-	return(presenter.Result.value());
+	UI_Modal_Session_Finish(session);
+	return(session.Result);
 }

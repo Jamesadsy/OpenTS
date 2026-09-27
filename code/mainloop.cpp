@@ -530,6 +530,25 @@ static OpenTS_MainLoop::MainLoopSessionOps Make_Main_Loop_Ops(void)
 }
 
 
+bool Main_Loop_Session_Begin(OpenTS_MainLoop::MainLoopSession & session)
+{
+	return(OpenTS_MainLoop::MainLoopSession_Begin(session));
+}
+
+
+OpenTS_MainLoop::CooperativeResult Main_Loop_Session_Step(OpenTS_MainLoop::MainLoopSession & session)
+{
+	OpenTS_MainLoop::MainLoopSessionOps const ops = Make_Main_Loop_Ops();
+	return(OpenTS_MainLoop::MainLoopSession_Step(session, ops));
+}
+
+
+bool Main_Loop_Session_Finish(OpenTS_MainLoop::MainLoopSession & session)
+{
+	return(OpenTS_MainLoop::MainLoopSession_Finish(session));
+}
+
+
 static void Native_Sync_Delay_Wait(OpenTS_MainLoop::SyncDelaySession const & session)
 {
 	if (session.NetworkWait) {
