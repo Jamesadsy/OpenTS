@@ -32,6 +32,10 @@ endif()
 
 target_compile_features(LANBootstrapContract PRIVATE cxx_std_20)
 target_include_directories(LANBootstrapContract PRIVATE "${OPENTS_ROOT}/code")
+if(NOT WIN32)
+    target_include_directories(LANBootstrapContract PRIVATE
+        "${OPENTS_ROOT}/platform/win32compat/include")
+endif()
 if(TARGET OpenTSBuildStamp)
     target_include_directories(LANBootstrapContract PRIVATE "${OPENTS_GENERATED_DIR}")
     add_dependencies(LANBootstrapContract OpenTSBuildStamp)
