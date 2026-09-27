@@ -76,6 +76,7 @@
 #include "fly.h"
 #include "fog.h"
 #include "gamedirs.h"
+#include "globals.h"
 #include "goptions.h"
 #include "house.h"
 #include "houstype.h"
@@ -342,6 +343,90 @@ static int Build_Arguments(char const * path_to_exe, char ** & argv)
 }
 
 
+#ifdef _DEBUG
+// Local L1 switches stay out of the game's public launch-option parser.
+static int Filter_L1_Arguments(int argc, char ** argv, char ** & filtered_argv)
+{
+	static std::vector<char *> filtered;
+	filtered.clear();
+	filtered.push_back(argv[0]);
+
+	for (int index = 1; index < argc; ++index) {
+		if (stricmp(argv[index], "-MULTIINSTANCE") == 0) {
+			Debug_MultipleInstances = true;
+			continue;
+		}
+
+		constexpr char port_option[] = "-L1LISTENPORT=";
+		if (strnicmp(argv[index], port_option, sizeof(port_option) - 1) == 0) {
+			char const * value = argv[index] + sizeof(port_option) - 1;
+			unsigned long port = 0;
+			if (*value == '\0') return(-1);
+			for (; *value != '\0'; ++value) {
+				if (!isdigit(static_cast<unsigned char>(*value))) return(-1);
+				port = port * 10UL + static_cast<unsigned long>(*value - '0');
+				if (port > 65535UL) return(-1);
+			}
+			if (port == 0) return(-1);
+			Debug_L1LocalListenPort = static_cast<unsigned short>(port);
+			continue;
+		}
+
+		filtered.push_back(argv[index]);
+	}
+
+	filtered_argv = filtered.data();
+	return(static_cast<int>(filtered.size()));
+}
+#endif
+
+
+static bool Claim_Single_Instance(void)
+{
+	AppMutex = ::CreateMutex(NULL, FALSE, APP_GUID);
+	if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+		HWND main_wnd = ::FindWindow(APP_GUID, NULL);
+		if (main_wnd != NULL) {
+			::SetForegroundWindow(main_wnd);
+			::ShowWindow(main_wnd, SW_RESTORE);
+		}
+		if (AppMutex != NULL) {
+			CloseHandle(AppMutex);
+			AppMutex = NULL;
+		}
+		DebugString("TibSun is already running...Bail!\n");
+		return(false);
+	}
+
+	DebugString("Create AppMutex okay.\n");
+	do {
+		AutoPlayMutex = ::OpenMutex(MUTEX_ALL_ACCESS, FALSE, AUTOPLAY_GUID);
+		if (AutoPlayMutex != NULL) {
+			DebugString("Waiting for Autoplay to quit!\n");
+			if (::WaitForSingleObject(AutoPlayMutex, 30000) == WAIT_FAILED) {
+				DebugString("Failed waiting for AutoPlayMutex\n");
+				::CloseHandle(AutoPlayMutex);
+				AutoPlayMutex = NULL;
+			}
+		}
+
+		if (AutoPlayMutex == NULL) {
+			AutoPlayMutex = CreateMutex(NULL, FALSE, AUTOPLAY_GUID);
+			if (GetLastError() == ERROR_ALREADY_EXISTS) {
+				CloseHandle(AutoPlayMutex);
+				AutoPlayMutex = NULL;
+				Sleep(2500);
+			} else {
+				DebugString("Create AutoPlayMutex.\n");
+			}
+		}
+	} while (AutoPlayMutex == NULL);
+
+	DebugString("Got AutoPlayMutex okay.\n");
+	return(true);
+}
+
+
 /***********************************************************************************************
  * main -- Initial startup routine (preps library systems).                                    *
  *                                                                                             *
@@ -390,76 +475,6 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 		return(EXIT_FAILURE);
 	}
 
-	/*
-	 * Create a mutex with a unique name to TibSun in order to determine if
-	 * our app is already running.
-	 *
-	 * WARNING: DO NOT use this number for any other application except TibSun
-	 */
-	AppMutex = ::CreateMutex (NULL, FALSE, APP_GUID);
-
-	//
-	// Is there already an instance of this app somewhere?
-	//
-	if (::GetLastError () == ERROR_ALREADY_EXISTS) {
-		//
-		// Find the previous instance
-		//
-		HWND main_wnd = ::FindWindow (APP_GUID, NULL);
-		if (main_wnd != NULL) {
-			::SetForegroundWindow (main_wnd);
-			::ShowWindow (main_wnd, SW_RESTORE);
-		}
-		if (AppMutex != NULL) {
-			CloseHandle(AppMutex);
-			AppMutex = NULL;
-		}
-		DebugString("TibSun is already running...Bail!\n");
-		return(EXIT_SUCCESS);
-	} else {
-
-		DebugString("Create AppMutex okay.\n");
-
-		//
-		// Obtain the mutex unique to the Renegade AutoPlay application.
-		//
-		// WARNING: DO NOT use this number for any other application except Renegade AutoPlay
-		//
-		do
-		{
-			//
-			// Attempt to open the mutex
-			//
-			AutoPlayMutex = ::OpenMutex (MUTEX_ALL_ACCESS, FALSE, AUTOPLAY_GUID);
-			if (AutoPlayMutex != NULL) {
-				DebugString( "Waiting for Autoplay to quit!\n");
-				if (::WaitForSingleObject (AutoPlayMutex, 30000) == WAIT_FAILED) {
-					DebugString ("Failed waiting for AutoPlayMutex\n");
-					::CloseHandle (AutoPlayMutex);
-					AutoPlayMutex = NULL;
-				}
-			}
-
-			/*
-			 * Create a mutex with a name unique to the TibSun AutoPlay application.
-			 * This prevents the autoplay from running since it cannot get the mutex.
-			 * TibSun needs both of these mutexs before it is allowed to run.
-			 */
-			if (AutoPlayMutex == NULL) {
-				AutoPlayMutex = CreateMutex (NULL, FALSE, AUTOPLAY_GUID);
-				if (GetLastError () == ERROR_ALREADY_EXISTS) {
-					CloseHandle (AutoPlayMutex);
-					AutoPlayMutex = NULL;
-					Sleep (2500);
-				} else {
-					DebugString("Create AutoPlayMutex.\n");
-				}
-			}
-		} while (AutoPlayMutex == NULL);
-
-		DebugString ("Got AutoPlayMutex okay.\n");
-	}
-
 	atexit(Prog_End);
 
 	if (!Init_Language_Resources(true)) {
@@ -478,6 +493,16 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 	**
 	*/
 	argc = Build_Arguments(path_to_exe, argv);
+#ifdef _DEBUG
+	char ** filtered_argv = nullptr;
+	int const filtered_argc = Filter_L1_Arguments(argc, argv, filtered_argv);
+	if (filtered_argc < 0) {
+		DebugString("Invalid LAN L1 local listen port.\n");
+		return(EXIT_FAILURE);
+	}
+	argc = filtered_argc;
+	argv = filtered_argv;
+#endif
 
 	/*
 	**	Change directory to the where the executable is located. Handle the
@@ -493,6 +518,15 @@ int CALLBACK WinMain ( HINSTANCE instance , HINSTANCE , char * , int command_sho
 	int error_code = EXIT_FAILURE;
 
 	if (Parse_Command_Line(argc, argv) && Apply_Game_Directories()) {
+#ifdef _DEBUG
+		if (!Debug_MultipleInstances && !Claim_Single_Instance()) {
+			return(EXIT_SUCCESS);
+		}
+#else
+		if (!Claim_Single_Instance()) {
+			return(EXIT_SUCCESS);
+		}
+#endif
 
 		Exception_Run_Immediate_Test();
 

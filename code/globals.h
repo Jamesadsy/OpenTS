@@ -123,6 +123,10 @@ extern bool Debug_Playtest;
 extern bool Debug_Trap_Check_Heap;
 extern bool Debug_Print_Events;
 extern bool Debug_Console;
+#ifdef _DEBUG
+extern bool Debug_MultipleInstances;
+#endif
+extern unsigned short Debug_L1LocalListenPort;
 
 extern ParticleSystemClass *GasSystem;
 

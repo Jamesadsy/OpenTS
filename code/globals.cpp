@@ -115,6 +115,10 @@ bool Debug_Playtest = false;
 bool Debug_Trap_Check_Heap = false; // true = check the Heap
 bool Debug_Print_Events = false;    // true = print event & packet processing
 bool Debug_Console = false;
+#ifdef _DEBUG
+bool Debug_MultipleInstances = false;
+#endif
+unsigned short Debug_L1LocalListenPort = 0;
 
 
 ParticleSystemClass * GasSystem;

@@ -39,6 +39,7 @@
 #include "netglobal.h"
 #include "netshare.h"
 #include "nettiming.h"
+#include "netsocket.h"
 #include "newmenu.h"
 #include "rules.h"
 #include "scenario.h"
@@ -54,6 +55,8 @@
 #include "wsproto.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
 
 
 /*
@@ -63,6 +66,8 @@ static int Request_To_Join(int join_index);
 static void Unjoin_Game(int game_index);
 static void Get_Join_Responses(void);
 static bool Lobby_Seat_Is_Valid(int house, int color);
+static void Record_LAN_Peer_Event(LANDiagnostics::Layer layer,
+	LANDiagnostics::Code code, IPXAddressClass const & address);
 
 bool Net2ReadyToGo(int load_game);
 
@@ -207,6 +212,17 @@ static void Net2AnswerLobby(int response)
 static bool Lobby_Seat_Is_Valid(int house, int color)
 {
 	return(house >= 0 && house < HouseTypes.Count() && color >= 0 && color < MAX_MPLAYER_COLORS);
+}
+
+
+static void Record_LAN_Peer_Event(LANDiagnostics::Layer layer,
+	LANDiagnostics::Code code, IPXAddressClass const & address)
+{
+	std::int32_t address_detail = 0;
+	std::uint32_t const address_bits = address.Get_IP();
+	std::memcpy(&address_detail, &address_bits, sizeof(address_detail));
+	LANDiagnostics::Record(layer, code, address_detail,
+		Socket_Network_Port(address.Get_Port()));
 }
 
 
@@ -1177,8 +1193,8 @@ static int Request_To_Join(int join_index)
 	memset (&Session.GPacket, 0, sizeof(GlobalPacketType));
 
 	Session.GPacket.Command = NET_QUERY_JOIN;
-	LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
-		LANDiagnostics::Code::JOIN_REQUEST, CurGame);
+	Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+		LANDiagnostics::Code::JOIN_REQUEST, Session.Games[CurGame]->Address);
 	strcpy (Session.GPacket.Name, Session.Handle);
 	strcpy (Session.GPacket.Serial, SerialNumber);
 	Session.GPacket.PlayerInfo.House = Session.House;
@@ -1436,8 +1452,8 @@ void Net2Query_Game_To(IPXAddressClass const & address)
 	GlobalPacketType packet = {};
 	packet.Command = NET_QUERY_GAME;
 	strcpy(packet.Name, Session.Handle);
-	LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
-		LANDiagnostics::Code::QUERY_GAME, 1);
+	Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+		LANDiagnostics::Code::QUERY_GAME, address);
 	IPXAddressClass destination = address;
 	Ipx.Send_Global_Message(&packet, sizeof(packet), 0,
 		&destination);
@@ -1473,8 +1489,8 @@ bool Process_Global_Packet(GlobalPacketType *packet, IPXAddressClass *address)
 			memset (&mypacket, 0, sizeof(GlobalPacketType));
 
 			mypacket.Command = NET_ANSWER_GAME;
-			LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
-				LANDiagnostics::Code::ANSWER_GAME, 1);
+			Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::ANSWER_GAME, *address);
 			strcpy(mypacket.Name, Session.GameName);
 			mypacket.GameInfo.IsOpen = Session.NetOpen;
 			mypacket.GameInfo.IsFirestorm = Addon_Enabled(ADDON_FIRESTORM);
@@ -1625,8 +1641,8 @@ static void Get_Join_Responses(void)
 		// system to our list box if it's new.
 		//------------------------------------------------------------------------
 		if (Session.GPacket.Command==NET_ANSWER_GAME) {
-			LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
-				LANDiagnostics::Code::ANSWER_GAME, Session.GPacket.GameInfo.IsOpen ? 1 : 0);
+			Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::ANSWER_GAME, Session.GAddress);
 
 			//.....................................................................
 			// See if this name is unique
@@ -1817,8 +1833,8 @@ static void Get_Join_Responses(void)
 		//------------------------------------------------------------------------
 		if (Session.GPacket.Command==NET_CONFIRM_JOIN) {
 			if ( JoinState != JOIN_CONFIRMED) {
-				LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
-					LANDiagnostics::Code::JOIN_CONFIRMED, 1);
+				Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+					LANDiagnostics::Code::JOIN_CONFIRMED, Session.GAddress);
 				JoinState = JOIN_CONFIRMED;
 				UTF8::Copy(Session.GameName, sizeof(Session.GameName), Session.GPacket.Name);
 				Session.House = Session.GPacket.PlayerInfo.House;
@@ -2283,6 +2299,8 @@ static void Get_Join_Responses(void)
 		// NET_QUERY_JOIN:
 		//------------------------------------------------------------------------
 		if (Session.GPacket.Command==NET_QUERY_JOIN) {
+			Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::JOIN_REQUEST, Session.GAddress);
 			GlobalPacketType packet = {};
 
 			if (!Session.Players.Count()) {
@@ -2468,6 +2486,8 @@ static void Get_Join_Responses(void)
 				packet.PlayerInfo.House = who->Player.House;
 				display_users = true;
 				packet.PlayerInfo.Color = who->Player.Color;
+				Record_LAN_Peer_Event(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+					LANDiagnostics::Code::JOIN_CONFIRMED, Session.GAddress);
 
 				Ipx.Send_Global_Message (&packet, sizeof (GlobalPacketType),
 					1, &Session.GAddress);

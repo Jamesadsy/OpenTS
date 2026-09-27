@@ -78,5 +78,6 @@ void Record(Layer layer, Code code, std::int32_t detail0 = 0, std::int32_t detai
 std::size_t Copy_Last(Event * destination, std::size_t capacity) noexcept;
 void Reset_For_Test() noexcept;
 char const * Layer_Name(Layer layer) noexcept;
+char const * Code_Name(Code code) noexcept;
 
 } // namespace LANDiagnostics

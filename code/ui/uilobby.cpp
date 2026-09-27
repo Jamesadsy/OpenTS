@@ -847,9 +847,9 @@ void UILobbyPresenterClass::Execute(UIIntent const & intent)
 			return;
 		}
 
-		int const subnet_class = LANBootstrap::Address_Class(endpoint.Address);
 		LANDiagnostics::Record(LANDiagnostics::Layer::ADDRESS_SELECTION,
-			LANDiagnostics::Code::ENDPOINT_FOUND, subnet_class, endpoint.Port);
+			LANDiagnostics::Code::ENDPOINT_FOUND,
+			static_cast<std::int32_t>(endpoint.Address), endpoint.Port);
 		LANBootstrap::Inject_Direct_Peer(Ipx, endpoint);
 		Net2Query_Game_To(LANBootstrap::To_IPX_Address(endpoint));
 		LANStatus = "Host address added; querying its game list.";

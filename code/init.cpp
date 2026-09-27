@@ -1169,6 +1169,9 @@ restart:
 							// not enable SO_BROADCAST or depend on multicast entitlements.
 							Ipx.Configure_Direct_Peers(static_cast<unsigned short>(WestwoodOnline_PortNumber));
 #else
+							if (Debug_L1LocalListenPort != 0) {
+								Ipx.Configure_Direct_Peers(Debug_L1LocalListenPort);
+							} else
 							Ipx.Configure_LAN();
 #endif
 
@@ -1576,7 +1579,6 @@ bool Parse_Command_Line(int argc, char * argv[])
 				break;
 		}
 		if (processed) continue;
-
 
 #ifdef _DEBUG
 		/*

@@ -7,6 +7,7 @@ opents_add_test(SocketUdp
     SOURCES socketudp.cpp
     ENGINE
         ipxaddr.cpp
+        landiagnostics.cpp
         netadmit.cpp
         netsocket_null.cpp
         wsproto.cpp

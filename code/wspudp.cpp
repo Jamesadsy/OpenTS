@@ -44,6 +44,7 @@
 #include "wspudp.h"
 
 #include "dbgprint.h"
+#include "landiagnostics.h"
 #include "netadmit.h"
 #include "vector.h"
 
@@ -309,8 +310,12 @@ bool UDPInterfaceClass::Open_Socket(void)
 	unsigned short const port = LocalPortSet ? LocalPort : (unsigned short) WestwoodOnline_PortNumber;
 
 	if (!Socket->Open(port)) {
+		LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+			LANDiagnostics::Code::UDP_TRANSPORT_ERROR, port);
 		return(false);
 	}
+	LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+		LANDiagnostics::Code::READY, Socket->Bound_Port(), UseBroadcast ? 1 : 0);
 
 	// Winsock refuses a broadcast on a socket that never asked for one.
 	if ( UseBroadcast ) {
