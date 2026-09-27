@@ -6,7 +6,7 @@
 	<link type="text/rcss" href="gamelist.rcss"/>
 </head>
 <body data-model="gamelist" data-controller-back="cancel" data-event-keydown="key()">
-	<div id="dialog" class="panel">
+	<div id="dialog" class="panel" data-class-ioslan="showlanbootstrap">
 		<div class="caption" id="namelabel">Your Name:</div>
 		<input type="text" id="yourname" class="field" maxlength="11" data-attr-value="handle" data-event-change="rename()"/>
 
@@ -14,6 +14,9 @@
 		<div id="games" class="list">
 			<div class="row" data-for="entry : games" data-class-picked="it_index == selectedgame" data-event-click="pickgame(it_index)">{{ entry.label }}</div>
 		</div>
+		<div id="lanstatus" class="caption" data-if="showlanbootstrap">{{ lanstatus }}</div>
+		<input type="text" id="manualip" class="field" maxlength="15" placeholder="192.168.1.2" data-if="showlanbootstrap"/>
+		<div id="manualipbutton" class="button" data-if="showlanbootstrap" data-event-click="press('manualip')">Connect</div>
 
 		<div class="caption" id="playerslabel">Players:</div>
 		<div id="users" class="list">

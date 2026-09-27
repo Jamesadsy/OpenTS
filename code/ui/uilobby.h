@@ -24,6 +24,7 @@
 
 
 inline constexpr char const * UI_LOBBY_RENAME = "rename";
+inline constexpr char const * UI_LOBBY_MANUAL_IP = "manualip";
 inline constexpr char const * UI_LOBBY_PICK_GAME = "pickgame";
 inline constexpr char const * UI_LOBBY_JOIN = "join";
 inline constexpr char const * UI_LOBBY_NEW = "new";
@@ -196,6 +197,13 @@ class UILobbyPresenterClass : public UIPresenterClass
 		ScreenType Showing = SCREEN_NONE;
 
 		std::string Handle;
+		std::string LANStatus = "Local network permission has not been requested.";
+		bool LANManualNotice = false;
+#if defined(OPENTS_IOS)
+		bool ShowLANBootstrap = true;
+#else
+		bool ShowLANBootstrap = false;
+#endif
 
 		// The longest handle the name field accepts, in bytes. Session.Handle is
 		// MPLAYER_NAME_MAX bytes and travels in a packet field of that size, so anything

@@ -18,6 +18,7 @@
 #include "netsocket.h"
 
 #include "dbgprint.h"
+#include "landiagnostics.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -86,6 +87,8 @@ PosixSocketClass::~PosixSocketClass(void)
 bool PosixSocketClass::Open(unsigned short port)
 {
 	Close();
+	LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+		LANDiagnostics::Code::STARTED, port);
 
 	/*
 	**	Create our UDP socket
@@ -93,6 +96,8 @@ bool PosixSocketClass::Open(unsigned short port)
 	Socket = socket(AF_INET, SOCK_DGRAM, 0);
 	if (Socket < 0) {
 		DebugString("Failed to create the UDP socket - error code %d\n", errno);
+		LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+			LANDiagnostics::Code::FAILED, errno, port);
 		return(false);
 	}
 
@@ -108,6 +113,8 @@ bool PosixSocketClass::Open(unsigned short port)
 
 	if (bind(Socket, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
 		DebugString("Failed to bind the UDP socket - error code %d\n", errno);
+		LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+			LANDiagnostics::Code::FAILED, errno, port);
 		Close();
 		return(false);
 	}
@@ -125,6 +132,8 @@ bool PosixSocketClass::Open(unsigned short port)
 	int nonblocking = 1;
 	if (ioctl(Socket, FIONBIO, &nonblocking) < 0) {
 		DebugString("Failed to make the socket non-blocking - error code %d\n", errno);
+		LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+			LANDiagnostics::Code::FAILED, errno, BoundPort);
 		Close();
 		return(false);
 	}
@@ -136,6 +145,8 @@ bool PosixSocketClass::Open(unsigned short port)
 	ling.l_onoff = 0;   // linger off
 	ling.l_linger = 0;  // timeout in seconds (ie close now)
 	setsockopt(Socket, SOL_SOCKET, SO_LINGER, &ling, sizeof(ling));
+	LANDiagnostics::Record(LANDiagnostics::Layer::SOCKET_BIND,
+		LANDiagnostics::Code::READY, BoundPort);
 
 	return(true);
 }

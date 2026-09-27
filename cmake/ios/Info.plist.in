@@ -63,6 +63,12 @@
   <true/>
   <key>UIApplicationSupportsIndirectInputEvents</key>
   <true/>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Second Sun uses your local Wi-Fi network to find and join multiplayer games hosted on the same private network.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_secondsun._udp</string>
+  </array>
   <!-- The user directory holds saved games, logs, and crash reports, and these two keys are
        what make it reachable from the Files app. -->
   <key>UIFileSharingEnabled</key>

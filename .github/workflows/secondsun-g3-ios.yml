@@ -40,7 +40,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-050-menu-controller-parity" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-051-coldboot-pointer-circle-back" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-052-save-description-order" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g7-053-ios-name-silent-audio"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g7-053-ios-name-silent-audio" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-lan-054-l0-apple-unicast"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log
@@ -62,10 +63,10 @@ jobs:
         run: |
           set -o pipefail
           cmake --build build/g3-host-tests \
-            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract IOSProductIdentityContract CursorStateContract ControllerFocusContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SaveTextContract SidebarFeedbackContract OpenTSDonorHostSmoke \
+            --target IOSPathContract IOSTouchContract IOSControllerContract IOSAudioRouteContract IOSProductIdentityContract CursorStateContract ControllerFocusContract CpuDetect GameDirs PresentationContract KeyboardContract ModalInputContract SaveIdentityContract SaveTextContract SidebarFeedbackContract LANBootstrapContract OpenTSDonorHostSmoke \
             --parallel 3 2>&1 | tee proof/host-tests-build.log
           ctest --test-dir build/g3-host-tests \
-            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|ios-product-identity-contract|cursor-scrollrate-contract|controller-focus-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|save-text-contract|sidebar-feedback-contract|donor-host-smoke)$' \
+            -R '^(ios-path-contract|ios-touch-contract|ios-controller-contract|ios-audio-route-contract|ios-product-identity-contract|cursor-scrollrate-contract|controller-focus-contract|cpudetect|gamedirs|presentation-contract|keyboard-contract|modal-input-contract|save-identity-contract|save-text-contract|sidebar-feedback-contract|lanbootstrap-contract|donor-host-smoke)$' \
             --output-on-failure 2>&1 | tee proof/host-tests-ctest.log
 
       - name: Configure unsigned iPhoneOS device route
@@ -75,6 +76,32 @@ jobs:
           cmake --preset ios-device \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO \
             -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED=NO 2>&1 | tee proof/ios-configure.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          commands = json.loads(Path('build/ios-device/compile_commands.json').read_text())
+          sources = {Path(row['file']).resolve().as_posix() for row in commands}
+          required = {
+              Path('code/netsocket_posix.cpp').resolve().as_posix(),
+              Path('code/wspudp.cpp').resolve().as_posix(),
+              Path('code/ipxmgr.cpp').resolve().as_posix(),
+              Path('code/ipxconn.cpp').resolve().as_posix(),
+              Path('code/ipxgconn.cpp').resolve().as_posix(),
+              Path('code/connect.cpp').resolve().as_posix(),
+              Path('code/netglobal.cpp').resolve().as_posix(),
+              Path('code/netpacket.cpp').resolve().as_posix(),
+              Path('code/netdlg2.cpp').resolve().as_posix(),
+              Path('code/nettime.cpp').resolve().as_posix(),
+              Path('code/nettiming.cpp').resolve().as_posix(),
+              Path('code/queue.cpp').resolve().as_posix(),
+              Path('code/ios_lan_discovery.mm').resolve().as_posix(),
+          }
+          missing = sorted(required - sources)
+          if missing:
+              raise SystemExit(f'iPhoneOS compile database omits network sources: {missing}')
+          Path('proof/apple-network-sources.log').write_text('\n'.join(sorted(required)) + '\n')
+          print('Apple POSIX UDP, host/session, lobby, timing, and Bonjour sources: included')
+          PY
 
       - name: Build unsigned iPhoneOS arm64 OpenTS
         shell: bash
@@ -160,6 +187,9 @@ jobs:
           test "$(plist_value CFBundleIdentifier)" = org.opents.OpenTS
           test "$(plist_value CFBundleDisplayName)" = "CnC TS"
           test "$(plist_value CFBundleSupportedPlatforms:0)" = iPhoneOS
+          test "$(plist_value NSLocalNetworkUsageDescription)" = "Second Sun uses your local Wi-Fi network to find and join multiplayer games hosted on the same private network."
+          test "$(plist_value NSBonjourServices:0)" = _secondsun._udp
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices' "$PLIST" | grep -c '_secondsun._udp')" = 1
           test "$(plist_value LSRequiresIPhoneOS)" = true
           test "$(plist_value MinimumOSVersion)" = 16.0
           test "$(plist_value UIDeviceFamily:0)" = 1
@@ -188,6 +218,18 @@ jobs:
 
           test ! -e "$APP/embedded.mobileprovision"
           test ! -d "$APP/_CodeSignature"
+          if find cmake/ios code scripts/build/ios -type f -name '*.entitlements' -print -quit | grep -q .; then
+            echo 'iOS build inputs unexpectedly include an entitlements file' >&2
+            exit 1
+          fi
+          if find "$APP" -type f -name '*.entitlements' -print -quit | grep -q .; then
+            echo 'unsigned app unexpectedly contains a generated entitlements file' >&2
+            exit 1
+          fi
+          if /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.networking.multicast' "$PLIST" 2>/dev/null; then
+            echo 'restricted multicast entitlement key appeared in the app plist' >&2
+            exit 1
+          fi
           printf '%s\n' 'unsigned: true' 'signing credentials: none' > proof/unsigned-state.log
 
       - name: Verify provenance and owner-data absence

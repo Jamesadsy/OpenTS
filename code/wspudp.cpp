@@ -267,6 +267,13 @@ void UDPInterfaceClass::Clear_Broadcast_Addresses(void)
  *=============================================================================================*/
 void UDPInterfaceClass::Set_Broadcast_Address (const IPXAddressClass &address)
 {
+	for (int index = 0; index < BroadcastAddresses.Count(); ++index) {
+		IPXAddressClass const * const existing = BroadcastAddresses[index];
+		if (existing != nullptr && existing->Get_IP() == address.Get_IP()
+			&& existing->Get_Port() == address.Get_Port()) {
+			return;
+		}
+	}
 	BroadcastAddresses.Add (new IPXAddressClass(address));
 }
 

@@ -76,6 +76,7 @@
 #include "always.h"
 
 #include "queue.h"
+#include "landiagnostics.h"
 
 #include "_keyboar.h"
 #include "_logic.h"
@@ -1427,12 +1428,16 @@ static RetcodeType Wait_For_Players(int first_time, ConnManClass *net,
 			}
 			if (show_stall) {
 				if (frame_stall != -1) {
+					LANDiagnostics::Record(LANDiagnostics::Layer::STALL,
+						LANDiagnostics::Code::FRAME_SYNC_WAIT, frame_stall, Frame);
 					if (Session.ShowInternetDebug) {
 						VisibleSurface->Fill_Rect(Rect(frame_stall + 100, 475, 35, 3), DSurface::Build_Hicolor_Pixel(255, 255, 40));
 					}
 					Session.ConnectionStats[frame_stall].FrameSyncStalls++;
 				}
 				if (count_stall != -1) {
+					LANDiagnostics::Record(LANDiagnostics::Layer::STALL,
+						LANDiagnostics::Code::COMMAND_COUNT_WAIT, count_stall, Frame);
 					if (Session.ShowInternetDebug) {
 						VisibleSurface->Fill_Rect(Rect(count_stall + 140, 475, 40, 3), DSurface::Build_Hicolor_Pixel(255, 40, 40));
 					}
@@ -1916,6 +1921,8 @@ static RetcodeType Process_Receive_Packet(ConnManClass *net,
 	//------------------------------------------------------------------------
 	else if (event.Type == EventClass::FRAMESYNC) {
 		if (event.Data.FrameInfo.CRC != ScenarioCRC) {
+			LANDiagnostics::Record(LANDiagnostics::Layer::DESYNC,
+				LANDiagnostics::Code::CHECKSUM_MISMATCH, Frame, index);
 			return(RC_SCENARIO_MISMATCH);
 		}
 		their[index].timing = *timer;

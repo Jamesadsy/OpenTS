@@ -27,7 +27,10 @@
 #include "goptions.h"
 #include "houstype.h"
 #include "init.h"
+#include "ios_lan_discovery.h"
 #include "ipxmgr.h"
+#include "landiagnostics.h"
+#include "lanbootstrap.h"
 #include "language/language.h"
 #include "mapgen.h"
 #include "mplayer.h"
@@ -41,6 +44,7 @@
 #include "scenario.h"
 #include "sendfile.h"
 #include "srfcache.h"
+#include "stats.h"
 #include "stimer.h"
 #include "timer.h"
 #include "utf8.h"
@@ -304,7 +308,14 @@ bool Net2Init_Network (void)
 	// This call allocates all necessary queue buffers and commands the
 	// transport to start listening on the Global Channel.
 	//------------------------------------------------------------------------
-	return(Ipx.Init() != 0);
+	if (Ipx.Init() == 0) {
+		IOSLanDiscovery::Record_UDP_Error(0);
+		return(false);
+	}
+	// This is called only after Network was selected. Starting the bounded Bonjour browse
+	// here keeps the Local Network permission prompt out of startup and single-player use.
+	IOSLanDiscovery::Start_Browsing();
+	return(true);
 
 }	/* end of Init_Network */
 
@@ -317,6 +328,18 @@ bool Net2Init_Network (void)
 /// </summary>
 void Net2ServiceGameList(void)
 {
+	LANBootstrap::Endpoint discovered;
+	while (IOSLanDiscovery::Pop_Endpoint(discovered)) {
+		if (discovered.Port != static_cast<std::uint16_t>(WestwoodOnline_PortNumber)) {
+			LANDiagnostics::Record(LANDiagnostics::Layer::ADDRESS_SELECTION,
+				LANDiagnostics::Code::ENDPOINT_REJECTED, discovered.Port,
+				WestwoodOnline_PortNumber);
+			continue;
+		}
+		LANBootstrap::Inject_Direct_Peer(Ipx, discovered);
+		Net2Query_Game_To(LANBootstrap::To_IPX_Address(discovered));
+	}
+
 	int i;
 
 	for (i = 1; i < Session.Games.Count(); i++) {
@@ -632,6 +655,15 @@ bool Decrypt_Serial(char * buffer)
  *=============================================================================================*/
 bool Net2Remote_Connect(void)
 {
+	struct DiscoveryLifetime
+	{
+		~DiscoveryLifetime()
+		{
+			IOSLanDiscovery::Stop_Advertising();
+			IOSLanDiscovery::Stop_Browsing();
+		}
+	} discovery_lifetime;
+
 	RulesID = RulesClass::Get_Rule_Unique_ID();
 	RulesClass::Load_Art_INI();
 	ArtID = RulesClass::Get_Art_Unique_ID();
@@ -715,6 +747,7 @@ bool Net2Remote_Connect(void)
 			}
 
 			if (Net2LobbyScreenID() == IDD_MPLAYER_HOST) {
+				IOSLanDiscovery::Stop_Advertising();
 				Unjoin_Game(CurGame);
 				JoinState = JOIN_NOTHING;
 				Lobby_Open_Screen(UILobbyPresenterClass::SCREEN_GAME_LIST);
@@ -822,6 +855,14 @@ bool Net2Remote_Connect(void)
 				Session.Options.ScenarioIndex = 0;
 				Session.PlayingAgainstVersion = VerNum.Version_Number();
 				Set_Scenario_Info_From_Index(Session.Options.ScenarioIndex);
+				LANDiagnostics::Record(LANDiagnostics::Layer::MAP_SCENARIO,
+					LANDiagnostics::Code::SCENARIO_MATCH,
+					Session.Options.ScenarioIndex,
+					Addon_Enabled(ADDON_FIRESTORM) ? 1 : 0);
+				IOSLanDiscovery::Start_Advertising(
+					static_cast<std::uint16_t>(WestwoodOnline_PortNumber));
+				LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+					LANDiagnostics::Code::LOBBY_OPEN, IDD_MPLAYER_HOST);
 
 				_netresponse = 0;
 
@@ -965,6 +1006,8 @@ bool Net2Remote_Connect(void)
 				memset(&gpacket, 0, sizeof(gpacket));
 				gpacket.Command = NET_GO;
 				gpacket.ResponseTime.OneWay = Session.MaxAhead;
+				LANDiagnostics::Record(LANDiagnostics::Layer::GAME_START_TICK,
+					LANDiagnostics::Code::GAME_GO, TickCount, Session.MaxAhead);
 				for (int i = 1; i < Session.Players.Count(); i++) {
 					Ipx.Send_Global_Message(&gpacket, sizeof(gpacket), 1, &(Session.Players[i]->Address));
 				}
@@ -1024,6 +1067,8 @@ bool Net2Remote_Connect(void)
 							Session.ScenarioRequests[Session.RequestCount++] = i;
 						}
 					}
+					LANDiagnostics::Record(LANDiagnostics::Layer::MAP_SCENARIO,
+						LANDiagnostics::Code::SCENARIO_TRANSFER, Session.RequestCount);
 					Send_Remote_File(Scen->ScenarioName, false, true);
 				}
 
@@ -1132,6 +1177,8 @@ static int Request_To_Join(int join_index)
 	memset (&Session.GPacket, 0, sizeof(GlobalPacketType));
 
 	Session.GPacket.Command = NET_QUERY_JOIN;
+	LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+		LANDiagnostics::Code::JOIN_REQUEST, CurGame);
 	strcpy (Session.GPacket.Name, Session.Handle);
 	strcpy (Session.GPacket.Serial, SerialNumber);
 	Session.GPacket.PlayerInfo.House = Session.House;
@@ -1313,6 +1360,8 @@ void Send_Join_Queries(int gamenow, int playernow, int chatnow, int init)
 			memset (&packet, 0, sizeof(GlobalPacketType));
 
 			packet.Command = NET_QUERY_GAME;
+			LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::QUERY_GAME, gamenow ? 1 : 0);
 
 			strcpy (packet.Name, Session.Handle);
 
@@ -1382,6 +1431,19 @@ void Send_Join_Queries(int gamenow, int playernow, int chatnow, int init)
  * HISTORY:                                                                                    *
  *   02/15/1995 BR : Created.                                                                  *
  *=============================================================================================*/
+void Net2Query_Game_To(IPXAddressClass const & address)
+{
+	GlobalPacketType packet = {};
+	packet.Command = NET_QUERY_GAME;
+	strcpy(packet.Name, Session.Handle);
+	LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+		LANDiagnostics::Code::QUERY_GAME, 1);
+	IPXAddressClass destination = address;
+	Ipx.Send_Global_Message(&packet, sizeof(packet), 0,
+		&destination);
+}
+
+
 bool Process_Global_Packet(GlobalPacketType *packet, IPXAddressClass *address)
 {
 	GlobalPacketType mypacket = {};
@@ -1411,6 +1473,8 @@ bool Process_Global_Packet(GlobalPacketType *packet, IPXAddressClass *address)
 			memset (&mypacket, 0, sizeof(GlobalPacketType));
 
 			mypacket.Command = NET_ANSWER_GAME;
+			LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::ANSWER_GAME, 1);
 			strcpy(mypacket.Name, Session.GameName);
 			mypacket.GameInfo.IsOpen = Session.NetOpen;
 			mypacket.GameInfo.IsFirestorm = Addon_Enabled(ADDON_FIRESTORM);
@@ -1561,6 +1625,8 @@ static void Get_Join_Responses(void)
 		// system to our list box if it's new.
 		//------------------------------------------------------------------------
 		if (Session.GPacket.Command==NET_ANSWER_GAME) {
+			LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::ANSWER_GAME, Session.GPacket.GameInfo.IsOpen ? 1 : 0);
 
 			//.....................................................................
 			// See if this name is unique
@@ -1751,6 +1817,8 @@ static void Get_Join_Responses(void)
 		//------------------------------------------------------------------------
 		if (Session.GPacket.Command==NET_CONFIRM_JOIN) {
 			if ( JoinState != JOIN_CONFIRMED) {
+				LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+					LANDiagnostics::Code::JOIN_CONFIRMED, 1);
 				JoinState = JOIN_CONFIRMED;
 				UTF8::Copy(Session.GameName, sizeof(Session.GameName), Session.GPacket.Name);
 				Session.House = Session.GPacket.PlayerInfo.House;
@@ -1782,6 +1850,8 @@ static void Get_Join_Responses(void)
 		// the dialog state to its first pop-up state.
 		//------------------------------------------------------------------------
 		if (Session.GPacket.Command==NET_REJECT_JOIN) {
+			LANDiagnostics::Record(LANDiagnostics::Layer::JOIN_HANDSHAKE,
+				LANDiagnostics::Code::JOIN_REJECTED, Session.GPacket.Reject.Why);
 			why = REJECT_DUPLICATE_NAME;
 			//.....................................................................
 			// If we're confirmed in a game, broadcast a sign-off to tell all other
@@ -2064,6 +2134,8 @@ static void Get_Join_Responses(void)
 		//------------------------------------------------------------------------
 		else if (Session.GPacket.Command==NET_GO || Session.GPacket.Command==NET_LOADGAME) {
 			if ( JoinState==JOIN_CONFIRMED) {
+				LANDiagnostics::Record(LANDiagnostics::Layer::GAME_START_TICK,
+					LANDiagnostics::Code::GAME_GO, TickCount, Session.GPacket.Command);
 				if (Session.GPacket.Command == NET_GO && Session.CommProtocol == COMM_PROTOCOL_MULTI_E_COMP) {
 					int const max_ahead = Session.GPacket.ResponseTime.OneWay;
 					if (max_ahead < 0) {
@@ -2087,9 +2159,13 @@ static void Get_Join_Responses(void)
 				if (Session.GPacket.Command==NET_GO) {
 					JoinState = JOIN_GAME_START;
 					if (!Net2ReadyToGo(0)) {
+						LANDiagnostics::Record(LANDiagnostics::Layer::GAME_START_TICK,
+							LANDiagnostics::Code::GAME_READY, TickCount, 0);
 						Net2AnswerLobby(2);
 						Net2GameStarted = false;
 					} else {
+						LANDiagnostics::Record(LANDiagnostics::Layer::GAME_START_TICK,
+							LANDiagnostics::Code::GAME_READY, TickCount, 1);
 						Net2GameStarted = true;
 					}
 				} else if (Session.GPacket.Command==NET_LOADGAME) {

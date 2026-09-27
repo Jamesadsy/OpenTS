@@ -95,6 +95,15 @@ if(IOS)
     set(OPENTS_IOS_BUNDLE_ID "org.opents.OpenTS" CACHE STRING "iOS bundle identifier")
     set(OPENTS_IOS_BUNDLE_VERSION "1" CACHE STRING "iOS CFBundleVersion")
 
+    # Bonjour is a control-plane lookup only. The resolved UDP endpoint is passed to the
+    # existing IPX/UDP peer transport; Network.framework does not carry gameplay traffic.
+    target_sources(OpenTS PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/ios_lan_discovery.mm")
+    set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/ios_lan_discovery.mm"
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_compile_definitions(OpenTS PRIVATE OPENTS_IOS=1)
+    find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    target_link_libraries(OpenTS PRIVATE "${FOUNDATION_FRAMEWORK}")
+
     set_target_properties(OpenTS PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/cmake/ios/Info.plist.in"

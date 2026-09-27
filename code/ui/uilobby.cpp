@@ -44,6 +44,9 @@
 #include "data.h"
 #include "houstype.h"
 #include "ipxmgr.h"
+#include "ios_lan_discovery.h"
+#include "landiagnostics.h"
+#include "lanbootstrap.h"
 #include "language/language.h"
 #include "mapgen.h"
 #include "mplayer.h"
@@ -55,6 +58,7 @@
 #include "rules.h"
 #include "dbgprint.h"
 #include "session.h"
+#include "stats.h"
 #include "utf8.h"
 
 #include <RmlUi/Core/DataModelHandle.h>
@@ -93,6 +97,9 @@ void UILobbyPresenterClass::Refresh(void)
 {
 	Handle = Session.Handle;
 	Color = Session.ColorIdx;
+	if (!LANManualNotice) {
+		LANStatus = IOSLanDiscovery::Status_Text();
+	}
 
 	Build_Game_Rows();
 	Build_User_Rows();
@@ -108,8 +115,12 @@ void UILobbyPresenterClass::Open(void)
 {
 	CurGame = 0;
 	Net2IsGameListActive = true;
+	LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+		LANDiagnostics::Code::LOBBY_OPEN, SCREEN_GAME_LIST);
 
 	Handle = Session.Handle;
+	LANManualNotice = false;
+	LANStatus = IOSLanDiscovery::Status_Text();
 
 	Session.Options.ScenarioDescription[0] = '\0';
 	Session.ColorIdx = Session.PrefColor;
@@ -145,6 +156,8 @@ void UILobbyPresenterClass::Open(void)
 /// </summary>
 void UILobbyPresenterClass::Open_Guest(void)
 {
+	LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+		LANDiagnostics::Code::LOBBY_OPEN, SCREEN_GUEST);
 	Build_Identity_Lists();
 	Read_Options();
 
@@ -175,6 +188,12 @@ void UILobbyPresenterClass::Open_Guest(void)
 void UILobbyPresenterClass::Options_Received(void)
 {
 	Read_Options();
+	LANDiagnostics::Record(LANDiagnostics::Layer::MAP_SCENARIO,
+		LANDiagnostics::Code::SCENARIO_MATCH,
+		Session.Options.ScenarioIndex,
+		static_cast<int>(ScenarioName.size()));
+	LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+		LANDiagnostics::Code::LOBBY_CHANGED, Session.Players.Count());
 	PreviewGeneration++;
 	Build_User_Rows();
 }
@@ -255,6 +274,8 @@ void UILobbyPresenterClass::Read_Options(void)
 /// </summary>
 void UILobbyPresenterClass::Open_Host(void)
 {
+	LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+		LANDiagnostics::Code::LOBBY_OPEN, SCREEN_HOST);
 	VerNum.Init_Clipping();
 
 	srand(NonCriticalRandomNumber(1, 0x7FFF));
@@ -521,6 +542,9 @@ void UILobbyPresenterClass::Run_Pending(void)
 	}
 
 	ScenarioName = Session.Options.ScenarioDescription;
+	LANDiagnostics::Record(LANDiagnostics::Layer::MAP_SCENARIO,
+		picked ? LANDiagnostics::Code::SCENARIO_MATCH : LANDiagnostics::Code::SCENARIO_REJECTED,
+		Session.Options.ScenarioIndex, static_cast<int>(ScenarioName.size()));
 
 	// A generated map has a picture of its own beside it rather than one read out of the map.
 	int const index = Session.Options.ScenarioIndex;
@@ -571,6 +595,8 @@ void UILobbyPresenterClass::Accept(void)
 	}
 
 	Session.Players[0]->Player.Status = 1;
+	LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+		LANDiagnostics::Code::LOBBY_CHANGED, Session.Players.Count());
 	CanAccept = false;
 
 	SendPublicGameopts("A1");
@@ -766,6 +792,8 @@ void UILobbyPresenterClass::Say(std::string const & text)
 	if (text.size() <= 2) {
 		return;
 	}
+	LANDiagnostics::Record(LANDiagnostics::Layer::LOBBY_STATE,
+		LANDiagnostics::Code::CHAT_SENT, static_cast<int>(text.size()));
 
 	PMessagePrintf(ColorMe, "[%s] %s", Session.Handle, text.c_str());
 
@@ -807,6 +835,28 @@ void UILobbyPresenterClass::Answer(ResponseType response)
 
 void UILobbyPresenterClass::Execute(UIIntent const & intent)
 {
+	if (intent.Action == UI_LOBBY_MANUAL_IP) {
+		LANBootstrap::Endpoint endpoint;
+		LANBootstrap::ParseError error = LANBootstrap::ParseError::NONE;
+		if (!LANBootstrap::Parse_Private_IPv4(intent.Identity,
+			static_cast<std::uint16_t>(WestwoodOnline_PortNumber), endpoint, &error)) {
+			LANDiagnostics::Record(LANDiagnostics::Layer::ADDRESS_SELECTION,
+				LANDiagnostics::Code::ENDPOINT_REJECTED, static_cast<int>(error));
+			LANStatus = "Enter a private IPv4 host address.";
+			LANManualNotice = true;
+			return;
+		}
+
+		int const subnet_class = LANBootstrap::Address_Class(endpoint.Address);
+		LANDiagnostics::Record(LANDiagnostics::Layer::ADDRESS_SELECTION,
+			LANDiagnostics::Code::ENDPOINT_FOUND, subnet_class, endpoint.Port);
+		LANBootstrap::Inject_Direct_Peer(Ipx, endpoint);
+		Net2Query_Game_To(LANBootstrap::To_IPX_Address(endpoint));
+		LANStatus = "Host address added; querying its game list.";
+		LANManualNotice = true;
+		return;
+	}
+
 	if (intent.Action == UI_LOBBY_RENAME) {
 		Rename(intent.Identity);
 		return;
@@ -1126,6 +1176,16 @@ void LobbyViewClass::Move(char const * which, int value)
 /// </summary>
 void LobbyViewClass::Press(char const * action)
 {
+	if (Kind == UILobbyPresenterClass::SCREEN_GAME_LIST
+		&& std::strcmp(action, UI_LOBBY_MANUAL_IP) == 0 && Element != nullptr) {
+		Rml::ElementFormControlInput * const field =
+			rmlui_dynamic_cast<Rml::ElementFormControlInput *>(Element->GetElementById("manualip"));
+		if (field != nullptr) {
+			Screen.Queue(UIIntent{UI_LOBBY_MANUAL_IP, field->GetValue(), 0});
+		}
+		return;
+	}
+
 	if (Kind == UILobbyPresenterClass::SCREEN_GAME_LIST && Element != nullptr) {
 		Rml::ElementFormControlInput * const field =
 			rmlui_dynamic_cast<Rml::ElementFormControlInput *>(Element->GetElementById("yourname"));
@@ -1237,6 +1297,8 @@ void LobbyViewClass::Bind(Rml::DataModelConstructor & model)
 	}
 
 	model.Bind("handle", &Screen.Handle);
+	model.Bind("lanstatus", &Screen.LANStatus);
+	model.Bind("showlanbootstrap", &Screen.ShowLANBootstrap);
 	model.Bind("games", &GameRows);
 	model.Bind("selectedgame", &Screen.SelectedGame);
 	model.Bind("users", &UserRows);
@@ -1362,6 +1424,7 @@ void LobbyViewClass::Bind(Rml::DataModelConstructor & model)
 			else if (action == UI_LOBBY_GO) Press(UI_LOBBY_GO);
 			else if (action == UI_LOBBY_KICK) Press(UI_LOBBY_KICK);
 			else if (action == UI_LOBBY_PICK_MAP) Press(UI_LOBBY_PICK_MAP);
+			else if (action == UI_LOBBY_MANUAL_IP) Press(UI_LOBBY_MANUAL_IP);
 		});
 
 	// Enter in the chat field sends the line, which is what EN_MAXTEXT stood for on an
@@ -1395,6 +1458,8 @@ void LobbyViewClass::Sync(void)
 	Model.DirtyVariable("selectedgame");
 	Model.DirtyVariable("users");
 	Model.DirtyVariable("messages");
+	Model.DirtyVariable("lanstatus");
+	Model.DirtyVariable("showlanbootstrap");
 	Model.DirtyVariable("scenarioname");
 	Model.DirtyVariable("canaccept");
 	Model.DirtyVariable("canstart");

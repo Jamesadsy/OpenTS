@@ -128,6 +128,7 @@
 #include "intro.h"
 #include "ionblast.h"
 #include "ipxmgr.h"
+#include "stats.h"
 #include "keyboard.h"
 #include "language/language.h"
 #include "laser.h"
@@ -1162,7 +1163,14 @@ restart:
 							Session.Type = GAME_IPX;
 							Session.CommProtocol = COMM_PROTOCOL_MULTI_E_COMP;
 
+#if defined(OPENTS_IOS)
+							// Bonjour resolves one private IPv4 host, then the existing UDP
+							// direct-peer path carries every game packet. This iOS route does
+							// not enable SO_BROADCAST or depend on multicast entitlements.
+							Ipx.Configure_Direct_Peers(static_cast<unsigned short>(WestwoodOnline_PortNumber));
+#else
 							Ipx.Configure_LAN();
+#endif
 
 							/*
 							**	Init network system & remote-connect

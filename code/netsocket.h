@@ -136,6 +136,7 @@ class NullSocketClass : public SocketClass
 		// Refuses every send until it is cleared, standing in for a socket
 		// whose send buffer is full.
 		void Set_Would_Block(bool block) { WouldBlock = block; }
+		bool Broadcast_Enabled(void) const { return(Broadcast); }
 
 		// Fails the next receive with this error, once.
 		void Set_Next_Receive_Error(SocketError error) { PendingError = error; }

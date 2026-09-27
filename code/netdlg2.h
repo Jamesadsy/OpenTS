@@ -14,6 +14,7 @@
 #pragma once
 
 #include "win.h"
+#include "ipxaddr.h"
 
 #include "netdlg.h"
 
@@ -28,6 +29,7 @@ extern JoinStateType JoinState;
 extern bool Net2IsGameListActive;
 
 void Send_Join_Queries(int gamenow, int playernow, int chatnow, int init = 0);
+void Net2Query_Game_To(IPXAddressClass const & address);
 void Net2ServiceGameList(void);
 
 // One pass of the lobby's own maintenance: service the transport, answer the join protocol,

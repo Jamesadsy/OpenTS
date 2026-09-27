@@ -22,10 +22,15 @@
 /* "Games:" at 296, 14 and its 113 x 68 list at 294, 27. */
 #gameslabel { left: 442dp; top: 20.75dp;  width: 75dp; height: 16.25dp; line-height: 16.25dp; }
 #games      { left: 439dp; top: 41.875dp; width: 169.5dp; height: 110.5dp; }
+#lanstatus  { left: 439dp; top: 156dp; width: 169.5dp; height: 23dp; line-height: 11.5dp; font-size: 10dp; overflow: hidden; }
+#manualip   { left: 439dp; top: 182dp; width: 99dp; height: 20dp; line-height: 16dp; }
+#manualipbutton { left: 542dp; top: 177dp; width: 66dp; height: 28dp; line-height: 28dp; }
 
 /* "Players:" at 296, 99 and its 113 x 100 list at 294, 111. */
 #playerslabel { left: 442dp; top: 158.875dp; width: 75dp; height: 16.25dp; line-height: 16.25dp; }
 #users        { left: 439dp; top: 178.375dp; width: 169.5dp; height: 162.5dp; }
+#dialog.ioslan #playerslabel { top: 210dp; }
+#dialog.ioslan #users { top: 229.5dp; height: 111.375dp; }
 
 /* A row states its own width, because a scrolling container gives its children none to be
    a proportion of. The lists are 113 dialog units wide, less the scrollbar. */
