@@ -30,6 +30,13 @@ void Win32_Record_Arguments(int argc, char ** argv);
 
 int main(int argc, char ** argv)
 {
+	// The 124A Emscripten target proves only that the browser can call and regain
+	// control from the native coordinator. It deliberately does not enter engine startup.
+#ifdef __EMSCRIPTEN__
+	(void)argc;
+	(void)argv;
+	return(0);
+#else
 	Win32_Record_Arguments(argc, argv);
 
 #ifdef OPENTS_IOS
@@ -64,4 +71,5 @@ int main(int argc, char ** argv)
 	_exit(result);
 #endif
 	return(result);
+#endif
 }

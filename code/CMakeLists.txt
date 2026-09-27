@@ -344,6 +344,16 @@ if(MSVC)
     )
 endif()
 
+# The bounded browser coordinator remains callable after the Emscripten entry point returns.
+# The browser harness calls these four C ABI functions directly; no stack transformation or
+# JavaScript game-state layer is needed for the control-plane proof.
+if(EMSCRIPTEN)
+    target_link_options(OpenTS PRIVATE
+        "-sNO_EXIT_RUNTIME=1"
+        "-sEXPORTED_FUNCTIONS=_main,_OpenTS_Browser_Begin,_OpenTS_Browser_Step,_OpenTS_Browser_Status,_OpenTS_Browser_Finish"
+    )
+endif()
+
 #
 # ---------------------------------------------------------
 # Visual Studio source groups
