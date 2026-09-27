@@ -174,7 +174,7 @@ NSString * Bonjour_Service_Type()
 			if (data.length < sizeof(sockaddr)) continue;
 			sockaddr const *sa = static_cast<sockaddr const *>(data.bytes);
 			if (sa->sa_family != AF_INET || data.length < sizeof(sockaddr_in)) continue;
-			sockaddr_in const *address = static_cast<sockaddr_in const *>(sa);
+			sockaddr_in const *address = reinterpret_cast<sockaddr_in const *>(sa);
 			std::uint16_t const port = address->sin_port == 0
 				? static_cast<std::uint16_t>(service.port) : ntohs(address->sin_port);
 			LANBootstrap::Endpoint endpoint{address->sin_addr.s_addr, port};
