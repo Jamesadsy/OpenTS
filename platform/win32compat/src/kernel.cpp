@@ -33,6 +33,10 @@
 
 static DWORD _LastError;
 
+#ifdef __EMSCRIPTEN__
+static std::vector<std::recursive_mutex *> BrowserMutexHandles;
+#endif
+
 
 extern "C" DWORD GetLastError(void) { return(_LastError); }
 extern "C" void SetLastError(DWORD code) { _LastError = code; }
@@ -47,7 +51,11 @@ extern "C" HANDLE CreateMutex(LPSECURITY_ATTRIBUTES attributes, BOOL owner, LPCS
 	(void)owner;
 	(void)name;
 	_LastError = ERROR_SUCCESS;
-	return((HANDLE)new std::recursive_mutex());
+	std::recursive_mutex * const mutex = new std::recursive_mutex();
+#ifdef __EMSCRIPTEN__
+	BrowserMutexHandles.push_back(mutex);
+#endif
+	return((HANDLE)mutex);
 }
 
 
@@ -788,6 +796,17 @@ extern "C" BOOL CloseHandle(HANDLE handle)
 	if (handle == NULL || handle == INVALID_HANDLE_VALUE) {
 		return(FALSE);
 	}
+
+#ifdef __EMSCRIPTEN__
+	// Browser process mutexes are C++ objects; file handles in this shim are stdio streams.
+	for (auto mutex = BrowserMutexHandles.begin(); mutex != BrowserMutexHandles.end(); ++mutex) {
+		if ((HANDLE)*mutex == handle) {
+			delete *mutex;
+			BrowserMutexHandles.erase(mutex);
+			return(TRUE);
+		}
+	}
+#endif
 
 	std::fclose((std::FILE *)handle);
 	return(TRUE);

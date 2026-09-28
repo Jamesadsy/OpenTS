@@ -3,8 +3,6 @@
  *******************************************************************************
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright 2026 OpenTS contributors
- *
- * See LICENSE.md for applicable additional terms and warranty disclaimers.
  ******************************************************************************/
 
 #include "browsercoord.h"
@@ -26,154 +24,226 @@ int Failures = 0;
 void Check(bool condition, char const * description)
 {
 	std::printf("%-76s %s\n", description, condition ? "ok" : "FAILED");
-	if (!condition) {
-		++Failures;
-	}
+	if (!condition) ++Failures;
 }
 
 std::string ReadSource(char const * relative_path)
 {
 	std::string const path = std::string(OPENTS_SOURCE_ROOT) + "/" + relative_path;
 	std::ifstream file(path, std::ios::binary);
-	return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	return(std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>()));
 }
 
-std::size_t Count(std::string const & text, std::string const & needle)
+struct Fixture
 {
-	std::size_t count = 0;
-	std::size_t offset = 0;
-	while ((offset = text.find(needle, offset)) != std::string::npos) {
-		++count;
-		offset += needle.size();
-	}
-	return count;
+	int BootstrapCalls = 0;
+	int FocusCalls = 0;
+	int BeginMainGameCalls = 0;
+	int MainGameStepCalls = 0;
+	int ShutdownRequestCalls = 0;
+	int ShutdownDrainCalls = 0;
+	int FinishCalls = 0;
+	bool FaultAtBootstrap = false;
+};
+
+OpenTS_Browser::StartupAction Bootstrap(void * context)
+{
+	Fixture & fixture = *static_cast<Fixture *>(context);
+	++fixture.BootstrapCalls;
+	return(fixture.FaultAtBootstrap
+		? OpenTS_Browser::StartupAction::Fault
+		: OpenTS_Browser::StartupAction::Complete);
 }
 
-void Test_Entry_Routes(void)
+OpenTS_Browser::StartupAction WaitFocus(void * context)
+{
+	Fixture & fixture = *static_cast<Fixture *>(context);
+	return(++fixture.FocusCalls == 1
+		? OpenTS_Browser::StartupAction::Waiting
+		: OpenTS_Browser::StartupAction::Complete);
+}
+
+OpenTS_Browser::StartupAction BeginMainGame(void * context)
+{
+	++static_cast<Fixture *>(context)->BeginMainGameCalls;
+	return(OpenTS_Browser::StartupAction::Boundary);
+}
+
+OpenTS_Browser::StartupAction StepMainGame(void * context)
+{
+	++static_cast<Fixture *>(context)->MainGameStepCalls;
+	return(OpenTS_Browser::StartupAction::Complete);
+}
+
+OpenTS_Browser::StartupAction ShutdownRequest(void * context)
+{
+	++static_cast<Fixture *>(context)->ShutdownRequestCalls;
+	return(OpenTS_Browser::StartupAction::Complete);
+}
+
+OpenTS_Browser::StartupAction ShutdownDrain(void * context)
+{
+	Fixture & fixture = *static_cast<Fixture *>(context);
+	return(++fixture.ShutdownDrainCalls == 1
+		? OpenTS_Browser::StartupAction::Waiting
+		: OpenTS_Browser::StartupAction::Complete);
+}
+
+void Finish(void * context)
+{
+	++static_cast<Fixture *>(context)->FinishCalls;
+}
+
+OpenTS_Browser::BrowserProcessOperations Operations(Fixture & fixture)
+{
+	OpenTS_Browser::BrowserProcessOperations operations;
+	operations.Context = &fixture;
+	operations.Bootstrap = &Bootstrap;
+	operations.WaitFocus = &WaitFocus;
+	operations.BeginMainGame = &BeginMainGame;
+	operations.StepMainGame = &StepMainGame;
+	operations.ShutdownRequest = &ShutdownRequest;
+	operations.ShutdownDrain = &ShutdownDrain;
+	operations.Finish = &Finish;
+	return(operations);
+}
+
+void Test_Process_Phases(void)
+{
+	using namespace OpenTS_Browser;
+	Fixture fixture;
+	BrowserProcessSession session;
+	BrowserProcessOperations const operations = Operations(fixture);
+
+	Check(Step(session) == CooperativeResult::Fault
+		&& Status(session) == BrowserProcessPhase::Idle,
+		"Step before Begin is rejected without corrupting the idle session");
+	Check(Begin(session, operations) && Status(session) == BrowserProcessPhase::Bootstrap,
+		"Begin owns a real startup session and enters Bootstrap");
+	Check(!Begin(session, operations), "duplicate Begin is rejected");
+	Check(Step(session) == CooperativeResult::Waiting
+		&& fixture.BootstrapCalls == 1 && Status(session) == BrowserProcessPhase::WaitFocus,
+		"one Bootstrap action advances to WaitFocus");
+	Check(Step(session) == CooperativeResult::Waiting
+		&& fixture.FocusCalls == 1 && session.WaitFocusYields == 1
+		&& Status(session) == BrowserProcessPhase::WaitFocus,
+		"WaitFocus returns Waiting after one message-handler pass");
+	Check(Step(session) == CooperativeResult::Waiting
+		&& fixture.FocusCalls == 2 && Status(session) == BrowserProcessPhase::MainGame,
+		"WaitFocus advances only after its next bounded pass observes focus");
+	Check(Step(session) == CooperativeResult::Waiting
+		&& fixture.BeginMainGameCalls == 1 && session.MainGameBeginOwned
+		&& Status(session) == BrowserProcessPhase::ShutdownRequest,
+		"MainGame begins once and records the owner-data boundary");
+	Check(fixture.MainGameStepCalls == 0,
+		"the boundary prevents a child gameplay or menu Step");
+	Check(Step(session) == CooperativeResult::Waiting
+		&& fixture.ShutdownRequestCalls == 1 && Status(session) == BrowserProcessPhase::ShutdownDrain,
+		"ShutdownRequest runs once before drain");
+	Check(Step(session) == CooperativeResult::Waiting
+		&& fixture.ShutdownDrainCalls == 1 && session.ShutdownDrainPasses == 1
+		&& Status(session) == BrowserProcessPhase::ShutdownDrain,
+		"ShutdownDrain yields after one pending message-handler pass");
+	Check(Step(session) == CooperativeResult::Complete
+		&& fixture.ShutdownDrainCalls == 2 && Status(session) == BrowserProcessPhase::Complete,
+		"ShutdownDrain completes after its next bounded message-handler pass");
+	Check(session.StepCount == 7 && Finish(session) && Finish(session)
+		&& fixture.FinishCalls == 1 && session.FinishOwned,
+		"Complete owns one idempotent Finish after seven native Steps");
+	Check(!Begin(session, operations), "a finished process session cannot be restarted");
+}
+
+void Test_Fault_And_Reentry(void)
+{
+	using namespace OpenTS_Browser;
+	Fixture fixture;
+	fixture.FaultAtBootstrap = true;
+	BrowserProcessSession faulted;
+	Check(Begin(faulted, Operations(fixture))
+		&& Step(faulted) == CooperativeResult::Fault
+		&& Status(faulted) == BrowserProcessPhase::Fault,
+		"Bootstrap faults enter the terminal Fault process phase");
+	Check(Finish(faulted) && fixture.FinishCalls == 1,
+		"Fault also releases the browser process through Finish");
+
+	Fixture reentry_fixture;
+	BrowserProcessSession reentrant;
+	Check(Begin(reentrant, Operations(reentry_fixture)), "re-entry fixture begins");
+	reentrant.StepActive = true;
+	Check(Step(reentrant) == CooperativeResult::Fault
+		&& Status(reentrant) == BrowserProcessPhase::Fault
+		&& reentrant.FaultCode != 0,
+		"a nested Step is rejected and recorded as a fault");
+}
+
+void Test_Entry_And_Boundary_Contracts(void)
 {
 	std::string const entry = ReadSource("platform/win32compat/src/entry.cpp");
 	std::size_t const main = entry.find("int main(int argc, char ** argv)");
 	std::size_t const emscripten = entry.find("#ifdef __EMSCRIPTEN__", main);
 	std::size_t const native = entry.find("#else", emscripten);
-	if (main == std::string::npos || emscripten == std::string::npos
-		|| native == std::string::npos) {
-		Check(false, "entry.cpp contains separate Emscripten and native main routes");
-		return;
-	}
-
 	std::string const browser_route = entry.substr(emscripten, native - emscripten);
 	std::string const native_route = entry.substr(native);
-	Check(true, "entry.cpp contains separate Emscripten and native main routes");
-	Check(browser_route.find("WinMain(") == std::string::npos
-		&& browser_route.find("SDL_Init(") == std::string::npos
-		&& browser_route.find("return(0)") != std::string::npos,
-		"Emscripten entry returns to the browser without WinMain or engine host startup");
-	Check(native_route.find("Win32_Record_Arguments(argc, argv)") != std::string::npos
-		&& native_route.find("SDL_Init(") != std::string::npos
-		&& native_route.find("WinMain((HINSTANCE)") != std::string::npos,
-		"native entry retains its synchronous main-to-WinMain route");
+	Check(browser_route.find("Win32_Record_Arguments(argc, argv)") != std::string::npos
+		&& browser_route.find("OpenTS_Browser_Begin()") != std::string::npos
+		&& browser_route.find("OpenTS_Browser_Main_Entry_Returned()") != std::string::npos
+		&& browser_route.find("WinMain(") == std::string::npos
+		&& browser_route.find("SDL_Quit") == std::string::npos,
+		"Emscripten main copies arguments, begins once, and returns without WinMain or teardown");
+	Check(native_route.find("SDL_Init(") != std::string::npos
+		&& native_route.find("WinMain((HINSTANCE)") != std::string::npos
+		&& native_route.find("Win32_Gamepad_Shutdown()") != std::string::npos
+		&& native_route.find("SDL_Quit()") != std::string::npos,
+		"native main retains SDL, WinMain, gamepad shutdown, and SDL_Quit ordering");
+
+	std::string const init = ReadSource("code/init.cpp");
+	std::size_t const reach = init.find("OpenTS_Browser_Startup_Reach_OwnerData_Boundary();");
+	std::size_t const boundary_return = init.find("return(false);", reach);
+	std::size_t const mixfiles = init.find("Init_Bootstrap_Mixfiles())", reach);
+	Check(reach != std::string::npos && boundary_return != std::string::npos
+		&& mixfiles != std::string::npos && reach < boundary_return && boundary_return < mixfiles,
+		"browser startup records the no-owner-data frontier before the first MIX archive access");
+	std::string const startup = ReadSource("code/startup.cpp");
+	Check(startup.find("OpenTS_Browser_Startup_WaitFocus") != std::string::npos
+		&& startup.find("Windows_Message_Handler();\n\treturn(GameInFocus ? 1 : 0);") != std::string::npos
+		&& startup.find("OpenTS_Browser_Startup_Shutdown_Drain") != std::string::npos,
+		"browser focus and shutdown each use one native message-handler pass per action");
 }
 
-void Test_Native_Session_Contract(void)
-{
-	using namespace OpenTS_Browser;
-	BrowserProcessSession session;
-
-	Check(Step(session) == CooperativeResult::Fault
-		&& Status(session) == BrowserProcessPhase::Idle,
-		"Step before Begin is rejected without corrupting the idle session");
-	Check(Begin(session) && Status(session) == BrowserProcessPhase::ControlProbe,
-		"Begin acquires native ownership and enters ControlProbe once");
-	Check(!Begin(session) && Status(session) == BrowserProcessPhase::ControlProbe,
-		"double Begin is rejected while the original session stays deterministic");
-	Check(Step(session) == CooperativeResult::Active && session.StepCount == 1
-		&& Status(session) == BrowserProcessPhase::ControlProbe,
-		"one bounded Step returns Active and advances exactly one native step");
-	Check(!Finish(session) && !session.FinishOwned,
-		"Finish cannot take ownership while the native probe is still active");
-
-	bool intermediate_steps_are_active = true;
-	for (std::uint32_t index = 1; index < ControlProbeStepLimit - 1; ++index) {
-		if (Step(session) != CooperativeResult::Active) {
-			intermediate_steps_are_active = false;
-			break;
-		}
-	}
-	Check(intermediate_steps_are_active && session.StepCount == ControlProbeStepLimit - 1
-		&& Status(session) == BrowserProcessPhase::ControlProbe,
-		"the first 299 bounded steps stay in the native control probe");
-	Check(Step(session) == CooperativeResult::Complete
-		&& session.StepCount == ControlProbeStepLimit
-		&& Status(session) == BrowserProcessPhase::Complete,
-		"the 300th bounded step deterministically completes without game semantics");
-	Check(Step(session) == CooperativeResult::Complete
-		&& session.StepCount == ControlProbeStepLimit,
-		"Step after completion returns Complete without advancing state");
-	Check(Finish(session) && session.FinishOwned
-		&& Status(session) == BrowserProcessPhase::Complete,
-		"Finish claims the completed native session once");
-	Check(Finish(session) && session.FinishOwned,
-		"Finish is idempotent for the single completed session owner");
-	Check(!Begin(session), "a finished session cannot be begun a second time");
-
-	BrowserProcessSession reentrant;
-	Check(Begin(reentrant), "re-entry contract fixture begins natively");
-	reentrant.StepActive = true;
-	Check(Step(reentrant) == CooperativeResult::Fault
-		&& Status(reentrant) == BrowserProcessPhase::Fault
-		&& reentrant.FaultCode != 0,
-		"Step re-entry is rejected and recorded as a native fault");
-}
-
-void Test_Exported_ABI_Contract(void)
-{
-	Check(OpenTS_Browser_Step() == static_cast<int>(OpenTS_Browser::CooperativeResult::Fault)
-		&& OpenTS_Browser_Status() == static_cast<int>(OpenTS_Browser::BrowserProcessPhase::Idle),
-		"exported Step before Begin is rejected while exported Status remains queryable");
-	Check(OpenTS_Browser_Begin() == 1 && OpenTS_Browser_Begin() == 0,
-		"exported Begin succeeds once and safely rejects a duplicate owner");
-	Check(OpenTS_Browser_Step() == static_cast<int>(OpenTS_Browser::CooperativeResult::Active),
-		"exported Step returns a bounded native result through the C ABI");
-	for (std::uint32_t index = 1; index < OpenTS_Browser::ControlProbeStepLimit; ++index) {
-		OpenTS_Browser_Step();
-	}
-	Check(OpenTS_Browser_Status() == static_cast<int>(OpenTS_Browser::BrowserProcessPhase::Complete),
-		"exported Status reports deterministic native completion");
-	Check(OpenTS_Browser_Finish() == 1 && OpenTS_Browser_Finish() == 1,
-		"exported Finish is idempotent for the completed native ABI owner");
-}
-
-void Test_Browser_Contract_Surface(void)
+void Test_Harness_And_Build_Contracts(void)
 {
 	std::string const cmake = ReadSource("code/CMakeLists.txt");
 	Check(cmake.find("-sNO_EXIT_RUNTIME=1") != std::string::npos
+		&& cmake.find("OUTPUT_NAME OpenTS") != std::string::npos
 		&& cmake.find("_OpenTS_Browser_Begin") != std::string::npos
-		&& cmake.find("_OpenTS_Browser_Step") != std::string::npos
-		&& cmake.find("_OpenTS_Browser_Status") != std::string::npos
-		&& cmake.find("_OpenTS_Browser_Finish") != std::string::npos,
-		"Emscripten keeps the runtime alive and exports the four coordinator ABI functions");
+		&& cmake.find("_OpenTS_Browser_Renderer_Name") != std::string::npos
+		&& cmake.find("OpenTS-browser-proof.html") != std::string::npos,
+		"Emscripten emits OpenTS.js/Wasm and stages the browser process harness");
 	Check(cmake.find("ASYNCIFY") == std::string::npos
 		&& cmake.find("JSPI") == std::string::npos,
-		"Emscripten coordinator configuration contains no Asyncify or JSPI setting");
+		"Emscripten process build keeps Asyncify and JSPI disabled");
 
-	std::string const harness = ReadSource("tests/browsercoord/harness.js");
-	Check(Count(harness, "Module._OpenTS_Browser_Step()") == 1,
-		"the browser callback harness contains exactly one native Step call site");
-	Check(harness.find("BrowserProcessPhase") == std::string::npos
-		&& harness.find("ControlProbe") == std::string::npos
-		&& harness.find("MainGame") == std::string::npos
-		&& harness.find("Select_Game") == std::string::npos,
-		"the JavaScript harness carries diagnostics only and no semantic phase model");
+	std::string const harness = ReadSource("tests/browserstartup/harness.js");
+	Check(harness.find("nativeValue(\"OpenTS_Browser_Step\")") != std::string::npos
+		&& harness.find("requestAnimationFrame(onFrame)") != std::string::npos
+		&& harness.find("heartbeatCount += 1;") != std::string::npos
+		&& harness.find("live.heartbeatCount = heartbeatCount;") != std::string::npos
+		&& harness.find("OpenTS_Browser_OwnerData_Boundary") != std::string::npos,
+		"browser harness records process callbacks, independent heartbeat, and owner-data boundary");
+	Check(harness.find("Select_Game") == std::string::npos
+		&& harness.find("Main_Loop") == std::string::npos
+		&& harness.find("Init_Game(") == std::string::npos,
+		"JavaScript observes process metrics without carrying game semantics");
 }
 
 } // namespace
 
 int main(void)
 {
-	Test_Entry_Routes();
-	Test_Native_Session_Contract();
-	Test_Exported_ABI_Contract();
-	Test_Browser_Contract_Surface();
+	Test_Process_Phases();
+	Test_Fault_And_Reentry();
+	Test_Entry_And_Boundary_Contracts();
+	Test_Harness_And_Build_Contracts();
 	std::printf("\n%s\n", Failures == 0 ? "PASSED" : "FAILED");
-	return Failures == 0 ? 0 : 1;
+	return(Failures == 0 ? 0 : 1);
 }

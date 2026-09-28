@@ -344,13 +344,29 @@ if(MSVC)
     )
 endif()
 
-# The bounded browser coordinator remains callable after the Emscripten entry point returns.
-# The browser harness calls these four C ABI functions directly; no stack transformation or
-# JavaScript game-state layer is needed for the control-plane proof.
+# The browser process coordinator remains callable after the Emscripten entry point returns.
+# The browser owns scheduling; the native process owns startup phases and lifecycle state.
 if(EMSCRIPTEN)
+	set_target_properties(OpenTS PROPERTIES
+		OUTPUT_NAME OpenTS
+		OUTPUT_NAME_DEBUG OpenTS
+		OUTPUT_NAME_RELEASE OpenTS
+	)
     target_link_options(OpenTS PRIVATE
         "-sNO_EXIT_RUNTIME=1"
-        "-sEXPORTED_FUNCTIONS=_main,_OpenTS_Browser_Begin,_OpenTS_Browser_Step,_OpenTS_Browser_Status,_OpenTS_Browser_Finish"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXPORTED_RUNTIME_METHODS=UTF8ToString"
+        "-sEXPORTED_FUNCTIONS=_main,_OpenTS_Browser_Begin,_OpenTS_Browser_Step,_OpenTS_Browser_Status,_OpenTS_Browser_Finish,_OpenTS_Browser_Begin_Count,_OpenTS_Browser_Begin_Result,_OpenTS_Browser_Main_Returned,_OpenTS_Browser_Main_Entry_Returned,_OpenTS_Browser_Step_Count,_OpenTS_Browser_WaitFocus_Yields,_OpenTS_Browser_MainGame_Began,_OpenTS_Browser_MainGame_Steps,_OpenTS_Browser_Shutdown_Drain_Passes,_OpenTS_Browser_OwnerData_Boundary,_OpenTS_Browser_Fault_Code,_OpenTS_Browser_Finish_Count,_OpenTS_Browser_Renderer_Initialized,_OpenTS_Browser_Renderer_Name,_OpenTS_Browser_Bootstrap_Stage,_OpenTS_Browser_Finish_Stage,_OpenTS_Browser_ProgEnd_Stage"
+    )
+    add_custom_command(TARGET OpenTS POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/tests/browserstartup/harness.html"
+            "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-proof.html"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/tests/browserstartup/harness.js"
+            "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-proof.js"
+        COMMENT "Staging the bounded 124G browser process proof harness"
+        VERBATIM
     )
 endif()
 

@@ -46,6 +46,8 @@
 #include "_surface.h"
 #include "_tactica.h"
 #include "_zbuffer.h"
+#include "bgfxbackend.h"
+#include "browsercoord.h"
 #include "aircraft.h"
 #include "airctype.h"
 #include "aitrig.h"
@@ -91,6 +93,7 @@
 #include "levitate.h"
 #include "light.h"
 #include "lightcon.h"
+#include "maingamesession.h"
 #include "mech.h"
 #include "mixfile.h"
 #include "misc.h"
@@ -166,6 +169,12 @@
 #include <cfloat>
 #include <string>
 #include <vector>
+
+#ifdef __EMSCRIPTEN__
+#include <SDL3/SDL.h>
+void Win32_Gamepad_Initialize(void);
+void Win32_Gamepad_Shutdown(void);
+#endif
 
 extern	HINSTANCE LanguageResources;
 
@@ -340,6 +349,358 @@ static int Build_Arguments(char const * path_to_exe, char ** & argv)
 	argv = pointers.data();
 	return((int)pointers.size());
 }
+
+#ifdef __EMSCRIPTEN__
+namespace
+{
+
+struct BrowserStartupState
+{
+	int Argc = 0;
+	char ** Argv = nullptr;
+	int BootstrapStage = 0;
+	int FinishStage = 0;
+	int ProgEndStage = 0;
+	char PathToExe[MAX_PATH]{};
+	char Buffer[512]{};
+	CDFileClass * ConfigFile = nullptr;
+	bool SDLInitialized = false;
+	bool GamepadInitialized = false;
+	bool ProgEndRequired = false;
+	bool BootstrapComplete = false;
+	bool MainGameBeginAttempted = false;
+	bool OwnerDataBoundaryReached = false;
+	bool ShutdownRequested = false;
+	bool Finished = false;
+	bool RendererInitialized = false;
+	std::string RendererName;
+};
+
+BrowserStartupState BrowserStartup;
+MainGameSession BrowserMainGame;
+
+} // namespace
+
+
+extern "C" int OpenTS_Browser_Startup_Bootstrap(void)
+{
+	if (BrowserStartup.BootstrapComplete) return(0);
+	BrowserStartup.BootstrapStage = 1;
+	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_GAMEPAD)) {
+		SDL_Log("SDL could not start: %s", SDL_GetError());
+		return(0);
+	}
+	BrowserStartup.SDLInitialized = true;
+	BrowserStartup.BootstrapStage = 2;
+	Win32_Gamepad_Initialize();
+	BrowserStartup.GamepadInitialized = true;
+
+	BrowserStartup.BootstrapStage = 3;
+	Install_Exception_Handler();
+	ProgramInstance = (HINSTANCE)(ULONG_PTR)1;
+	if (lzo_init() != LZO_E_OK) return(0);
+	Debug_Init();
+	Exception_Register_Log_File(Debug_Log_File_Name());
+	int const lzo_status = lzo_init();
+	if (lzo_status != LZO_E_OK) {
+		DebugString("lzo_init failed with %d.\n", lzo_status);
+		return(0);
+	}
+
+	BrowserStartup.BootstrapStage = 4;
+	AppMutex = ::CreateMutex(NULL, FALSE, APP_GUID);
+	if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+		if (AppMutex != NULL) {
+			CloseHandle(AppMutex);
+			AppMutex = NULL;
+		}
+		DebugString("OpenTS is already running in this browser runtime.\n");
+		return(0);
+	}
+	DebugString("Create AppMutex okay.\n");
+
+	AutoPlayMutex = ::OpenMutex(MUTEX_ALL_ACCESS, FALSE, AUTOPLAY_GUID);
+	if (AutoPlayMutex != NULL) {
+		DebugString("Browser startup found a live AutoPlay mutex and will yield by faulting startup.\n");
+		::CloseHandle(AutoPlayMutex);
+		AutoPlayMutex = NULL;
+		return(0);
+	}
+	if (AutoPlayMutex == NULL) {
+		AutoPlayMutex = CreateMutex(NULL, FALSE, AUTOPLAY_GUID);
+		if (GetLastError() == ERROR_ALREADY_EXISTS) {
+			if (AutoPlayMutex != NULL) CloseHandle(AutoPlayMutex);
+			AutoPlayMutex = NULL;
+			return(0);
+		}
+	}
+	if (AutoPlayMutex == NULL) return(0);
+	BrowserStartup.ProgEndRequired = true;
+
+	BrowserStartup.BootstrapStage = 5;
+	if (!Init_Language_Resources(true)) return(0);
+	RegisterClasses();
+	if (GetModuleFileName((HINSTANCE)(ULONG_PTR)1, &BrowserStartup.PathToExe[0], sizeof(BrowserStartup.PathToExe)) == 0) {
+		return(0);
+	}
+	BrowserStartup.Argc = Build_Arguments(BrowserStartup.PathToExe, BrowserStartup.Argv);
+	if (BrowserStartup.Argc <= 0 || BrowserStartup.Argv == nullptr) return(0);
+
+	char drive[_MAX_DRIVE];
+	char path[_MAX_PATH];
+	char dir[_MAX_DIR];
+	_splitpath(BrowserStartup.Argv[0], drive, dir, NULL, NULL);
+	_makepath(path, drive, dir, NULL, NULL);
+	if (!SetCurrentDirectory(path)) return(0);
+
+	BrowserStartup.BootstrapStage = 6;
+	if (!Parse_Command_Line(BrowserStartup.Argc, BrowserStartup.Argv)
+		|| !Apply_Game_Directories()) {
+		return(0);
+	}
+
+	Exception_Run_Immediate_Test();
+	DeploymentConfig.Read_File(Data_Directory().c_str());
+	Init_Search_Folders(DeploymentConfig.SearchPaths.c_str());
+	Session.RecordFile.Set_Name("RECORD.BIN");
+
+	BrowserStartup.BootstrapStage = 7;
+	BrowserStartup.ConfigFile = new CDFileClass(DeploymentConfig.SettingsFile.c_str());
+	ConfigINI.Load(*BrowserStartup.ConfigFile, false);
+	Options.ScreenWidth = ConfigINI.Get_Int("Video", "ScreenWidth", Options.ScreenWidth);
+	Options.ScreenHeight = ConfigINI.Get_Int("Video", "ScreenHeight", Options.ScreenHeight);
+	Options.Fullscreen = ConfigINI.Get_Bool("Video", "Fullscreen", Options.Fullscreen);
+	Options.WindowWidth = ConfigINI.Get_Int("Video", "WindowWidth", Options.WindowWidth);
+	Options.WindowHeight = ConfigINI.Get_Int("Video", "WindowHeight", Options.WindowHeight);
+	Options.VSync = ConfigINI.Get_Bool("Video", "VSync", Options.VSync);
+	Options.Renderer = ConfigINI.Get_Int("Video", "Renderer", Options.Renderer);
+	if (!WindowedMode) WindowedMode = !Options.Fullscreen;
+	Keyboard = new KeyboardClass();
+
+	if (Disk_Space_Available() < INIT_FREE_DISK_SPACE) {
+		DebugString("Browser startup stopped at the low-disk prompt boundary.\n");
+		return(0);
+	}
+
+	BrowserStartup.BootstrapStage = 8;
+	if (Options.ScreenWidth == -1 || Options.ScreenHeight == -1) {
+		int framewidth = 0;
+		int frameheight = 0;
+		if (Win_Preferred_Frame_Size(framewidth, frameheight)) {
+			Options.ScreenWidth = framewidth;
+			Options.ScreenHeight = frameheight;
+		} else {
+			Options.ScreenWidth = 640;
+			Options.ScreenHeight = 480;
+		}
+	}
+
+	VisibleRect = Rect(0, 0, Options.ScreenWidth, Options.ScreenHeight);
+	VideoModeWidth = Options.ScreenWidth;
+	VideoModeHeight = Options.ScreenHeight;
+	BrowserStartup.BootstrapStage = 9;
+	Create_Main_Window((HINSTANCE)(ULONG_PTR)1, 1, Options.ScreenWidth, Options.ScreenHeight);
+	BrowserStartup.BootstrapStage = 10;
+	if (MainWindow == NULL) return(0);
+	Exception_Run_Post_Window_Test();
+	BrowserStartup.BootstrapStage = 11;
+	AudioEngine.Init();
+
+	BrowserStartup.BootstrapStage = 12;
+	int drawablewidth = 0;
+	int drawableheight = 0;
+	int const refreshrate = Win_Window_Refresh_Rate(MainWindow);
+	NativeWindow const nativewindow = Win_Native_Window(MainWindow);
+	if (!Win_Window_Drawable_Size(MainWindow, drawablewidth, drawableheight)
+		|| !Video_Init(nativewindow, drawablewidth, drawableheight, refreshrate)) {
+		DebugString("Browser startup could not initialize the renderer.\n");
+		return(0);
+	}
+	BrowserStartup.RendererInitialized = true;
+	char const * const renderer = Backend_Renderer_Name();
+	BrowserStartup.RendererName = renderer != nullptr ? renderer : "unknown";
+	BrowserStartup.BootstrapStage = 13;
+	VisibleSurface = DSurface::Create_Primary();
+	if (VisibleSurface == NULL) {
+		DebugString("Browser startup could not create the primary surface.\n");
+		return(0);
+	}
+
+	BrowserStartup.BootstrapStage = 14;
+	BrowserStartup.BootstrapComplete = true;
+	return(1);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_WaitFocus(void)
+{
+	if (!BrowserStartup.BootstrapComplete) return(-1);
+	Windows_Message_Handler();
+	return(GameInFocus ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Begin_MainGame(void)
+{
+	if (!BrowserStartup.BootstrapComplete || BrowserStartup.MainGameBeginAttempted || !GameInFocus) return(-1);
+	BrowserStartup.MainGameBeginAttempted = true;
+
+	VisibleSurface->Fill(0);
+	Rect sidebar_rect(0, 0, SidebarClass::SIDE_WIDTH, VisibleRect.Height);
+	Rect tile_rect(0, 0, VisibleRect.Width - sidebar_rect.Width, sidebar_rect.Height);
+	Rect composite_rect(0, 0, VisibleRect.Width - sidebar_rect.Width, sidebar_rect.Height);
+	Allocate_Surfaces(VisibleRect, composite_rect, tile_rect, sidebar_rect, false);
+	LogicalSurface = HiddenSurface;
+	Update_Visible_Surface(HiddenSurface);
+	DepthBuffer = new ZBuffer(Rect(TacticalRect.X, TacticalRect.Y, 480, 480 - TacticalRect.Y));
+	DepthBuffer->Set_Scroll(ZBUFFER_MAX);
+	AlphaBuffer = new ABuffer(Rect(TacticalRect.X, TacticalRect.Y, 480, 480 - TacticalRect.Y));
+	MouseCursor = new WWMouseClass(MainWindow);
+	MouseCursor->Capture_Mouse();
+
+	if (!Special.IsFromInstall && !Spawner_Is_Requested()) {
+		Special.IsFromInstall = ConfigINI.Get_Bool("Intro", "PlayIntro", true);
+	}
+	if (Special.IsFromInstall && !Spawner_Is_Requested()) {
+		ConfigINI.Put_Bool("Intro", "PlayIntro", false);
+		BrowserStartup.ConfigFile->Close();
+		ConfigINI.Save(*BrowserStartup.ConfigFile, false);
+	}
+	BrowserStartup.ConfigFile->Close();
+	delete BrowserStartup.ConfigFile;
+	BrowserStartup.ConfigFile = nullptr;
+
+	DebugString("Main_Game\n");
+	bool const began = BrowserMainGame.Begin(BrowserStartup.Argc, BrowserStartup.Argv, true);
+	if (BrowserStartup.OwnerDataBoundaryReached
+		&& BrowserMainGame.Init_Game_Owned()
+		&& BrowserMainGame.Phase() == MainGamePhase::Complete) {
+		return(1);
+	}
+	return(began ? 0 : -1);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Step_MainGame(void)
+{
+	if (!BrowserStartup.MainGameBeginAttempted || BrowserStartup.OwnerDataBoundaryReached) return(-1);
+	MainGameStepResult const result = BrowserMainGame.Step();
+	if (result == MainGameStepResult::Waiting) return(0);
+	if (result == MainGameStepResult::Complete) return(1);
+	if (result == MainGameStepResult::NativeChild) return(2);
+	return(-1);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Shutdown_Request(void)
+{
+	if (!BrowserStartup.MainGameBeginAttempted || BrowserStartup.ShutdownRequested
+		|| HiddenSurface == nullptr || MainWindow == NULL) {
+		return(0);
+	}
+	HiddenSurface->Fill(0);
+	Update_Visible_Surface(HiddenSurface);
+	ReadyToQuit = 1;
+	AudioEngine.End();
+	PostMessage(MainWindow, WM_DESTROY, 0, 0);
+	BrowserStartup.ShutdownRequested = true;
+	return(1);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Shutdown_Drain(void)
+{
+	if (!BrowserStartup.ShutdownRequested) return(-1);
+	Windows_Message_Handler();
+	return(ReadyToQuit == 1 ? 0 : 1);
+}
+
+
+extern "C" void OpenTS_Browser_Startup_Finish(void)
+{
+	if (BrowserStartup.Finished) return;
+	BrowserStartup.Finished = true;
+	BrowserStartup.FinishStage = 1;
+	if (BrowserStartup.MainGameBeginAttempted) BrowserMainGame.Finish();
+	BrowserStartup.FinishStage = 2;
+	if (BrowserStartup.GamepadInitialized) {
+		Win32_Gamepad_Shutdown();
+		BrowserStartup.GamepadInitialized = false;
+	}
+	BrowserStartup.FinishStage = 3;
+	if (BrowserStartup.ProgEndRequired) {
+		Prog_End();
+		BrowserStartup.FinishStage = 31;
+		BrowserStartup.ProgEndRequired = false;
+		BrowserStartup.FinishStage = 32;
+	}
+	BrowserStartup.FinishStage = 4;
+	if (AutoPlayMutex != NULL) {
+		CloseHandle(AutoPlayMutex);
+		AutoPlayMutex = NULL;
+	}
+	BrowserStartup.FinishStage = 5;
+	if (AppMutex != NULL) {
+		CloseHandle(AppMutex);
+		AppMutex = NULL;
+	}
+	BrowserStartup.FinishStage = 6;
+	if (BrowserStartup.ConfigFile != nullptr) {
+		BrowserStartup.ConfigFile->Close();
+		delete BrowserStartup.ConfigFile;
+		BrowserStartup.ConfigFile = nullptr;
+	}
+	BrowserStartup.FinishStage = 7;
+	if (BrowserStartup.SDLInitialized) {
+		SDL_Quit();
+		BrowserStartup.SDLInitialized = false;
+	}
+	BrowserStartup.FinishStage = 8;
+}
+
+
+extern "C" int OpenTS_Browser_Startup_OwnerData_Boundary(void)
+{
+	return(BrowserStartup.OwnerDataBoundaryReached ? 1 : 0);
+}
+
+
+extern "C" void OpenTS_Browser_Startup_Reach_OwnerData_Boundary(void)
+{
+	BrowserStartup.OwnerDataBoundaryReached = true;
+	DebugString("OpenTS browser proof stopped before Init_Bootstrap_Mixfiles owner-data access.\n");
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Renderer_Initialized(void)
+{
+	return(BrowserStartup.RendererInitialized ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Bootstrap_Stage(void)
+{
+	return(BrowserStartup.BootstrapStage);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Finish_Stage(void)
+{
+	return(BrowserStartup.FinishStage);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_ProgEnd_Stage(void)
+{
+	return(BrowserStartup.ProgEndStage);
+}
+
+
+extern "C" char const * OpenTS_Browser_Startup_Renderer_Name(void)
+{
+	return(BrowserStartup.RendererName.c_str());
+}
+#endif
 
 
 /***********************************************************************************************
@@ -700,19 +1061,35 @@ void __cdecl Prog_End(void)
 {
 	int i;
 
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 1;
+#endif
+
 	GameActive = false;
 
 	Session.Free_Scenario_Descriptions();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 2;
+#endif
 
 	while (ColorSchemes.Count()) {
 		delete ColorSchemes[0];
 	}
 	ColorSchemes.Clear();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 3;
+#endif
 
 	// The theaters outlive every scenario, so they are not released with its objects.
 	TheaterClass::Clear();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 4;
+#endif
 
 	Delete_All_Objects();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 5;
+#endif
 
 	while (Movies.Count()) {
 		free((void *)Movies[0]);
@@ -740,6 +1117,9 @@ void __cdecl Prog_End(void)
 	EditorINI.Clear();
 	ConfigINI.Clear();
 	ConfigINI.Clear();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 6;
+#endif
 
 	SpotLightClass::Clear_All();
 	IonBlastClass::Clear_All();
@@ -751,8 +1131,14 @@ void __cdecl Prog_End(void)
 
 	Map.Free_Cells();
 	Map.Clear_Radar();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 7;
+#endif
 
 	Reset_Surfaces();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 8;
+#endif
 
 	if (DepthBuffer != NULL) {
 		delete DepthBuffer;
@@ -829,6 +1215,9 @@ void __cdecl Prog_End(void)
 		delete (Surface *)CloakingSurface;
 		CloakingSurface = NULL;
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 9;
+#endif
 
 	if (BuildingTypeClass::BuildingZShape != NULL) {
 		delete (void *)BuildingTypeClass::BuildingZShape;
@@ -836,6 +1225,9 @@ void __cdecl Prog_End(void)
 	}
 
 	Map.Shutdown();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 10;
+#endif
 
 	for (i = 0; i < TileDrawers.Count(); i++) {
 		delete TileDrawers[i];
@@ -854,6 +1246,9 @@ void __cdecl Prog_End(void)
 		delete IsometricTheaterData;
 		IsometricTheaterData = NULL;
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 11;
+#endif
 
 	if (IsometricTileTypeClass::CellShadowShapes != NULL) {
 		delete IsometricTileTypeClass::CellShadowShapes;
@@ -881,6 +1276,9 @@ void __cdecl Prog_End(void)
 		delete PreviewSurface;
 		PreviewSurface = NULL;
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 12;
+#endif
 
 	if (MoviesMix != NULL) {
 		delete MoviesMix;
@@ -967,6 +1365,9 @@ void __cdecl Prog_End(void)
 		delete GameMix;
 		GameMix = NULL;
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 13;
+#endif
 
 	if (TacticalMap != NULL) {
 		delete TacticalMap;
@@ -974,8 +1375,14 @@ void __cdecl Prog_End(void)
 	}
 
 	Free_Vocs();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 14;
+#endif
 
 	CDFileClass::Clear_Search_Drives();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 15;
+#endif
 
 	if (Keyboard != NULL) {
 		delete Keyboard;
@@ -983,6 +1390,9 @@ void __cdecl Prog_End(void)
 	}
 
 	Shutdown_Network();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 16;
+#endif
 
 	if (UnkBuffer != NULL) {
 		delete UnkBuffer;
@@ -998,12 +1408,21 @@ void __cdecl Prog_End(void)
 		delete Scen;
 		Scen = NULL;
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 17;
+#endif
 
 	Unregister_Classes();
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 18;
+#endif
 
 	if (LanguageResources) {
 		FreeLibrary(LanguageResources);
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 19;
+#endif
 
 	if (AutoPlayMutex != NULL) {
 		CloseHandle(AutoPlayMutex);
@@ -1013,6 +1432,9 @@ void __cdecl Prog_End(void)
 		CloseHandle(AppMutex);
 		AppMutex = NULL;
 	}
+#ifdef __EMSCRIPTEN__
+	BrowserStartup.ProgEndStage = 20;
+#endif
 }
 
 /***********************************************************************************************

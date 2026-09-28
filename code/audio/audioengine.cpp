@@ -204,7 +204,25 @@ bool AudioEngineClass::Init(void)
 	Pool.Set_Random(Random_Proc, nullptr);
 
 	Feeder.Setup(&Mixer, Device.get());
+#if defined(__EMSCRIPTEN__)
+	// The bounded cooperative browser runtime is intentionally single-threaded.
+	// AudioFeederClass::Start creates a std::thread for streamed audio and aborts
+	// in a non-pthread Emscripten build. Audio is optional during startup, so
+	// report it unavailable here and unwind the device just as for a missing
+	// output device. Native startup retains the existing feeder behavior below.
+	DebugString("Audio: browser stream feeder unavailable; sound disabled\n");
+	Feeder.Stop();
+	Device->Stop();
+	Device->Close();
+	Device.reset();
+	Pool.Shutdown();
+	Mixer.Shutdown();
+	Provider.reset();
+	Reader.reset();
+	return(false);
+#else
 	Feeder.Start();
+#endif
 
 	LastDropped = 0;
 	LastDropReport = 0;

@@ -9,6 +9,11 @@
 
 #include "win32compat.h"
 
+#ifdef __EMSCRIPTEN__
+extern "C" int OpenTS_Browser_Begin(void);
+extern "C" void OpenTS_Browser_Main_Entry_Returned(void);
+#endif
+
 #ifdef OPENTS_IOS
 // UIKit, not the C runtime, starts an iOS application. This header renames main to SDL_main
 // and supplies the real entry point, which creates the UIApplication and its delegate and
@@ -18,9 +23,8 @@
 #include <unistd.h>
 #endif
 
-// Windows enters the game at WinMain. Nothing else does, so the host's entry point records
-// the arguments the shell handed over and hands control to the same function the supported
-// build starts in.
+// Windows enters through WinMain; other hosts copy their entry arguments and use their own
+// process lifetime adapter.
 
 int CALLBACK WinMain(HINSTANCE instance, HINSTANCE previous, char * commandline, int show);
 void __cdecl Prog_End(void);
@@ -30,11 +34,10 @@ void Win32_Record_Arguments(int argc, char ** argv);
 
 int main(int argc, char ** argv)
 {
-	// The 124A Emscripten target proves only that the browser can call and regain
-	// control from the native coordinator. It deliberately does not enter engine startup.
 #ifdef __EMSCRIPTEN__
-	(void)argc;
-	(void)argv;
+	Win32_Record_Arguments(argc, argv);
+	(void)OpenTS_Browser_Begin();
+	OpenTS_Browser_Main_Entry_Returned();
 	return(0);
 #else
 	Win32_Record_Arguments(argc, argv);

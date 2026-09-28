@@ -58,6 +58,10 @@
 
 #include "init.h"
 
+#ifdef __EMSCRIPTEN__
+extern "C" void OpenTS_Browser_Startup_Reach_OwnerData_Boundary(void);
+#endif
+
 #include "_bench.h"
 #include "_command.h"
 #include "_convert.h"
@@ -2620,15 +2624,26 @@ static bool Bootstrap(void)
 	**	Process the message loop until we are in focus. We need to be in focus to read pixels from
 	**	the screen.
 	*/
+#ifdef __EMSCRIPTEN__
+	if (!GameInFocus) {
+		return(false);
+	}
+#else
 	do {
 		Keyboard->Check();
 	} while (!GameInFocus);
+#endif
 
 	/*
 	**	Perform any special debug-only processing. This includes preparing the
 	**	monochrome screen.
 	*/
 	Mono_Clear_Screen();
+
+#ifdef __EMSCRIPTEN__
+	OpenTS_Browser_Startup_Reach_OwnerData_Boundary();
+	return(false);
+#endif
 
 	/*
 	**	Register and make resident all local mixfiles with particular emphasis
