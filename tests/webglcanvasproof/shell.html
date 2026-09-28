@@ -27,6 +27,17 @@
       let heartbeatAtLastCallback = 0;
       let presentAtResize = 0;
       let resizeSucceeded = false;
+      let dprAtResize = 0;
+      let logicalResizeRequest = [800, 600];
+      let expectedDprDrawable = [0, 0];
+      let logicalWindowAfterResize = [0, 0];
+      let cssClientSizeAfterResize = [0, 0];
+      let physicalDrawableAfterResize = [0, 0];
+      let canvasBackingStoreAfterResize = [0, 0];
+      let rendererResizeSize = [0, 0];
+      let logicalResizeObserved = false;
+      let physicalDrawableConsistent = false;
+      let rendererResizeUsedActualDrawable = false;
 
       function append(text) {
         output.textContent += '\n' + String(text);
@@ -64,11 +75,24 @@
           heartbeatAtFirstCallback,
           heartbeatAtResize,
           heartbeatAtLastCallback,
+          heartbeatAdvancedBeforeResize: heartbeatAtResize > heartbeatAtFirstCallback,
+          heartbeatAdvancedAfterResize: heartbeatAtLastCallback > heartbeatAtResize,
           presentCount: Module._VV124F_Present_Count(),
           presentAtResize,
           presentsAfterResize: Module._VV124F_Present_Count() - presentAtResize,
           initialDrawable: [Module._VV124F_Initial_Width(), Module._VV124F_Initial_Height()],
+          initialLogicalWindow: [Module._VV124F_Initial_Window_Width(), Module._VV124F_Initial_Window_Height()],
+          devicePixelRatioAtResize: dprAtResize,
+          logicalResizeRequest,
+          logicalWindowAfterResize,
+          cssClientSizeAfterResize,
           resizedDrawable: [Module._VV124F_Resized_Width(), Module._VV124F_Resized_Height()],
+          expectedDprDrawable,
+          physicalDrawableConsistent,
+          canvasBackingStoreAfterResize,
+          rendererResizeSize,
+          rendererResizeUsedActualDrawable,
+          logicalResizeObserved,
           renderer: UTF8ToString(Module._VV124F_Renderer_Name()),
           resizeSucceeded,
           runtimeErrors,
@@ -123,9 +147,30 @@
           if (callbackReturned === resizeCallback) {
             presentAtResize = Module._VV124F_Present_Count();
             heartbeatAtResize = heartbeat;
+            dprAtResize = window.devicePixelRatio || 1;
             resizeSucceeded = Module._VV124F_Resize(800, 600) === 1;
-            if (!resizeSucceeded) {
-              complete('failed', { failure: 'SDL drawable resize did not reach 800x600' });
+            logicalWindowAfterResize = [Module._VV124F_Resized_Window_Width(), Module._VV124F_Resized_Window_Height()];
+            physicalDrawableAfterResize = [Module._VV124F_Resized_Width(), Module._VV124F_Resized_Height()];
+            expectedDprDrawable = [
+              Math.round(logicalResizeRequest[0] * dprAtResize),
+              Math.round(logicalResizeRequest[1] * dprAtResize)
+            ];
+            const canvas = document.getElementById('canvas');
+            const rect = canvas.getBoundingClientRect();
+            cssClientSizeAfterResize = [rect.width, rect.height];
+            canvasBackingStoreAfterResize = [canvas.width, canvas.height];
+            rendererResizeSize = [Module._VV124F_Backend_Resize_Width(), Module._VV124F_Backend_Resize_Height()];
+            logicalResizeObserved = resizeSucceeded
+              && logicalWindowAfterResize[0] === logicalResizeRequest[0]
+              && logicalWindowAfterResize[1] === logicalResizeRequest[1];
+            physicalDrawableConsistent = physicalDrawableAfterResize[0] === expectedDprDrawable[0]
+              && physicalDrawableAfterResize[1] === expectedDprDrawable[1]
+              && canvasBackingStoreAfterResize[0] === physicalDrawableAfterResize[0]
+              && canvasBackingStoreAfterResize[1] === physicalDrawableAfterResize[1];
+            rendererResizeUsedActualDrawable = rendererResizeSize[0] === physicalDrawableAfterResize[0]
+              && rendererResizeSize[1] === physicalDrawableAfterResize[1];
+            if (!logicalResizeObserved || !physicalDrawableConsistent || !rendererResizeUsedActualDrawable) {
+              complete('failed', { failure: 'DPI-aware logical/drawable/renderer resize checks failed' });
               return;
             }
           }
@@ -135,11 +180,12 @@
             const passed = callbackStarted === targetCallbacks
               && callbackReturned === targetCallbacks
               && Module._VV124F_Present_Count() === targetCallbacks
-              && heartbeat > 0
+              && heartbeatAtResize > heartbeatAtFirstCallback
               && heartbeatAtLastCallback > heartbeatAtResize
-              && Module._VV124F_Resized_Width() === 800
-              && Module._VV124F_Resized_Height() === 600
-              && Module._VV124F_Present_Count() > presentAtResize
+              && logicalResizeObserved
+              && physicalDrawableConsistent
+              && rendererResizeUsedActualDrawable
+              && Module._VV124F_Present_Count() - presentAtResize >= 210
               && runtimeErrors.length === 0
               && capturedConsole.length === 0;
             complete(passed ? 'passed' : 'failed', passed ? {} : { failure: 'proof gate assertion failed' });

@@ -29,7 +29,7 @@ target_link_libraries(OpenTSWebGLCanvasProof PRIVATE
 
 target_link_options(OpenTSWebGLCanvasProof PRIVATE
     "-sNO_EXIT_RUNTIME=1"
-    "-sEXPORTED_FUNCTIONS=_main,_VV124F_Begin,_VV124F_Frame,_VV124F_Resize,_VV124F_Present_Count,_VV124F_Initial_Width,_VV124F_Initial_Height,_VV124F_Resized_Width,_VV124F_Resized_Height,_VV124F_Renderer_Name,_VV124F_Finish"
+    "-sEXPORTED_FUNCTIONS=_main,_VV124F_Begin,_VV124F_Frame,_VV124F_Resize,_VV124F_Present_Count,_VV124F_Initial_Width,_VV124F_Initial_Height,_VV124F_Resized_Width,_VV124F_Resized_Height,_VV124F_Initial_Window_Width,_VV124F_Initial_Window_Height,_VV124F_Resized_Window_Width,_VV124F_Resized_Window_Height,_VV124F_Backend_Resize_Width,_VV124F_Backend_Resize_Height,_VV124F_Renderer_Name,_VV124F_Finish"
     "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/shell.html"
 )
 

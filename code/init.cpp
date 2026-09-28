@@ -60,6 +60,8 @@
 
 #ifdef __EMSCRIPTEN__
 extern "C" void OpenTS_Browser_Startup_Reach_OwnerData_Boundary(void);
+extern "C" int OpenTS_124H_Storage_Is_Ready(void);
+extern "C" int OpenTS_124H_AtOwnerDataBoundary(void);
 #endif
 
 #include "_bench.h"
@@ -2641,7 +2643,13 @@ static bool Bootstrap(void)
 	Mono_Clear_Screen();
 
 #ifdef __EMSCRIPTEN__
+	if (!OpenTS_124H_Storage_Is_Ready()) {
+		return(false);
+	}
 	OpenTS_Browser_Startup_Reach_OwnerData_Boundary();
+	if (!OpenTS_124H_AtOwnerDataBoundary()) {
+		return(false);
+	}
 	return(false);
 #endif
 

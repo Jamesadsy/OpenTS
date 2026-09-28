@@ -12,8 +12,14 @@ HWND _Window = nullptr;
 uint32_t _PresentCount = 0;
 int _InitialWidth = 0;
 int _InitialHeight = 0;
+int _InitialWindowWidth = 0;
+int _InitialWindowHeight = 0;
 int _ResizedWidth = 0;
 int _ResizedHeight = 0;
+int _ResizedWindowWidth = 0;
+int _ResizedWindowHeight = 0;
+int _BackendResizeWidth = 0;
+int _BackendResizeHeight = 0;
 bool _Ready = false;
 
 bool Drawable_Size(int & width, int & height)
@@ -25,6 +31,17 @@ bool Drawable_Size(int & width, int & height)
 
 	width = client.right - client.left;
 	height = client.bottom - client.top;
+	return(width > 0 && height > 0);
+}
+
+bool Window_Size(int & width, int & height)
+{
+	Win32Window * const window = Win32_Lookup(_Window);
+	if (window == nullptr || window->Handle == nullptr
+		|| !SDL_GetWindowSize(window->Handle, &width, &height)) {
+		return(false);
+	}
+
 	return(width > 0 && height > 0);
 }
 
@@ -55,7 +72,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Begin(void)
 	}
 
 	ShowWindow(_Window, SW_SHOW);
-	if (!Drawable_Size(_InitialWidth, _InitialHeight)) {
+	if (!Window_Size(_InitialWindowWidth, _InitialWindowHeight)
+		|| !Drawable_Size(_InitialWidth, _InitialHeight)) {
 		DestroyWindow(_Window);
 		_Window = nullptr;
 		SDL_Quit();
@@ -115,12 +133,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Resize(int width, int height)
 
 	SDL_SetWindowSize(window->Handle, width, height);
 	SDL_PumpEvents();
-	if (!Drawable_Size(_ResizedWidth, _ResizedHeight)) {
+	if (!Window_Size(_ResizedWindowWidth, _ResizedWindowHeight)
+		|| !Drawable_Size(_ResizedWidth, _ResizedHeight)) {
 		return(0);
 	}
 
-	Backend_On_Resize(_ResizedWidth, _ResizedHeight);
-	return(_ResizedWidth == width && _ResizedHeight == height ? 1 : 0);
+	_BackendResizeWidth = _ResizedWidth;
+	_BackendResizeHeight = _ResizedHeight;
+	Backend_On_Resize(_BackendResizeWidth, _BackendResizeHeight);
+	return(_ResizedWindowWidth == width && _ResizedWindowHeight == height ? 1 : 0);
 }
 
 
@@ -151,6 +172,42 @@ extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Resized_Width(void)
 extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Resized_Height(void)
 {
 	return(_ResizedHeight);
+}
+
+
+extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Initial_Window_Width(void)
+{
+	return(_InitialWindowWidth);
+}
+
+
+extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Initial_Window_Height(void)
+{
+	return(_InitialWindowHeight);
+}
+
+
+extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Resized_Window_Width(void)
+{
+	return(_ResizedWindowWidth);
+}
+
+
+extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Resized_Window_Height(void)
+{
+	return(_ResizedWindowHeight);
+}
+
+
+extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Backend_Resize_Width(void)
+{
+	return(_BackendResizeWidth);
+}
+
+
+extern "C" EMSCRIPTEN_KEEPALIVE int VV124F_Backend_Resize_Height(void)
+{
+	return(_BackendResizeHeight);
 }
 
 

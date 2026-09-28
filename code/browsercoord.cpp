@@ -97,6 +97,16 @@ OpenTS_Browser::BrowserProcessOperations ProductionOperations()
 	operations.Finish = &FinishStartup;
 	return(operations);
 }
+
+StartupAction StorageProofFault(void *)
+{
+	return(StartupAction::Fault);
+}
+
+void StorageProofFinish(void * context)
+{
+	++(*static_cast<int *>(context));
+}
 #endif
 
 struct StepActivityGuard
@@ -346,6 +356,30 @@ extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_OwnerData_Boundary(void)
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Fault_Code(void) { return(Session.FaultCode); }
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Finish_Count(void) { return(FinishCount); }
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_124H_Browser_Fault_Finish_Proof(void)
+{
+#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser::BrowserProcessSession proofSession;
+	int finishCalls = 0;
+	OpenTS_Browser::BrowserProcessOperations operations;
+	operations.Bootstrap = &StorageProofFault;
+	operations.Finish = &StorageProofFinish;
+	operations.Context = &finishCalls;
+	if (!OpenTS_Browser::Begin(proofSession, operations)) return(0);
+	auto const stepResult = OpenTS_Browser::Step(proofSession);
+	int proof = 0;
+	if (stepResult == OpenTS_Browser::CooperativeResult::Fault) proof |= 1;
+	if (OpenTS_Browser::Status(proofSession) == OpenTS_Browser::BrowserProcessPhase::Fault) proof |= 2;
+	if (proofSession.FaultCode == FaultUnexpectedAction) proof |= 4;
+	bool const firstFinish = OpenTS_Browser::Finish(proofSession);
+	bool const repeatedFinish = OpenTS_Browser::Finish(proofSession);
+	if (firstFinish && repeatedFinish && finishCalls == 1) proof |= 8;
+	return(proof);
+#else
+	return(0);
+#endif
+}
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Renderer_Initialized(void)
 {

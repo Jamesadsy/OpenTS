@@ -347,6 +347,11 @@ endif()
 # The browser process coordinator remains callable after the Emscripten entry point returns.
 # The browser owns scheduling; the native process owns startup phases and lifecycle state.
 if(EMSCRIPTEN)
+	set_property(TARGET OpenTS APPEND PROPERTY LINK_DEPENDS
+		"${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.html"
+		"${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.js"
+		"${CMAKE_SOURCE_DIR}/tests/browserstorage/browserstorage.js"
+	)
 	set_target_properties(OpenTS PROPERTIES
 		OUTPUT_NAME OpenTS
 		OUTPUT_NAME_DEBUG OpenTS
@@ -355,8 +360,10 @@ if(EMSCRIPTEN)
     target_link_options(OpenTS PRIVATE
         "-sNO_EXIT_RUNTIME=1"
         "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXPORTED_RUNTIME_METHODS=UTF8ToString"
-        "-sEXPORTED_FUNCTIONS=_main,_OpenTS_Browser_Begin,_OpenTS_Browser_Step,_OpenTS_Browser_Status,_OpenTS_Browser_Finish,_OpenTS_Browser_Begin_Count,_OpenTS_Browser_Begin_Result,_OpenTS_Browser_Main_Returned,_OpenTS_Browser_Main_Entry_Returned,_OpenTS_Browser_Step_Count,_OpenTS_Browser_WaitFocus_Yields,_OpenTS_Browser_MainGame_Began,_OpenTS_Browser_MainGame_Steps,_OpenTS_Browser_Shutdown_Drain_Passes,_OpenTS_Browser_OwnerData_Boundary,_OpenTS_Browser_Fault_Code,_OpenTS_Browser_Finish_Count,_OpenTS_Browser_Renderer_Initialized,_OpenTS_Browser_Renderer_Name,_OpenTS_Browser_Bootstrap_Stage,_OpenTS_Browser_Finish_Stage,_OpenTS_Browser_ProgEnd_Stage"
+        "-sFORCE_FILESYSTEM=1"
+        "-sEXPORTED_RUNTIME_METHODS=UTF8ToString,FS,callMain"
+        "-sEXPORTED_FUNCTIONS=_main,_OpenTS_Browser_Begin,_OpenTS_Browser_Step,_OpenTS_Browser_Status,_OpenTS_Browser_Finish,_OpenTS_Browser_Begin_Count,_OpenTS_Browser_Begin_Result,_OpenTS_Browser_Main_Returned,_OpenTS_Browser_Main_Entry_Returned,_OpenTS_Browser_Step_Count,_OpenTS_Browser_WaitFocus_Yields,_OpenTS_Browser_MainGame_Began,_OpenTS_Browser_MainGame_Steps,_OpenTS_Browser_Shutdown_Drain_Passes,_OpenTS_Browser_OwnerData_Boundary,_OpenTS_Browser_Fault_Code,_OpenTS_Browser_Finish_Count,_OpenTS_124H_Browser_Fault_Finish_Proof,_OpenTS_Browser_Renderer_Initialized,_OpenTS_Browser_Renderer_Name,_OpenTS_Browser_Bootstrap_Stage,_OpenTS_Browser_Finish_Stage,_OpenTS_Browser_ProgEnd_Stage,_OpenTS_124H_Storage_Mark_Ready,_OpenTS_124H_Storage_Is_Ready,_OpenTS_124H_Data_Probe,_OpenTS_124H_AtOwnerDataBoundary,_OpenTS_124H_Data_Root,_OpenTS_124H_Data_Root_Stable,_OpenTS_124H_Data_Probe_Passed,_OpenTS_124H_Boundary_Probe_Passed,_OpenTS_124H_Boundary_Probe_Count,_OpenTS_124H_Root_Entry_Count,_OpenTS_124H_Nested_Entry_Count,_OpenTS_124H_Boundary_Sentinel_Size,_OpenTS_124H_User_Write,_OpenTS_124H_User_Readback_Hex,_OpenTS_124H_User_Readback_Size,_OpenTS_124H_User_Remove"
+        "-lidbfs.js"
     )
     add_custom_command(TARGET OpenTS POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -365,7 +372,16 @@ if(EMSCRIPTEN)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/tests/browserstartup/harness.js"
             "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-proof.js"
-        COMMENT "Staging the bounded 124G browser process proof harness"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.html"
+            "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-storage-proof.html"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.js"
+            "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-storage-proof.js"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/tests/browserstorage/browserstorage.js"
+            "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-storage-runtime.js"
+        COMMENT "Staging the bounded browser process and storage proof harnesses"
         VERBATIM
     )
 endif()
