@@ -37,6 +37,10 @@
 #include "options.h"
 #include "ui/uiabort.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 
 class GameOptionsClass : public OptionsClass {
 	public:
@@ -44,5 +48,7 @@ class GameOptionsClass : public OptionsClass {
 };
 
 UIAbortDialogOutcome Abort_Dialog(void);
+std::unique_ptr<UIFrontendContinuation> Abort_Dialog_Continuation(bool native_blocking_adapter = false);
 int Network_Quality_Text_ID(NetTiming::ConnectionQuality quality);
 void Game_Options_Dialog(void);
+std::unique_ptr<UIFrontendContinuation> Game_Options_Dialog_Continuation(bool native_blocking_adapter = false);

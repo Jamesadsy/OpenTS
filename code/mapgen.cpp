@@ -3256,35 +3256,152 @@ MapGeneratorClass::~MapGeneratorClass(void)
 /// <param name="callback">Progress callback to run while the screen is up.</param>
 /// <returns>Returns with the screen's result -- 1 if the player accepted the map, 2 if the
 /// screen was canceled, and 0 if it could not be opened at all.</returns>
+namespace
+{
+
+class RandomMapDialogContinuation final : public UIFrontendContinuation
+{
+	public:
+		RandomMapDialogContinuation(bool (*callback)(void), bool native_blocking_adapter)
+		{
+			m_Presenter.Open(callback);
+			RMGCallback = callback;
+			RandomMapGen.SeedData.Callback = callback;
+			m_Screen = UI_MapGen_Run_Continuation(m_Presenter, native_blocking_adapter);
+		}
+
+		~RandomMapDialogContinuation(void) override
+		{
+			if (!m_Finished) Finish();
+		}
+
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			using OpenTS_UIModal::UIModalStepResult;
+			if (m_Finished || m_Completed) return(m_LastStep);
+			if (m_Screen == nullptr) {
+				m_Result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+				m_Result.Value = 0;
+				m_Completed = true;
+				Cleanup();
+				m_LastStep = UIModalStepResult::Complete;
+				return(m_LastStep);
+			}
+
+			m_LastStep = m_Screen->Step();
+			if (m_LastStep == UIModalStepResult::Complete || m_LastStep == UIModalStepResult::SessionEnded) {
+				m_Result = m_Screen->Result();
+				m_Result.Value = m_Result.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN ? 0 : m_Result.Value;
+				if (!m_Screen->Finish()) {
+					m_Result.Outcome = UIResult::OUTCOME_SESSION_ENDED;
+					m_LastStep = UIModalStepResult::Fault;
+					return(m_LastStep);
+				}
+				m_Completed = true;
+				Cleanup();
+			}
+			return(m_LastStep);
+		}
+
+		UIResult const & Result(void) const noexcept override
+		{
+			return(m_Completed || m_Finished ? m_Result : m_Screen->Result());
+		}
+
+		bool Finish(void) noexcept override
+		{
+			if (m_Finished) return(true);
+			bool success = true;
+			if (m_Screen != nullptr) {
+				if (!m_Completed) {
+					m_Result = m_Screen->Result();
+					m_Result.Value = m_Result.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN ? 0 : m_Result.Value;
+				}
+				success = m_Screen->Finish();
+				m_Screen.reset();
+			}
+			Cleanup();
+			m_Finished = true;
+			return(success);
+		}
+
+	private:
+		void Cleanup(void) noexcept
+		{
+			if (m_Cleaned) return;
+			m_Cleaned = true;
+			RMGCallback = MapGen_Call_Back;
+			RandomMapGen.SeedData.Callback = NULL;
+			if (RandomMapGen.MapPreview != NULL) {
+				if (RandomMapGen.MapPreview->Get_Preview_Surface() != NULL) {
+					RawFileClass file("RandMap.img");
+					Write_PCX_File(file, *RandomMapGen.MapPreview->Get_Preview_Surface(), &GamePalette);
+				}
+				delete RandomMapGen.MapPreview;
+				RandomMapGen.MapPreview = NULL;
+			}
+			if (RandomMapGen.MapSeeder != NULL) {
+				delete RandomMapGen.MapSeeder;
+				RandomMapGen.MapSeeder = NULL;
+			}
+		}
+
+		UIMapGenPresenterClass m_Presenter;
+		std::unique_ptr<UIFrontendContinuation> m_Screen;
+		UIResult m_Result;
+		OpenTS_UIModal::UIModalStepResult m_LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		bool m_Completed = false;
+		bool m_Cleaned = false;
+		bool m_Finished = false;
+};
+
+} // namespace
+
+
+std::unique_ptr<UIFrontendContinuation> Do_Random_Map_Dialog_Continuation(
+	bool (*callback)(void), bool native_blocking_adapter)
+{
+	if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
+		UIResult result;
+		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+		result.Value = 0;
+		return(std::make_unique<UIImmediateFrontendContinuation>(result));
+	}
+	return(std::make_unique<RandomMapDialogContinuation>(callback, native_blocking_adapter));
+}
+
+
 int Do_Random_Map_Dialog(bool (*callback)())
 {
-	LONG res = 0;
-
-	UIMapGenPresenterClass screen;
-	screen.Open(callback);
-
-	RMGCallback = callback;
-	RandomMapGen.SeedData.Callback = callback;
-	res = UI_MapGen_Run(screen);
-
-	RMGCallback = MapGen_Call_Back;
-	RandomMapGen.SeedData.Callback = NULL;
-
-	if (RandomMapGen.MapPreview != NULL) {
-		if (RandomMapGen.MapPreview->Get_Preview_Surface() != NULL) {
-			RawFileClass file("RandMap.img");
-			Write_PCX_File(file, *RandomMapGen.MapPreview->Get_Preview_Surface(), &GamePalette);
+	if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
+		// The existing lobby caller remains on its native/network path.
+		LONG result = 0;
+		UIMapGenPresenterClass screen;
+		screen.Open(callback);
+		RMGCallback = callback;
+		RandomMapGen.SeedData.Callback = callback;
+		result = UI_MapGen_Run(screen);
+		RMGCallback = MapGen_Call_Back;
+		RandomMapGen.SeedData.Callback = NULL;
+		if (RandomMapGen.MapPreview != NULL) {
+			if (RandomMapGen.MapPreview->Get_Preview_Surface() != NULL) {
+				RawFileClass file("RandMap.img");
+				Write_PCX_File(file, *RandomMapGen.MapPreview->Get_Preview_Surface(), &GamePalette);
+			}
+			delete RandomMapGen.MapPreview;
+			RandomMapGen.MapPreview = NULL;
 		}
-		delete RandomMapGen.MapPreview;
-		RandomMapGen.MapPreview = NULL;
+		if (RandomMapGen.MapSeeder != NULL) {
+			delete RandomMapGen.MapSeeder;
+			RandomMapGen.MapSeeder = NULL;
+		}
+		return(result);
 	}
 
-	if (RandomMapGen.MapSeeder != NULL) {
-		delete RandomMapGen.MapSeeder;
-		RandomMapGen.MapSeeder = NULL;
-	}
-
-	return(res);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		Do_Random_Map_Dialog_Continuation(callback, true);
+	UIResult const result = UI_Run_Frontend_Continuation(*continuation);
+	return(result.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN ? 0 : result.Value);
 }
 
 

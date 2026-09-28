@@ -35,6 +35,9 @@
 
 #include "gamedlg.h"
 
+#include "ui/uifrontendcontinuation.h"
+#include "ui/uigamecontrols.h"
+
 #include "_map.h"
 #include "_tooltip.h"
 #include "cctooltip.h"
@@ -103,14 +106,83 @@ int GameDifficultyNames[OptionsClass::MAX_DIFFICULTY_SETTING] = {
 void GameControlsClass::Dialog(void)
 {
 	DebugString("GameControls: GameSpeed = %d, ScrollRate = %d, Detail = %d\n", Options.GameSpeed, Options.ScrollRate, Options.DetailLevel);
-
-	UIGameControlsPresenterClass screen;
-	screen.Refresh();
-
-	if (UI_Game_Controls_Screen(screen).Outcome != UIResult::OUTCOME_FAILED_TO_OPEN && screen.Commits()) {
-		screen.Apply();
-		Options.Save_Settings();
-	}
+	std::unique_ptr<UIFrontendContinuation> continuation = GameControls_Dialog_Continuation(true);
+	UI_Run_Frontend_Continuation(*continuation);
 
 	DebugString("GameControls: GameSpeed = %d, ScrollRate = %d, Detail = %d\n", Options.GameSpeed, Options.ScrollRate, Options.DetailLevel);
+}
+
+
+namespace
+{
+
+class GameControlsDialogContinuation final : public UIFrontendContinuation
+{
+	public:
+		explicit GameControlsDialogContinuation(bool native_blocking_adapter)
+		{
+			m_Presenter.Refresh();
+			m_Screen = UI_Game_Controls_Screen_Continuation(m_Presenter, native_blocking_adapter);
+		}
+
+		~GameControlsDialogContinuation(void) override
+		{
+			if (!m_Finished) Finish();
+		}
+
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			if (m_Completed || m_Finished) return(m_LastStep);
+			if (m_Screen == nullptr) {
+				m_Result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+				m_Completed = true;
+				m_LastStep = OpenTS_UIModal::UIModalStepResult::Complete;
+				return(m_LastStep);
+			}
+			m_LastStep = m_Screen->Step();
+			if (m_LastStep == OpenTS_UIModal::UIModalStepResult::Complete
+				|| m_LastStep == OpenTS_UIModal::UIModalStepResult::SessionEnded) {
+				m_Result = m_Screen->Result();
+				if (!m_Applied && m_Result.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+					&& m_Presenter.Commits()) {
+					m_Presenter.Apply();
+					Options.Save_Settings();
+					m_Applied = true;
+				}
+				m_Completed = true;
+			}
+			return(m_LastStep);
+		}
+
+		UIResult const & Result(void) const noexcept override { return(m_Result); }
+
+		bool Finish(void) noexcept override
+		{
+			if (m_Finished) return(true);
+			bool success = true;
+			if (m_Screen != nullptr) {
+				if (!m_Completed) m_Result = m_Screen->Result();
+				success = m_Screen->Finish();
+				m_Screen.reset();
+			}
+			m_Finished = true;
+			return(success);
+		}
+
+	private:
+		UIGameControlsPresenterClass m_Presenter;
+		std::unique_ptr<UIFrontendContinuation> m_Screen;
+		UIResult m_Result;
+		OpenTS_UIModal::UIModalStepResult m_LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		bool m_Applied = false;
+		bool m_Completed = false;
+		bool m_Finished = false;
+};
+
+} // namespace
+
+
+std::unique_ptr<UIFrontendContinuation> GameControls_Dialog_Continuation(bool native_blocking_adapter)
+{
+	return(std::make_unique<GameControlsDialogContinuation>(native_blocking_adapter));
 }

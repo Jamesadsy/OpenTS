@@ -13,6 +13,10 @@
 
 #include "isotype.hh"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 class CellClass;
 class MapPreviewClass;
 
@@ -328,6 +332,9 @@ class MapSeedClass : public LoadOptionsClass
 
 	public:
 		MapSeedClass(void);
+		void Set_Load_Style(LoadStyleType style) { Style = style; }
+		void Set_Description_Buffer(char * description) { Description = description; }
+		unsigned int Min_Space_Required(void) const { return(MinSpaceRequired); }
 
 		/*
 		 * Seed file persistence.
@@ -678,6 +685,9 @@ inline bool My_In_Radar(Cell const &cell)
 }
 
 int Do_Random_Map_Dialog(bool (*callback)());
+std::unique_ptr<UIFrontendContinuation> Do_Random_Map_Dialog_Continuation(
+	bool (*callback)(),
+	bool native_blocking_adapter = false);
 
 extern MapRegionClass::CellData *RMGCellData;
 extern unsigned int MapCellStride;

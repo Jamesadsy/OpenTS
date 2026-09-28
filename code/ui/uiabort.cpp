@@ -124,15 +124,16 @@ void AbortViewClass::Bind(Rml::DataModelConstructor & model)
 /// </summary>
 UIResult UI_Abort_Screen(UIAbortPresenterClass & presenter)
 {
-	AbortViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Abort_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Abort_Screen_Continuation(
+	UIAbortPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UITypedFrontendContinuation<UIAbortPresenterClass, AbortViewClass>>(
+		presenter, native_blocking_adapter, nullptr));
 }

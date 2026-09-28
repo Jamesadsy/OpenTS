@@ -147,6 +147,36 @@ void UIScenarioPickPresenterClass::Run_Pending(void)
 }
 
 
+std::unique_ptr<UIFrontendContinuation> UIScenarioPickPresenterClass::Start_Child_Continuation(
+	bool native_blocking_adapter)
+{
+	if (Pending != SUB_RANDOM_MAP) return(nullptr);
+	return(CreateRandomMap_Continuation(native_blocking_adapter));
+}
+
+
+void UIScenarioPickPresenterClass::Complete_Child_Continuation(UIResult const & result)
+{
+	if (Pending != SUB_RANDOM_MAP) return;
+	Pending = SUB_NONE;
+	int const scenario = result.Value;
+	if (scenario == -1) return;
+
+	// Preserve the synchronous native post-result sequence, including its zero result when
+	// the generator was cancelled or could not open.
+	Build_List();
+	Selected = scenario;
+	LastPreviewed = -1;
+	Set_Scenario_Info_From_Index(scenario);
+	if (MultiplayerMapPreview == NULL || MultiplayerMapPreview->Get_Preview_Surface() == NULL) {
+		Rebuild_Network_Map_Preview();
+	}
+	PreviewGeneration++;
+	Session.Options.ScenarioIndex = Original;
+	Set_Scenario_Info_From_Index(Original);
+}
+
+
 void UIScenarioPickPresenterClass::Execute(UIIntent const & intent)
 {
 	if (intent.Action == UI_SCENARIOPICK_SELECT) {
@@ -281,29 +311,36 @@ void ScenarioPickViewClass::Sync(void)
 /// </summary>
 UIResult UI_Scenario_Pick_Screen(UIScenarioPickPresenterClass & presenter)
 {
-	ScenarioPickViewClass view(presenter);
-
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+	if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
+		ScenarioPickViewClass view(presenter);
+		if (!view.Prepare(true)) {
+			UIResult failed;
+			failed.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+			return(failed);
+		}
+		while (!presenter.Result.has_value()) {
+			UI_Run_Modal(presenter, view);
+			if (presenter.Pending == UIScenarioPickPresenterClass::SUB_NONE) break;
+			view.Hide();
+			presenter.Run_Pending();
+			view.Show();
+			view.Sync();
+		}
+		UIResult const result = presenter.Result.value_or(UIResult{});
+		view.Close();
 		return(result);
 	}
 
-	// The map generator draws where this screen is, so the document steps aside for it.
-	while (!presenter.Result.has_value()) {
-		UI_Run_Modal(presenter, view);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Scenario_Pick_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-		if (presenter.Pending == UIScenarioPickPresenterClass::SUB_NONE) {
-			break;
-		}
 
-		view.Hide();
-		presenter.Run_Pending();
-		view.Show();
-		view.Sync();
-	}
-
-	UIResult const result = presenter.Result.value_or(UIResult{});
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Scenario_Pick_Screen_Continuation(
+	UIScenarioPickPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UINestedTypedFrontendContinuation<UIScenarioPickPresenterClass, ScenarioPickViewClass>>(
+		presenter, native_blocking_adapter, nullptr));
 }

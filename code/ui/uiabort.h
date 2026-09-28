@@ -16,6 +16,7 @@
 #pragma once
 
 #include "uiscreen.h"
+#include "uifrontendcontinuation.h"
 
 #include <string>
 
@@ -98,3 +99,6 @@ inline UIAbortDialogOutcome UI_Abort_Dialog_Result(
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller receives an explicit presentation failure.
 UIResult UI_Abort_Screen(UIAbortPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Abort_Screen_Continuation(
+	UIAbortPresenterClass & presenter,
+	bool native_blocking_adapter = false);

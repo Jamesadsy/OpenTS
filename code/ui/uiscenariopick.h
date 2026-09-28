@@ -15,6 +15,7 @@
 #pragma once
 
 #include "uiscreen.h"
+#include "uifrontendcontinuation.h"
 
 #include <string>
 #include <vector>
@@ -31,7 +32,7 @@ inline constexpr char const * UI_SCENARIOPICK_RANDOM = "random";
 inline constexpr char const * UI_MAP_PREVIEW_SURFACE = "mappreview";
 
 
-class UIScenarioPickPresenterClass : public UIPresenterClass
+class UIScenarioPickPresenterClass : public UIPresenterClass, public UIChildContinuationProvider
 {
 	public:
 		// A screen this one opens on top of itself. The map generator draws where this
@@ -42,6 +43,8 @@ class UIScenarioPickPresenterClass : public UIPresenterClass
 		};
 
 		UIScenarioPickPresenterClass(void);
+		std::unique_ptr<UIFrontendContinuation> Start_Child_Continuation(bool native_blocking_adapter) override;
+		void Complete_Child_Continuation(UIResult const & result) override;
 
 		virtual void Execute(UIIntent const & intent) override;
 		virtual void Refresh(void) override;
@@ -85,3 +88,6 @@ class UIScenarioPickPresenterClass : public UIPresenterClass
 
 // Shows the picker through its RmlUi view.
 UIResult UI_Scenario_Pick_Screen(UIScenarioPickPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Scenario_Pick_Screen_Continuation(
+	UIScenarioPickPresenterClass & presenter,
+	bool native_blocking_adapter = false);

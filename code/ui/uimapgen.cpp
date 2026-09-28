@@ -27,16 +27,22 @@
 
 #include "uiinternal.h"
 #include "uimappreview.h"
+#include "uifrontendcontinuation.h"
+#include "uimessagebox.h"
+#include "uisavebrowser.h"
 #include "uirmlview.h"
 #include "uishell.h"
 #include "uisurface.h"
 
 #include "addon.h"
 #include "ccrand.h"
+#include "conquer.h"
 #include "data.h"
 #include "dbgprint.h"
+#include "gamedirs.h"
 #include "init.h"
 #include "language/language.h"
+#include "loaddlg.h"
 #include "mapgen.h"
 #include "preview.h"
 #include "scenario.h"
@@ -361,6 +367,72 @@ void UIMapGenPresenterClass::Run_Pending(void)
 }
 
 
+UIMapGenPresenterClass::UIMapGenPresenterClass(void) = default;
+UIMapGenPresenterClass::~UIMapGenPresenterClass(void) = default;
+
+
+std::unique_ptr<UIFrontendContinuation> UIMapGenPresenterClass::Start_Child_Continuation(
+	bool native_blocking_adapter)
+{
+	ChildPending = Pending;
+	if (ChildPending == PENDING_NONE) return(nullptr);
+
+	MapSeedClass & seed = RandomMapGen.SeedData;
+	UISaveBrowserPresenterClass::StyleType style = UISaveBrowserPresenterClass::STYLE_LOAD;
+	if (ChildPending == PENDING_SAVE) {
+		style = UISaveBrowserPresenterClass::STYLE_SAVE;
+		seed.Set_Load_Style(LoadOptionsClass::SAVE);
+		seed.MapDescription[0] = '\0';
+		seed.Set_Description_Buffer(seed.MapDescription);
+		if (Disk_Space_Available() < seed.Min_Space_Required()) {
+			ChildDiskFull = true;
+			return(UI_Message_Box_Screen_Continuation(Fetch_String(TXT_DISKFULL), 0,
+				Fetch_String(TXT_OK), nullptr, nullptr, nullptr, native_blocking_adapter));
+		}
+	} else if (ChildPending == PENDING_DELETE) {
+		style = UISaveBrowserPresenterClass::STYLE_DELETE;
+		seed.Set_Load_Style(LoadOptionsClass::WWDELETE);
+		seed.Set_Description_Buffer(nullptr);
+	} else {
+		seed.Set_Load_Style(LoadOptionsClass::LOAD);
+		seed.Set_Description_Buffer(nullptr);
+	}
+	seed.State = LoadOptionsClass::STATE_PENDING;
+	ChildDiskFull = false;
+	ChildSaveBrowser = std::make_unique<UISaveBrowserPresenterClass>(seed, style);
+	ChildSaveBrowser->Refresh();
+	return(UI_Save_Browser_Screen_Continuation(*ChildSaveBrowser, native_blocking_adapter));
+}
+
+
+void UIMapGenPresenterClass::Complete_Child_Continuation(UIResult const & result)
+{
+	bool const accepted = result.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+		&& ChildSaveBrowser != nullptr && ChildSaveBrowser->Accepted();
+	if (ChildSaveBrowser != nullptr) {
+		RandomMapGen.SeedData.State = accepted ? LoadOptionsClass::STATE_OK : LoadOptionsClass::STATE_CLOSE;
+	}
+
+	if (ChildDiskFull) {
+		Refresh_File_Buttons();
+	} else if (ChildPending == PENDING_LOAD) {
+		if (accepted) {
+			Refresh();
+			Queue(UIIntent{UI_MAPGEN_PREVIEW, "", 0});
+		} else {
+			Refresh();
+		}
+	} else if (ChildPending == PENDING_SAVE || ChildPending == PENDING_DELETE) {
+		Refresh_File_Buttons();
+	}
+
+	Pending = PENDING_NONE;
+	ChildPending = PENDING_NONE;
+	ChildSaveBrowser.reset();
+	ChildDiskFull = false;
+}
+
+
 /// <summary>
 /// Writes the view-model back into the generator's settings, so that whatever the player
 /// has dialed in becomes the seed the generator works from.
@@ -548,6 +620,8 @@ namespace {
 
 			void Attach_Preview(void);
 			void Release_Preview(void);
+			void Begin_Lifetime(void);
+			void End_Lifetime(void);
 
 		private:
 			void Rebuild_Rows(void);
@@ -771,6 +845,24 @@ namespace {
 
 	MapGenViewClass * _View = NULL;
 
+
+	void MapGenViewClass::Begin_Lifetime(void)
+	{
+		_View = this;
+		_MapGenScreen = &Screen;
+		Attach_Preview();
+		Arm_Ranges();
+		Sync();
+	}
+
+
+	void MapGenViewClass::End_Lifetime(void)
+	{
+		Release_Preview();
+		if (_MapGenScreen == &Screen) _MapGenScreen = NULL;
+		if (_View == this) _View = NULL;
+	}
+
 }	// namespace
 
 
@@ -794,6 +886,17 @@ void UI_MapGen_Preview_Changed(void)
 /// <returns>What Do_Random_Map_Dialog reports: 1 accepted, 2 cancelled, 0 not shown.</returns>
 int UI_MapGen_Run(UIMapGenPresenterClass & presenter)
 {
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_MapGen_Run_Continuation(presenter, true);
+	UIResult const result = UI_Run_Frontend_Continuation(*continuation);
+	return(result.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN ? 0 : result.Value);
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UI_MapGen_Run_Continuation(
+	UIMapGenPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
 	char const * document = "mapgen.rml";
 	if (presenter.Variant == UIMapGenPresenterClass::VARIANT_WDT) {
 		document = "mapgenwdt.rml";
@@ -801,39 +904,9 @@ int UI_MapGen_Run(UIMapGenPresenterClass & presenter)
 		document = "mapgenfs.rml";
 	}
 
-	MapGenViewClass * const view = new MapGenViewClass(presenter, document);
-	if (!view->Prepare(true)) {
-		delete view;
-		return(0);
-	}
-
-	_View = view;
-	_MapGenScreen = &presenter;
-
-	view->Attach_Preview();
-	view->Arm_Ranges();
-	view->Sync();
-
-	while (!presenter.Result.has_value()) {
-		UI_Run_Modal(presenter, *view);
-
-		if (!presenter.Suspends()) {
-			break;
-		}
-
-		// A browser draws where this screen is, so the document steps aside for it.
-		view->Hide();
-		presenter.Run_Pending();
-		view->Show();
-		view->Sync();
-	}
-
-	view->Release_Preview();
-	view->Close();
-
-	_MapGenScreen = NULL;
-	_View = NULL;
-	delete view;
-
-	return(presenter.Result.has_value() ? presenter.Result->Value : UIMapGenPresenterClass::ANSWER_CANCELLED);
+	auto continuation = std::make_unique<UINestedTypedFrontendContinuation<UIMapGenPresenterClass, MapGenViewClass>>(
+		presenter, native_blocking_adapter,
+		[](MapGenViewClass & view) { view.Begin_Lifetime(); }, document);
+	continuation->SetFinishView([](MapGenViewClass & view) { view.End_Lifetime(); });
+	return(continuation);
 }

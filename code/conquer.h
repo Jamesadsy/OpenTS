@@ -21,6 +21,9 @@
 #include "theater.hh"
 #include "vq.hh"
 
+#include <cstdint>
+#include <memory>
+
 class TechnoTypeClass;
 class Cell;
 
@@ -49,6 +52,45 @@ unsigned int Disk_Space_Available(void);
 void Emergency_Exit(void);
 
 void Main_Game(int argc, char * argv[]);
+
+enum class IngameMenuPhase : std::uint8_t {
+	Idle,
+	Gate,
+	Pause,
+	Dispatch,
+	ChildActive,
+	ApplyChildResult,
+	Resume,
+	Complete,
+	Fault,
+};
+
+enum class IngameMenuStepResult : std::uint8_t {
+	Active,
+	Waiting,
+	Complete,
+	Fault,
+};
+
+// Persistent native owner for one SpecialDialog chain. Callers retain it across Steps and
+// finish only after the chain has reached SDLG_NONE.
+class IngameMenuSession
+{
+	public:
+		IngameMenuSession(void);
+		~IngameMenuSession(void);
+		IngameMenuSession(IngameMenuSession const &) = delete;
+		IngameMenuSession & operator=(IngameMenuSession const &) = delete;
+
+		void Begin(bool native_blocking_adapter = false);
+		IngameMenuStepResult Step(void) noexcept;
+		bool Finish(void) noexcept;
+		IngameMenuPhase Phase(void) const noexcept;
+
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> m_Impl;
+};
 
 void Special_Dialog(void);
 

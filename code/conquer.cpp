@@ -115,6 +115,11 @@
 #include "scenario.h"
 #include "session.h"
 #include "ui/uishell.h"
+#include "ui/uifrontendcontinuation.h"
+#include "ui/uigameoptions.h"
+#include "ui/uikeyboard.h"
+#include "ui/uimessagebox.h"
+#include "ui/uisound.h"
 #include "sidebar.h"
 #include "sounddlg.h"
 #include "stats.h"
@@ -328,6 +333,333 @@ void Ingame_Menu_Dialog(void)
 
 		Resume_Scenario();
 	}
+}
+
+
+struct IngameMenuSession::Impl
+{
+	enum class ChildType : std::uint8_t {
+		None,
+		Options,
+		Settings,
+		Sound,
+		Keyboard,
+		Abort,
+		Surrender,
+		QuickloadError,
+	};
+
+	IngameMenuPhase Phase = IngameMenuPhase::Idle;
+	ChildType ActiveChild = ChildType::None;
+	std::unique_ptr<UIFrontendContinuation> Child;
+	UISoundPresenterClass SoundPresenter;
+	UIKeyboardPresenterClass KeyboardPresenter;
+	UIResult ChildResult;
+	UIAbortDialogOutcome AbortOutcome = UIAbortDialogOutcome::PRESENTATION_FAILURE;
+	bool NativeBlockingAdapter = false;
+	bool PauseOwned = false;
+	bool ResumeOwned = false;
+	bool SurrenderAllowed = false;
+	bool Finished = false;
+};
+
+
+IngameMenuSession::IngameMenuSession(void) : m_Impl(std::make_unique<Impl>())
+{
+}
+
+
+IngameMenuSession::~IngameMenuSession(void)
+{
+	if (m_Impl != nullptr && !m_Impl->Finished) Finish();
+}
+
+
+void IngameMenuSession::Begin(bool native_blocking_adapter)
+{
+	if (m_Impl->Child != nullptr) {
+		m_Impl->Child->Finish();
+		m_Impl->Child.reset();
+	}
+	m_Impl->Phase = IngameMenuPhase::Gate;
+	m_Impl->ActiveChild = Impl::ChildType::None;
+	m_Impl->ChildResult = UIResult{};
+	m_Impl->AbortOutcome = UIAbortDialogOutcome::PRESENTATION_FAILURE;
+	m_Impl->NativeBlockingAdapter = native_blocking_adapter;
+	m_Impl->PauseOwned = false;
+	m_Impl->ResumeOwned = false;
+	m_Impl->SurrenderAllowed = false;
+	m_Impl->Finished = false;
+}
+
+
+IngameMenuPhase IngameMenuSession::Phase(void) const noexcept
+{
+	return(m_Impl->Phase);
+}
+
+
+IngameMenuStepResult IngameMenuSession::Step(void) noexcept
+{
+	using Result = IngameMenuStepResult;
+	if (m_Impl->Finished) return(m_Impl->Phase == IngameMenuPhase::Complete ? Result::Complete : Result::Fault);
+
+	switch (m_Impl->Phase) {
+		case IngameMenuPhase::Idle:
+			m_Impl->Phase = IngameMenuPhase::Fault;
+			return(Result::Fault);
+
+		case IngameMenuPhase::Gate:
+			if (SpecialDialog == SDLG_NONE) {
+				m_Impl->Phase = IngameMenuPhase::Complete;
+				return(Result::Complete);
+			}
+			// This cooperative child chain is the accepted local-game tranche. Network
+			// modal service remains on the existing native Ingame_Menu_Dialog path.
+			if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH) {
+				m_Impl->Phase = IngameMenuPhase::Fault;
+				return(Result::Fault);
+			}
+			if (Session.Type == GAME_SKIRMISH) {
+				if (PlayerPtr->IsToLose || PlayerPtr->IsToWin || PlayerPtr->IsToDie) {
+					SpecialDialog = SDLG_NONE;
+					m_Impl->Phase = IngameMenuPhase::Complete;
+					return(Result::Complete);
+				}
+				if (!_special_dialog_flag) {
+					if (PlayerPtr->IsDefeated) {
+						_special_dialog_flag = true;
+					} else {
+						SpecialDialog = SDLG_NONE;
+						m_Impl->Phase = IngameMenuPhase::Complete;
+						return(Result::Complete);
+					}
+				}
+			}
+			m_Impl->Phase = IngameMenuPhase::Pause;
+			return(Result::Waiting);
+
+		case IngameMenuPhase::Pause:
+			if (!m_Impl->PauseOwned) {
+				Pause_Scenario();
+				m_Impl->PauseOwned = true;
+			}
+			m_Impl->Phase = IngameMenuPhase::Dispatch;
+			return(Result::Waiting);
+
+		case IngameMenuPhase::Dispatch:
+			if (SpecialDialog == SDLG_NONE) {
+				m_Impl->Phase = IngameMenuPhase::Resume;
+				return(Result::Waiting);
+			}
+			switch (SpecialDialog) {
+				case SDLG_OPTIONS:
+					m_Impl->ActiveChild = Impl::ChildType::Options;
+					m_Impl->Child = Game_Options_Dialog_Continuation(m_Impl->NativeBlockingAdapter);
+					break;
+
+				case SDLG_SETTINGS:
+					m_Impl->ActiveChild = Impl::ChildType::Settings;
+					m_Impl->Child = GameControls_Dialog_Continuation(m_Impl->NativeBlockingAdapter);
+					break;
+
+				case SDLG_SOUND:
+					m_Impl->SoundPresenter.Result.reset();
+					m_Impl->SoundPresenter.IsClosing = false;
+					m_Impl->SoundPresenter.Refresh();
+					m_Impl->ActiveChild = Impl::ChildType::Sound;
+					m_Impl->Child = UI_Sound_Screen_Continuation(
+						m_Impl->SoundPresenter, m_Impl->NativeBlockingAdapter);
+					break;
+
+				case SDLG_KEYBOARD:
+					m_Impl->KeyboardPresenter.Result.reset();
+					m_Impl->KeyboardPresenter.IsClosing = false;
+					m_Impl->KeyboardPresenter.Choice = UIKeyboardPresenterClass::CHOICE_NONE;
+					m_Impl->KeyboardPresenter.Refresh();
+					m_Impl->ActiveChild = Impl::ChildType::Keyboard;
+					m_Impl->Child = UI_Keyboard_Screen_Continuation(
+						m_Impl->KeyboardPresenter, m_Impl->NativeBlockingAdapter);
+					break;
+
+				case SDLG_ABORT:
+					m_Impl->ActiveChild = Impl::ChildType::Abort;
+					m_Impl->Child = Abort_Dialog_Continuation(m_Impl->NativeBlockingAdapter);
+					break;
+
+				case SDLG_SURRENDER:
+					m_Impl->SurrenderAllowed = !PlayerPtr->IsDefeated && !PlayerPtr->IsToWin
+						&& !PlayerPtr->IsToLose && !PlayerPtr->IsToDie;
+					m_Impl->ActiveChild = Impl::ChildType::Surrender;
+					m_Impl->Child = UI_Message_Box_Screen_Continuation(
+						Fetch_String(TXT_SURRENDER), 1, Fetch_String(TXT_OK), Fetch_String(TXT_CANCEL),
+						nullptr, nullptr, m_Impl->NativeBlockingAdapter);
+					break;
+
+				case SDLG_QUICKLOAD: {
+					AutosaveClass::KindType const kind = Session.Type == GAME_NORMAL
+						? AutosaveClass::KindType::Campaign : AutosaveClass::KindType::Skirmish;
+					if (LoadOptionsClass().Load_File(Quick_Save_File_Name(kind).c_str())) {
+						Keyboard->Clear();
+						IgnoreInput = Scen->IsInputLocked;
+						if (!MouseCursor->Is_Hidden() && Scen->IsInputLocked) Hide_Mouse();
+						else if (MouseCursor->Is_Hidden() && !Scen->IsInputLocked) Show_Mouse();
+						Map.Flag_To_Redraw(GS_REDRAW_ALL);
+						SpecialDialog = SDLG_NONE;
+						m_Impl->ActiveChild = Impl::ChildType::None;
+						return(Result::Waiting);
+					}
+					m_Impl->ActiveChild = Impl::ChildType::QuickloadError;
+					m_Impl->Child = UI_Message_Box_Screen_Continuation(
+						Fetch_String(TXT_ERROR_LOADING_GAME), 0, Fetch_String(TXT_OK), nullptr,
+						nullptr, nullptr, m_Impl->NativeBlockingAdapter);
+					break;
+				}
+
+				case SDLG_LOAD:
+				default:
+					// SDLG_LOAD is a network-only caller and remains on the native path.
+					m_Impl->Phase = IngameMenuPhase::Fault;
+					return(Result::Fault);
+			}
+			if (m_Impl->Child == nullptr) {
+				m_Impl->Phase = IngameMenuPhase::Fault;
+				return(Result::Fault);
+			}
+			m_Impl->Phase = IngameMenuPhase::ChildActive;
+			return(Result::Waiting);
+
+		case IngameMenuPhase::ChildActive: {
+			if (m_Impl->Child == nullptr) {
+				m_Impl->Phase = IngameMenuPhase::Fault;
+				return(Result::Fault);
+			}
+			OpenTS_UIModal::UIModalStepResult const step = m_Impl->Child->Step();
+			if (step == OpenTS_UIModal::UIModalStepResult::Active
+				|| step == OpenTS_UIModal::UIModalStepResult::Waiting
+				|| step == OpenTS_UIModal::UIModalStepResult::Suspended) {
+				return(Result::Waiting);
+			}
+			m_Impl->ChildResult = m_Impl->Child->Result();
+			if (!m_Impl->Child->Finish()) {
+				m_Impl->Phase = IngameMenuPhase::Fault;
+				return(Result::Fault);
+			}
+			m_Impl->Child.reset();
+			if (step == OpenTS_UIModal::UIModalStepResult::Fault) {
+				m_Impl->Phase = IngameMenuPhase::Fault;
+				return(Result::Fault);
+			}
+			if (m_Impl->ActiveChild == Impl::ChildType::Abort) {
+				m_Impl->AbortOutcome = (UIAbortDialogOutcome)m_Impl->ChildResult.Value;
+			}
+			m_Impl->Phase = IngameMenuPhase::ApplyChildResult;
+			return(Result::Waiting);
+		}
+
+		case IngameMenuPhase::ApplyChildResult:
+			switch (m_Impl->ActiveChild) {
+				case Impl::ChildType::Options:
+					if (SpecialDialog == SDLG_OPTIONS) SpecialDialog = SDLG_NONE;
+					break;
+
+				case Impl::ChildType::Settings:
+					if (SpecialDialog == SDLG_SETTINGS) SpecialDialog = SDLG_OPTIONS;
+					break;
+
+				case Impl::ChildType::Sound:
+				case Impl::ChildType::Keyboard:
+					SpecialDialog = SDLG_SETTINGS;
+					break;
+
+				case Impl::ChildType::Abort:
+					switch (m_Impl->AbortOutcome) {
+						case UIAbortDialogOutcome::QUIT:
+							Queue_Exit();
+							SpecialDialog = SDLG_NONE;
+							break;
+						case UIAbortDialogOutcome::CANCEL:
+							SpecialDialog = SDLG_NONE;
+							break;
+						case UIAbortDialogOutcome::RESTART_OR_SURRENDER:
+							if (Session.Type == GAME_NORMAL) {
+								PlayerRestarts = true;
+							} else {
+								OutList.push_back(EventClass(PlayerPtr->HeapID, EventClass::DESTRUCT));
+								_special_dialog_flag = false;
+							}
+							SpecialDialog = SDLG_NONE;
+							break;
+						case UIAbortDialogOutcome::PRESENTATION_FAILURE:
+							DebugString("[UI] Abort presentation failed to open; returning to options.\n");
+							SpecialDialog = SDLG_OPTIONS;
+							break;
+					}
+					break;
+
+				case Impl::ChildType::Surrender:
+					if (m_Impl->SurrenderAllowed && m_Impl->ChildResult.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+						&& m_Impl->ChildResult.Outcome != UIResult::OUTCOME_SESSION_ENDED
+						&& m_Impl->ChildResult.Value == 0) {
+						PlayerPtr->Flag_To_Lose();
+					}
+					SpecialDialog = SDLG_NONE;
+					break;
+
+				case Impl::ChildType::QuickloadError:
+					SpecialDialog = SDLG_OPTIONS;
+					break;
+
+				case Impl::ChildType::None:
+					m_Impl->Phase = IngameMenuPhase::Fault;
+					return(Result::Fault);
+			}
+			m_Impl->ActiveChild = Impl::ChildType::None;
+			m_Impl->Phase = SpecialDialog == SDLG_NONE ? IngameMenuPhase::Resume : IngameMenuPhase::Dispatch;
+			return(Result::Waiting);
+
+		case IngameMenuPhase::Resume:
+			if (m_Impl->PauseOwned && !m_Impl->ResumeOwned && SpecialDialog == SDLG_NONE) {
+				Resume_Scenario();
+				m_Impl->ResumeOwned = true;
+			}
+			if (m_Impl->PauseOwned && !m_Impl->ResumeOwned) {
+				m_Impl->Phase = IngameMenuPhase::Fault;
+				return(Result::Fault);
+			}
+			m_Impl->Phase = IngameMenuPhase::Complete;
+			return(Result::Complete);
+
+		case IngameMenuPhase::Complete:
+			return(Result::Complete);
+
+		case IngameMenuPhase::Fault:
+			return(Result::Fault);
+	}
+
+	m_Impl->Phase = IngameMenuPhase::Fault;
+	return(Result::Fault);
+}
+
+
+bool IngameMenuSession::Finish(void) noexcept
+{
+	if (m_Impl->Finished) return(true);
+	bool success = true;
+	if (m_Impl->Child != nullptr) {
+		success = m_Impl->Child->Finish();
+		m_Impl->Child.reset();
+	}
+	if (m_Impl->PauseOwned && !m_Impl->ResumeOwned) {
+		if (SpecialDialog == SDLG_NONE) {
+			Resume_Scenario();
+			m_Impl->ResumeOwned = true;
+		} else {
+			success = false;
+		}
+	}
+	m_Impl->Finished = true;
+	return(success);
 }
 
 

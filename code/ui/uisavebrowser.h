@@ -16,7 +16,9 @@
 #pragma once
 
 #include "uiscreen.h"
+#include "uifrontendcontinuation.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -30,7 +32,7 @@ inline constexpr char const * UI_SAVEBROWSER_ACCEPT = "accept";
 inline constexpr char const * UI_SAVEBROWSER_CANCEL = "cancel";
 
 
-class UISaveBrowserPresenterClass : public UIPresenterClass
+class UISaveBrowserPresenterClass : public UIPresenterClass, public UIChildContinuationProvider
 {
 	public:
 		enum StyleType {
@@ -45,7 +47,10 @@ class UISaveBrowserPresenterClass : public UIPresenterClass
 		enum SubScreenType {
 			SUB_NONE,
 			SUB_LOAD,
+			SUB_PROMPT,
 		};
+
+		~UISaveBrowserPresenterClass(void) override;
 
 		struct EntryType
 		{
@@ -82,6 +87,8 @@ class UISaveBrowserPresenterClass : public UIPresenterClass
 		// Runs the sub-screen an executed intent asked for and clears the request. Safe to
 		// call with nothing pending.
 		void Run_Pending(void);
+		std::unique_ptr<UIFrontendContinuation> Start_Child_Continuation(bool native_blocking_adapter) override;
+		void Complete_Child_Continuation(UIResult const & result) override;
 
 		// Did the player go through with the operation? This is what the callers read.
 		bool Accepted(void) const { return(Outcome); }
@@ -117,15 +124,38 @@ class UISaveBrowserPresenterClass : public UIPresenterClass
 		bool SelectionChanged = false;
 
 	private:
+		enum ChildActionType {
+			CHILD_NONE,
+			CHILD_LOAD,
+			CHILD_LOAD_ERROR,
+			CHILD_EMPTY_DESCRIPTION,
+			CHILD_OVERWRITE_CONFIRM,
+			CHILD_SAVE_WRITE,
+			CHILD_SAVE_ERROR,
+			CHILD_SAVE_CONFIRMATION,
+			CHILD_DELETE_CONFIRM,
+			CHILD_DELETE_WRITE,
+		};
+
 		void Accept(void);
 		void Finish(bool accepted);
 		void Select_Row(int row, bool focus_description);
+		bool Save_Selected(void);
+		std::unique_ptr<UIFrontendContinuation> Message_Continuation(int message, int defresponse,
+			int button1, int button2, bool native_blocking_adapter);
 
 		LoadOptionsClass & Options;
 		bool Outcome = false;
+		ChildActionType ChildAction = CHILD_NONE;
+		std::string TargetFilename;
+		std::string DeletePrompt;
+		int SaveConfirmation = -1;
 };
 
 
 // Shows the browser through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Save_Browser_Screen(UISaveBrowserPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Save_Browser_Screen_Continuation(
+	UISaveBrowserPresenterClass & presenter,
+	bool native_blocking_adapter = false);

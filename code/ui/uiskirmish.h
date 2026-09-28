@@ -14,6 +14,7 @@
 #pragma once
 
 #include "uiscreen.h"
+#include "uifrontendcontinuation.h"
 
 #include <string>
 #include <vector>
@@ -50,7 +51,7 @@ inline constexpr char const * UI_SKIRMISH_SHORTGAME = "shortgame";
 inline constexpr char const * UI_SKIRMISH_ENGINEER = "engineer";
 
 
-class UISkirmishPresenterClass : public UIPresenterClass
+class UISkirmishPresenterClass : public UIPresenterClass, public UIChildContinuationProvider
 {
 	public:
 		// A screen this one opens on top of itself.
@@ -80,6 +81,8 @@ class UISkirmishPresenterClass : public UIPresenterClass
 		};
 
 		UISkirmishPresenterClass(void);
+		std::unique_ptr<UIFrontendContinuation> Start_Child_Continuation(bool native_blocking_adapter) override;
+		void Complete_Child_Continuation(UIResult const & result) override;
 
 		virtual void Execute(UIIntent const & intent) override;
 		virtual void Refresh(void) override;
@@ -144,10 +147,15 @@ class UISkirmishPresenterClass : public UIPresenterClass
 	private:
 		void Accept(void);
 		void Read_Identity(void);
+		void Apply_Scenario_Pick(bool picked, int previous);
 
 		bool Outcome = false;
+		int PreviousScenario = 0;
 };
 
 
 // Shows the skirmish screen through its RmlUi view.
 UIResult UI_Skirmish_Screen(UISkirmishPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Skirmish_Screen_Continuation(
+	UISkirmishPresenterClass & presenter,
+	bool native_blocking_adapter = false);

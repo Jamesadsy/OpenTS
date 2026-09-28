@@ -24,11 +24,16 @@
 
 #include "uigameoptions.h"
 
+#include "uifrontendcontinuation.h"
 #include "uirmlview.h"
+#include "uisavebrowser.h"
+#include "uimessagebox.h"
 
 #include "data.h"
 #include "dbgprint.h"
+#include "conquer.h"
 #include "event.h"
+#include "gamedirs.h"
 #include "gamedlg.h"
 #include "globals.h"
 #include "house.h"
@@ -47,6 +52,23 @@
 #include <RmlUi/Core/Input.h>
 
 #include <cstring>
+
+
+UIGameOptionsPresenterClass::UIGameOptionsPresenterClass(void) = default;
+UIGameOptionsPresenterClass::~UIGameOptionsPresenterClass(void) = default;
+
+namespace
+{
+
+class GameOptionsLoadOptionsClass : public LoadOptionsClass
+{
+	public:
+		void Set_Style(LoadStyleType style) { Style = style; }
+		void Set_Description(char * description) { Description = description; }
+		unsigned int Min_Space_Required(void) const { return(MinSpaceRequired); }
+};
+
+} // namespace
 
 
 // The connection quality labels, best first, which is the order the slider counts in.
@@ -234,6 +256,69 @@ void UIGameOptionsPresenterClass::Run_Pending(void)
 }
 
 
+std::unique_ptr<UIFrontendContinuation> UIGameOptionsPresenterClass::Start_Child_Continuation(
+	bool native_blocking_adapter)
+{
+	ChildIsLoad = Pending == SUB_LOAD;
+	ChildIsDiskFull = false;
+	ChildOptions = std::make_unique<GameOptionsLoadOptionsClass>();
+	GameOptionsLoadOptionsClass & child_options = static_cast<GameOptionsLoadOptionsClass &>(*ChildOptions);
+	ChildOptions->State = LoadOptionsClass::STATE_PENDING;
+
+	UISaveBrowserPresenterClass::StyleType style = UISaveBrowserPresenterClass::STYLE_LOAD;
+	if (Pending == SUB_SAVE) {
+		style = UISaveBrowserPresenterClass::STYLE_SAVE;
+		child_options.Set_Style(LoadOptionsClass::SAVE);
+		std::strncpy(ChildDescription, Scen->Description, sizeof(ChildDescription) - 1);
+		ChildDescription[sizeof(ChildDescription) - 1] = '\0';
+		child_options.Set_Description(ChildDescription);
+		if (Disk_Space_Available() < child_options.Min_Space_Required()) {
+			ChildIsDiskFull = true;
+			return(UI_Message_Box_Screen_Continuation(
+				Fetch_String(TXT_DISKFULL), 0, Fetch_String(TXT_OK), nullptr, nullptr, nullptr,
+				native_blocking_adapter));
+		}
+	} else if (Pending == SUB_DELETE) {
+		style = UISaveBrowserPresenterClass::STYLE_DELETE;
+		child_options.Set_Style(LoadOptionsClass::WWDELETE);
+		child_options.Set_Description(nullptr);
+	} else {
+		child_options.Set_Style(LoadOptionsClass::LOAD);
+		child_options.Set_Description(nullptr);
+	}
+
+	ChildSaveBrowser = std::make_unique<UISaveBrowserPresenterClass>(*ChildOptions, style);
+	ChildSaveBrowser->Refresh();
+	return(UI_Save_Browser_Screen_Continuation(*ChildSaveBrowser, native_blocking_adapter));
+}
+
+
+void UIGameOptionsPresenterClass::Complete_Child_Continuation(UIResult const & result)
+{
+	bool const accepted = result.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+		&& ChildSaveBrowser != nullptr && ChildSaveBrowser->Accepted();
+	if (ChildOptions != nullptr) {
+		ChildOptions->State = accepted ? LoadOptionsClass::STATE_OK : LoadOptionsClass::STATE_CLOSE;
+	}
+
+	if (ChildIsDiskFull) {
+		Pending = SUB_NONE;
+		Refresh();
+	} else if (Pending == SUB_LOAD && accepted) {
+		Pending = SUB_NONE;
+		Finish(CHOICE_LOADED, UIResult::OUTCOME_ACCEPTED);
+	} else {
+		Pending = SUB_NONE;
+		Refresh();
+	}
+
+	ChildSaveBrowser.reset();
+	ChildOptions.reset();
+	ChildIsLoad = false;
+	ChildIsDiskFull = false;
+}
+
+
 //---------------------------------------------------------------------------------------
 // The RmlUi view. One document per dialog template, because the three templates differ by
 // which controls exist rather than by how one is arranged.
@@ -364,42 +449,23 @@ void GameOptionsViewClass::Sync(void)
 /// </summary>
 UIResult UI_Game_Options_Screen(UIGameOptionsPresenterClass & presenter)
 {
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Game_Options_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UI_Game_Options_Screen_Continuation(
+	UIGameOptionsPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
 	char const * document = "gameoptionsmp.rml";
 	if (!presenter.IsMultiplayer) {
 		document = "gameoptions.rml";
 	} else if (presenter.HasSliders) {
 		document = "gameoptionswol.rml";
 	}
-
-	GameOptionsViewClass view(presenter, document);
-
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
-
-	view.Settle();
-
-	// A browser this screen opens is a screen of a different kind, so it nests; getting out
-	// of the way of it is hiding this document, which is what the dialog's ShowWindow did.
-	while (!presenter.Result.has_value()) {
-		UI_Run_Modal(presenter, view);
-
-		if (presenter.Pending == UIGameOptionsPresenterClass::SUB_NONE) {
-			break;
-		}
-
-		view.Hide();
-		presenter.Run_Pending();
-		if (presenter.Result.has_value()) {
-			break;
-		}
-		view.Show();
-		view.Sync();
-	}
-
-	UIResult const result = presenter.Result.value_or(UIResult{});
-	view.Close();
-	return(result);
+	return(std::make_unique<UINestedTypedFrontendContinuation<UIGameOptionsPresenterClass, GameOptionsViewClass>>(
+		presenter, native_blocking_adapter,
+		[](GameOptionsViewClass & view) { view.Settle(); }, document));
 }

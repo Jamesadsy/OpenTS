@@ -24,6 +24,8 @@
 #include "uisavebrowser.h"
 #include "savebrowsernavigation.h"
 
+#include "uifrontendcontinuation.h"
+#include "uimessagebox.h"
 #include "uirmlview.h"
 
 #include "addon.h"
@@ -71,6 +73,9 @@ UISaveBrowserPresenterClass::UISaveBrowserPresenterClass(LoadOptionsClass & opti
 	Options(options)
 {
 }
+
+
+UISaveBrowserPresenterClass::~UISaveBrowserPresenterClass(void) = default;
 
 
 /// <summary>
@@ -231,12 +236,13 @@ void UISaveBrowserPresenterClass::Accept(void)
 				Init_Campaigns();
 			}
 			Pending = SUB_LOAD;
+			ChildAction = CHILD_LOAD;
 			break;
 
 		case STYLE_SAVE: {
 			if (Description.empty()) {
-				WWMessageBox().Process(TXT_MUSTENTER_DESCRIPTION, TXT_OK, TXT_NONE, TXT_NONE);
-				FocusDescription = true;
+				Pending = SUB_PROMPT;
+				ChildAction = CHILD_EMPTY_DESCRIPTION;
 				return;
 			}
 
@@ -250,34 +256,19 @@ void UISaveBrowserPresenterClass::Accept(void)
 			}
 			std::string const target = Save_Target_Filename(entry.Valid, entry.Filename, new_filename);
 			filename = target.c_str();
-			AutosaveClass::ProductType const product = Active_Save_Product();
-
 			if (filename == NULL) {
 				return;
 			}
+			TargetFilename = filename;
 
 			// A name the folder already holds is written over, so it is confirmed first.
-			if (Saved_Game_Exists(filename)
-				&& WWMessageBox()._Process(TXT_CONFIRM_SAVE, 1, TXT_YES, TXT_NO, TXT_NONE)) {
-				return;
+			if (Saved_Game_Exists(TargetFilename.c_str())) {
+				Pending = SUB_PROMPT;
+				ChildAction = CHILD_OVERWRITE_CONFIRM;
+			} else {
+				Pending = SUB_PROMPT;
+				ChildAction = CHILD_SAVE_WRITE;
 			}
-
-			if (!Options.Save_File(filename, Description.c_str())) {
-				WWMessageBox().Process(TXT_ERROR_SAVING_GAME, TXT_OK, TXT_NONE, TXT_NONE);
-				return;
-			}
-			SaveManager.Record_Manual_Save(product, target, true);
-
-			int const confirmation = Options.Save_Confirmation();
-			if (confirmation != TXT_NONE) {
-				WWMessageBox().Process(confirmation, TXT_OK, TXT_NONE, TXT_NONE);
-			}
-
-			if (Options.Description != NULL) {
-				strcpy(Options.Description, Description.c_str());
-			}
-
-			Finish(true);
 			break;
 		}
 
@@ -285,19 +276,176 @@ void UISaveBrowserPresenterClass::Accept(void)
 			char buffer[256];
 			sprintf(buffer, "%s\n%s", Fetch_String(TXT_DELETE_FILE_QUERY), entry.Description.c_str());
 
-			if (WWMessageBox()._Process(buffer, 1, TXT_YES, TXT_NO, TXT_NONE)) {
-				return;
-			}
-
-			Options.Delete_File(entry.Filename.c_str());
-			Refresh();
-
-			// The list stays open for another deletion; emptying it leaves the screen.
-			if (Entries.empty()) {
-				Finish(true);
-			}
+			DeletePrompt = buffer;
+			TargetFilename = entry.Filename;
+			Pending = SUB_PROMPT;
+			ChildAction = CHILD_DELETE_CONFIRM;
 			break;
 		}
+	}
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UISaveBrowserPresenterClass::Message_Continuation(
+	int message, int defresponse, int button1, int button2, bool native_blocking_adapter)
+{
+	char const * const first = button1 == TXT_NONE ? nullptr : Fetch_String(button1);
+	char const * const second = button2 == TXT_NONE ? nullptr : Fetch_String(button2);
+	return(UI_Message_Box_Screen_Continuation(
+		Fetch_String(message), defresponse, first, second, nullptr, nullptr, native_blocking_adapter));
+}
+
+
+bool UISaveBrowserPresenterClass::Save_Selected(void)
+{
+	AutosaveClass::ProductType const product = Active_Save_Product();
+	if (!Options.Save_File(TargetFilename.c_str(), Description.c_str())) {
+		ChildAction = CHILD_SAVE_ERROR;
+		return(false);
+	}
+
+	SaveManager.Record_Manual_Save(product, TargetFilename, true);
+	SaveConfirmation = Options.Save_Confirmation();
+	if (Options.Description != NULL) {
+		strcpy(Options.Description, Description.c_str());
+	}
+	if (SaveConfirmation != TXT_NONE) {
+		ChildAction = CHILD_SAVE_CONFIRMATION;
+		return(true);
+	}
+
+	ChildAction = CHILD_NONE;
+	Pending = SUB_NONE;
+	Finish(true);
+	return(true);
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UISaveBrowserPresenterClass::Start_Child_Continuation(
+	bool native_blocking_adapter)
+{
+	switch (ChildAction) {
+		case CHILD_LOAD: {
+			if (Selected < 0 || Selected >= (int)Entries.size()) {
+				ChildAction = CHILD_NONE;
+				Pending = SUB_NONE;
+				return(std::make_unique<UIImmediateFrontendContinuation>(UIResult{}));
+			}
+			TargetFilename = Entries[Selected].Filename;
+			AutosaveClass::ProductType const product = Active_Save_Product();
+			if (!Options.Load_File(TargetFilename.c_str())) {
+				ChildAction = CHILD_LOAD_ERROR;
+				return(Message_Continuation(TXT_ERROR_LOADING_GAME, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+			}
+			SaveManager.Record_Manual_Load(product, TargetFilename, true);
+			ChildAction = CHILD_NONE;
+			Pending = SUB_NONE;
+			Finish(true);
+			{
+				UIResult result;
+				result.Outcome = UIResult::OUTCOME_ACCEPTED;
+				return(std::make_unique<UIImmediateFrontendContinuation>(result));
+			}
+		}
+
+		case CHILD_EMPTY_DESCRIPTION:
+			return(Message_Continuation(TXT_MUSTENTER_DESCRIPTION, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+
+		case CHILD_OVERWRITE_CONFIRM:
+			return(Message_Continuation(TXT_CONFIRM_SAVE, 1, TXT_YES, TXT_NO, native_blocking_adapter));
+
+		case CHILD_SAVE_WRITE:
+			Save_Selected();
+			if (ChildAction == CHILD_SAVE_ERROR) {
+				return(Message_Continuation(TXT_ERROR_SAVING_GAME, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+			}
+			if (ChildAction == CHILD_SAVE_CONFIRMATION) {
+				return(Message_Continuation(SaveConfirmation, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+			}
+			{
+				UIResult result;
+				result.Outcome = UIResult::OUTCOME_ACCEPTED;
+				return(std::make_unique<UIImmediateFrontendContinuation>(result));
+			}
+
+		case CHILD_SAVE_ERROR:
+			return(Message_Continuation(TXT_ERROR_SAVING_GAME, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+
+		case CHILD_SAVE_CONFIRMATION:
+			return(Message_Continuation(SaveConfirmation, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+
+		case CHILD_DELETE_CONFIRM:
+			return(UI_Message_Box_Screen_Continuation(DeletePrompt.c_str(), 1,
+				Fetch_String(TXT_YES), Fetch_String(TXT_NO), nullptr, nullptr, native_blocking_adapter));
+
+		case CHILD_DELETE_WRITE:
+			Options.Delete_File(TargetFilename.c_str());
+			Refresh();
+			Pending = SUB_NONE;
+			ChildAction = CHILD_NONE;
+			if (Entries.empty()) Finish(true);
+			{
+				UIResult result;
+				result.Outcome = UIResult::OUTCOME_ACCEPTED;
+				return(std::make_unique<UIImmediateFrontendContinuation>(result));
+			}
+
+		case CHILD_LOAD_ERROR:
+			return(Message_Continuation(TXT_ERROR_LOADING_GAME, 0, TXT_OK, TXT_NONE, native_blocking_adapter));
+
+		case CHILD_NONE:
+		default: {
+			UIResult result;
+			result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+			return(std::make_unique<UIImmediateFrontendContinuation>(result));
+		}
+	}
+}
+
+
+void UISaveBrowserPresenterClass::Complete_Child_Continuation(UIResult const & result)
+{
+	bool const usable = result.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+		&& result.Outcome != UIResult::OUTCOME_SESSION_ENDED;
+	switch (ChildAction) {
+		case CHILD_EMPTY_DESCRIPTION:
+			FocusDescription = true;
+			Pending = SUB_NONE;
+			ChildAction = CHILD_NONE;
+			break;
+
+		case CHILD_OVERWRITE_CONFIRM:
+			if (usable && result.Value == 0) {
+				ChildAction = CHILD_SAVE_WRITE;
+			} else {
+				Pending = SUB_NONE;
+				ChildAction = CHILD_NONE;
+			}
+			break;
+
+		case CHILD_SAVE_ERROR:
+		case CHILD_LOAD_ERROR:
+			Pending = SUB_NONE;
+			ChildAction = CHILD_NONE;
+			break;
+
+		case CHILD_SAVE_CONFIRMATION:
+			Pending = SUB_NONE;
+			ChildAction = CHILD_NONE;
+			Finish(true);
+			break;
+
+		case CHILD_DELETE_CONFIRM:
+			if (usable && result.Value == 0) {
+				ChildAction = CHILD_DELETE_WRITE;
+			} else {
+				Pending = SUB_NONE;
+				ChildAction = CHILD_NONE;
+			}
+			break;
+
+		default:
+			break;
 	}
 }
 
@@ -514,40 +662,22 @@ void SaveBrowserViewClass::Sync(void)
 /// </summary>
 UIResult UI_Save_Browser_Screen(UISaveBrowserPresenterClass & presenter)
 {
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Save_Browser_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UI_Save_Browser_Screen_Continuation(
+	UISaveBrowserPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
 	char const * document = "missionload.rml";
 	if (presenter.Style == UISaveBrowserPresenterClass::STYLE_SAVE) {
 		document = "missionsave.rml";
 	} else if (presenter.Style == UISaveBrowserPresenterClass::STYLE_DELETE) {
 		document = "missiondelete.rml";
 	}
-
-	SaveBrowserViewClass view(presenter, document);
-
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
-
-	// Loading draws where this screen is, so the document steps aside for it, which is what
-	// the dialog's own ShowWindow did.
-	while (!presenter.Result.has_value()) {
-		UI_Run_Modal(presenter, view);
-
-		if (presenter.Pending == UISaveBrowserPresenterClass::SUB_NONE) {
-			break;
-		}
-
-		view.Hide();
-		presenter.Run_Pending();
-		if (presenter.Result.has_value()) {
-			break;
-		}
-		view.Show();
-		view.Sync();
-	}
-
-	UIResult const result = presenter.Result.value_or(UIResult{});
-	view.Close();
-	return(result);
+	return(std::make_unique<UINestedTypedFrontendContinuation<UISaveBrowserPresenterClass, SaveBrowserViewClass>>(
+		presenter, native_blocking_adapter, nullptr, document));
 }

@@ -14,6 +14,10 @@
 #include "preview.h"
 #include "wstring.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 class HouseClass;
 
 int ODMessageBox(const char *text, int type, bool (*callback)(void));
@@ -26,6 +30,8 @@ void Rebuild_Network_Map_Preview(void);
 // Runs the map selection screen and reports whether the player settled on a map. This is
 // the entry a screen uses, because a presenter names no window.
 bool Pick_Scenario_Screen(void);
+std::unique_ptr<UIFrontendContinuation> Pick_Scenario_Screen_Continuation(
+	bool native_blocking_adapter = false);
 void Receive_Random_Map_Preview(void);
 void Send_Preview_To_Guests(void);
 int CountAliveTeams(HouseClass * house);
@@ -48,8 +54,10 @@ void SendPrivateGameopts(char const * player, char const * options);
 // Eight hexadecimal digits, a terminator, and slack.
 constexpr int RANDOM_MAP_DIGEST_SIZE = 12;
 
-void CalcRandomMapDigest(char * digest, int bufsize);
+char * CalcRandomMapDigest(void);
 int CreateRandomMap(void);
+std::unique_ptr<UIFrontendContinuation> CreateRandomMap_Continuation(
+	bool native_blocking_adapter = false);
 
 extern COLORREF PlayerColorTable[MAX_PLAYERS];
 

@@ -179,11 +179,15 @@ void UISkirmishPresenterClass::Run_Pending(void)
 	}
 
 	Pending = SUB_NONE;
-
 	int const previous = Session.Options.ScenarioIndex;
 
 	bool const picked = Pick_Scenario_Screen();
+	Apply_Scenario_Pick(picked, previous);
+}
 
+
+void UISkirmishPresenterClass::Apply_Scenario_Pick(bool picked, int previous)
+{
 	if (picked && Set_Scenario_Info_From_Index(Session.Options.ScenarioIndex) == true) {
 		ScenarioName = Session.Options.ScenarioDescription;
 	} else {
@@ -206,6 +210,23 @@ void UISkirmishPresenterClass::Run_Pending(void)
 	}
 
 	PreviewGeneration++;
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UISkirmishPresenterClass::Start_Child_Continuation(
+	bool native_blocking_adapter)
+{
+	if (Pending != SUB_PICK_MAP) return(nullptr);
+	PreviousScenario = Session.Options.ScenarioIndex;
+	return(Pick_Scenario_Screen_Continuation(native_blocking_adapter));
+}
+
+
+void UISkirmishPresenterClass::Complete_Child_Continuation(UIResult const & result)
+{
+	if (Pending != SUB_PICK_MAP) return;
+	Pending = SUB_NONE;
+	Apply_Scenario_Pick(result.Outcome == UIResult::OUTCOME_ACCEPTED, PreviousScenario);
 }
 
 
@@ -677,32 +698,17 @@ void SkirmishViewClass::Sync(void)
 /// </summary>
 UIResult UI_Skirmish_Screen(UISkirmishPresenterClass & presenter)
 {
-	SkirmishViewClass view(presenter);
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Skirmish_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
 
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
 
-	view.Settle();
-
-	// The map selection screen draws where this one is, so the document steps aside for it,
-	// which is what the dialog's own ShowWindow did.
-	while (!presenter.Result.has_value()) {
-		UI_Run_Modal(presenter, view);
-
-		if (presenter.Pending == UISkirmishPresenterClass::SUB_NONE) {
-			break;
-		}
-
-		view.Hide();
-		presenter.Run_Pending();
-		view.Show();
-		view.Sync();
-	}
-
-	UIResult const result = presenter.Result.value_or(UIResult{});
-	view.Close();
-	return(result);
+std::unique_ptr<UIFrontendContinuation> UI_Skirmish_Screen_Continuation(
+	UISkirmishPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
+	return(std::make_unique<UINestedTypedFrontendContinuation<UISkirmishPresenterClass, SkirmishViewClass>>(
+		presenter, native_blocking_adapter,
+		[](SkirmishViewClass & view) { view.Settle(); }));
 }

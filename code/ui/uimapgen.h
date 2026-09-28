@@ -16,9 +16,13 @@
 #pragma once
 
 #include "uiscreen.h"
+#include "uifrontendcontinuation.h"
 
+#include <memory>
 #include <string>
 #include <vector>
+
+class UISaveBrowserPresenterClass;
 
 
 inline constexpr char const * UI_MAPGEN_OK = "ok";
@@ -39,9 +43,11 @@ inline constexpr char const * UI_MAPGEN_TOGGLE = "toggle";
 inline constexpr char const * UI_MAPGEN_SEED = "seed";
 
 
-class UIMapGenPresenterClass : public UIPresenterClass
+class UIMapGenPresenterClass : public UIPresenterClass, public UIChildContinuationProvider
 {
 	public:
+		UIMapGenPresenterClass(void);
+		~UIMapGenPresenterClass(void) override;
 		// Which of the three templates the screen is. The addon and the session decide it,
 		// not the menu that opened the screen.
 		enum VariantType {
@@ -102,6 +108,8 @@ class UIMapGenPresenterClass : public UIPresenterClass
 		// Runs the browser the player asked for with this screen out of the way. Called by
 		// the owner between passes, never from an event.
 		void Run_Pending(void);
+		std::unique_ptr<UIFrontendContinuation> Start_Child_Continuation(bool native_blocking_adapter) override;
+		void Complete_Child_Continuation(UIResult const & result) override;
 
 		/*
 		**	The view-model.
@@ -173,6 +181,9 @@ class UIMapGenPresenterClass : public UIPresenterClass
 		void Refresh_File_Buttons(void);
 
 		PendingType Pending = PENDING_NONE;
+		std::unique_ptr<UISaveBrowserPresenterClass> ChildSaveBrowser;
+		PendingType ChildPending = PENDING_NONE;
+		bool ChildDiskFull = false;
 
 		// The maintenance the driver ran on every pass of its own loop.
 		bool (*Callback)(void) = NULL;
@@ -189,3 +200,6 @@ void UI_MapGen_Preview_Changed(void);
 // Shows the variant the screen says it is and runs it until the player accepts or cancels.
 // The answer is what Do_Random_Map_Dialog returns; zero means no document was shown.
 int UI_MapGen_Run(UIMapGenPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_MapGen_Run_Continuation(
+	UIMapGenPresenterClass & presenter,
+	bool native_blocking_adapter = false);

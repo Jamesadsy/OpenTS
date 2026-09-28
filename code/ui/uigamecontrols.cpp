@@ -22,6 +22,7 @@
 
 #include "uigamecontrols.h"
 
+#include "uifrontendcontinuation.h"
 #include "uirmlview.h"
 
 #include "_map.h"
@@ -378,24 +379,23 @@ void GameControlsViewClass::Sync(void)
 /// </summary>
 UIResult UI_Game_Controls_Screen(UIGameControlsPresenterClass & presenter)
 {
+	std::unique_ptr<UIFrontendContinuation> continuation =
+		UI_Game_Controls_Screen_Continuation(presenter, true);
+	return(UI_Run_Frontend_Continuation(*continuation));
+}
+
+
+std::unique_ptr<UIFrontendContinuation> UI_Game_Controls_Screen_Continuation(
+	UIGameControlsPresenterClass & presenter,
+	bool native_blocking_adapter)
+{
 	char const * document = "gamecontrols.rml";
 	if (presenter.Variant == UIGameControlsPresenterClass::VARIANT_SESSION) {
 		document = "gamecontrolsmp.rml";
 	} else if (presenter.Variant == UIGameControlsPresenterClass::VARIANT_INTERNET) {
 		document = "gamecontrolswol.rml";
 	}
-
-	GameControlsViewClass view(presenter, document);
-
-	if (!view.Prepare(true)) {
-		UIResult result;
-		result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
-		return(result);
-	}
-
-	view.Settle();
-
-	UIResult const result = UI_Run_Modal(presenter, view);
-	view.Close();
-	return(result);
+	return(std::make_unique<UITypedFrontendContinuation<UIGameControlsPresenterClass, GameControlsViewClass>>(
+		presenter, native_blocking_adapter,
+		[](GameControlsViewClass & view) { view.Settle(); }, document));
 }

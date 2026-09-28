@@ -19,6 +19,9 @@
 
 #include <string>
 #include <vector>
+#include <memory>
+
+class UIFrontendContinuation;
 
 
 // What a view raises. Value carries the slider step or the check state.
@@ -118,3 +121,6 @@ class UIGameControlsPresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Game_Controls_Screen(UIGameControlsPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Game_Controls_Screen_Continuation(
+	UIGameControlsPresenterClass & presenter,
+	bool native_blocking_adapter = false);

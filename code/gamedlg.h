@@ -35,6 +35,10 @@
 #include "gadget.h"
 #include "goptions.h"
 
+#include <memory>
+
+class UIFrontendContinuation;
+
 extern int GameSpeedNames[OptionsClass::MAX_SPEED_SETTING];
 extern int GameScrollSpeedNames[OptionsClass::MAX_SCROLL_SETTING];
 extern int GameDetailLevelNames[OptionsClass::MAX_DETAIL_SETTING];
@@ -51,3 +55,8 @@ class GameControlsClass
 			return(GameDifficultyNames[difficulty]);
 		}
 };
+
+// Persistent native SETTINGS child. The existing Dialog entry point drives this from the
+// blocking adapter; cooperative in-game menus retain it across frame callbacks.
+std::unique_ptr<UIFrontendContinuation> GameControls_Dialog_Continuation(
+	bool native_blocking_adapter = false);

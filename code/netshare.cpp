@@ -10,6 +10,7 @@
 #include "always.h"
 
 #include "netshare.h"
+#include "ui/uifrontendcontinuation.h"
 #include "ui/uilobby.h"
 #include "ui/uimessagebox.h"
 #include "ui/uiscenariopick.h"
@@ -728,10 +729,200 @@ static int LastPreviewedScenario;
 /// <returns>bool; Did the player settle on a map?</returns>
 bool Pick_Scenario_Screen(void)
 {
+	if (Session.Type == GAME_SKIRMISH) {
+		std::unique_ptr<UIFrontendContinuation> continuation = Pick_Scenario_Screen_Continuation(true);
+		UIResult const result = UI_Run_Frontend_Continuation(*continuation);
+		return(result.Outcome == UIResult::OUTCOME_ACCEPTED);
+	}
+
 	UIScenarioPickPresenterClass screen;
 	screen.Refresh();
 
 	return(UI_Scenario_Pick_Screen(screen).Outcome == UIResult::OUTCOME_ACCEPTED);
+}
+
+
+namespace
+{
+
+class ScenarioPickCallerContinuation final : public UIFrontendContinuation
+{
+	public:
+		explicit ScenarioPickCallerContinuation(bool native_blocking_adapter)
+		{
+			m_Presenter.Refresh();
+			m_Screen = UI_Scenario_Pick_Screen_Continuation(m_Presenter, native_blocking_adapter);
+		}
+
+		~ScenarioPickCallerContinuation(void) override
+		{
+			if (!m_Finished) Finish();
+		}
+
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			if (m_Completed || m_Finished) return(m_LastStep);
+			if (m_Screen == nullptr) {
+				m_Result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+				m_Completed = true;
+				m_LastStep = OpenTS_UIModal::UIModalStepResult::Complete;
+				return(m_LastStep);
+			}
+			m_LastStep = m_Screen->Step();
+			if (m_LastStep == OpenTS_UIModal::UIModalStepResult::Complete
+				|| m_LastStep == OpenTS_UIModal::UIModalStepResult::SessionEnded) {
+				m_Result = m_Screen->Result();
+				m_Completed = true;
+			}
+			return(m_LastStep);
+		}
+
+		UIResult const & Result(void) const noexcept override
+		{
+			return(m_Completed || m_Finished ? m_Result : m_Screen->Result());
+		}
+
+		bool Finish(void) noexcept override
+		{
+			if (m_Finished) return(true);
+			bool success = true;
+			if (m_Screen != nullptr) {
+				if (!m_Completed) m_Result = m_Screen->Result();
+				success = m_Screen->Finish();
+				m_Screen.reset();
+			}
+			m_Finished = true;
+			return(success);
+		}
+
+	private:
+		UIScenarioPickPresenterClass m_Presenter;
+		std::unique_ptr<UIFrontendContinuation> m_Screen;
+		UIResult m_Result;
+		OpenTS_UIModal::UIModalStepResult m_LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		bool m_Completed = false;
+		bool m_Finished = false;
+};
+
+int Register_Random_Map_Scenario(void)
+{
+	IsRandomMap = true;
+	RandomMapGen.SeedData.Save(RANDOM_MAP_FILE_NAME);
+
+	delete MultiplayerMapPreview;
+	MultiplayerMapPreview = new MapPreviewClass;
+	MultiplayerMapPreview->Read_PCX_Preview("RandMap.img");
+
+	int index;
+	bool found = false;
+	for (index = 0; index < Session.Scenarios.Count(); index++) {
+		if (stricmp(Session.Scenarios[index]->Get_Filename(), RANDOM_MAP_FILE_NAME) == 0) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		char * digest = CalcRandomMapDigest();
+		MultiMission * scenario = new MultiMission(RANDOM_MAP_FILE_NAME, RandomMapGen.SeedData.MapDescription, digest);
+		Session.Scenarios.Add(scenario);
+		delete digest;
+	} else {
+		Session.Scenarios[index]->Set_Description(RandomMapGen.SeedData.MapDescription);
+	}
+	return(index);
+}
+
+class RandomMapCreationContinuation final : public UIFrontendContinuation
+{
+	public:
+		explicit RandomMapCreationContinuation(bool native_blocking_adapter) :
+			m_MapGen(Do_Random_Map_Dialog_Continuation(MapGen_Call_Back, native_blocking_adapter))
+		{
+	}
+
+		~RandomMapCreationContinuation(void) override
+		{
+			if (!m_Finished) Finish();
+		}
+
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			using OpenTS_UIModal::UIModalStepResult;
+			if (m_Completed || m_Finished) return(m_LastStep);
+			m_LastStep = m_MapGen->Step();
+			if (m_LastStep == UIModalStepResult::Complete || m_LastStep == UIModalStepResult::SessionEnded) {
+				UIResult const generated = m_MapGen->Result();
+				if (!m_MapGen->Finish()) {
+					m_Result.Outcome = UIResult::OUTCOME_SESSION_ENDED;
+					m_Result.Value = 0;
+					m_LastStep = UIModalStepResult::Fault;
+					return(m_LastStep);
+				}
+				if (generated.Outcome == UIResult::OUTCOME_ACCEPTED && generated.Value == IDOK) {
+					m_Result.Outcome = UIResult::OUTCOME_ACCEPTED;
+					m_Result.Value = Register_Random_Map_Scenario();
+				} else {
+					m_Result.Outcome = generated.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN
+						? UIResult::OUTCOME_FAILED_TO_OPEN : UIResult::OUTCOME_CANCELLED;
+					m_Result.Value = 0;
+				}
+				m_Completed = true;
+			}
+			return(m_LastStep);
+		}
+
+		UIResult const & Result(void) const noexcept override { return(m_Result); }
+
+		bool Finish(void) noexcept override
+		{
+			if (m_Finished) return(true);
+			bool success = true;
+			if (m_MapGen != nullptr) {
+				if (!m_Completed) {
+					UIResult const generated = m_MapGen->Result();
+					m_Result.Outcome = generated.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN
+						? UIResult::OUTCOME_FAILED_TO_OPEN : UIResult::OUTCOME_CANCELLED;
+					m_Result.Value = 0;
+				}
+				success = m_MapGen->Finish();
+				m_MapGen.reset();
+			}
+			m_Finished = true;
+			return(success);
+		}
+
+	private:
+		std::unique_ptr<UIFrontendContinuation> m_MapGen;
+		UIResult m_Result;
+		OpenTS_UIModal::UIModalStepResult m_LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		bool m_Completed = false;
+		bool m_Finished = false;
+};
+
+} // namespace
+
+
+std::unique_ptr<UIFrontendContinuation> Pick_Scenario_Screen_Continuation(bool native_blocking_adapter)
+{
+	if (Session.Type != GAME_SKIRMISH) {
+		UIResult failed;
+		failed.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+		return(std::make_unique<UIImmediateFrontendContinuation>(failed));
+	}
+	return(std::make_unique<ScenarioPickCallerContinuation>(native_blocking_adapter));
+}
+
+
+std::unique_ptr<UIFrontendContinuation> CreateRandomMap_Continuation(bool native_blocking_adapter)
+{
+	if (Session.Type != GAME_SKIRMISH) {
+		UIResult failed;
+		failed.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+		failed.Value = 0;
+		return(std::make_unique<UIImmediateFrontendContinuation>(failed));
+	}
+	return(std::make_unique<RandomMapCreationContinuation>(native_blocking_adapter));
 }
 
 
@@ -1128,31 +1319,5 @@ int CreateRandomMap(void)
 	if (result != IDOK) {
 		return(0);
 	}
-
-	IsRandomMap = true;
-	RandomMapGen.SeedData.Save(RANDOM_MAP_FILE_NAME);
-
-	delete MultiplayerMapPreview;
-	MultiplayerMapPreview = new MapPreviewClass;
-	MultiplayerMapPreview->Read_PCX_Preview("RandMap.img");
-
-	int index;
-	bool found = false;
-	for (index = 0; index < Session.Scenarios.Count(); index++) {
-		if (stricmp(Session.Scenarios[index]->Get_Filename(), RANDOM_MAP_FILE_NAME) == 0) {
-			found = true;
-			break;
-		}
-	}
-
-	if (!found) {
-		char * digest = CalcRandomMapDigest();
-		MultiMission * scenario = new MultiMission(RANDOM_MAP_FILE_NAME, RandomMapGen.SeedData.MapDescription, digest);
-		Session.Scenarios.Add(scenario);
-		delete digest;
-	} else {
-		Session.Scenarios[index]->Set_Description(RandomMapGen.SeedData.MapDescription);
-	}
-
-	return(index);
+	return(Register_Random_Map_Scenario());
 }

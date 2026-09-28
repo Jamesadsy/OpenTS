@@ -48,6 +48,7 @@
 #include "scenario.h"
 #include "stats.h"
 #include "ui/uiabort.h"
+#include "ui/uifrontendcontinuation.h"
 #include "ui/uigameoptions.h"
 
 #include "special.hh"
@@ -96,15 +97,164 @@ static void Game_Options_Finish(UIGameOptionsPresenterClass const & screen)
 /// </summary>
 void Game_Options_Dialog(void)
 {
-	UIGameOptionsPresenterClass screen;
-	screen.Refresh();
+	std::unique_ptr<UIFrontendContinuation> continuation = Game_Options_Dialog_Continuation(true);
+	UI_Run_Frontend_Continuation(*continuation);
+}
 
-	IgnoreInput = true;
-	Keyboard->Clear();
 
-	UI_Game_Options_Screen(screen);
+namespace
+{
 
-	Game_Options_Finish(screen);
+class GameOptionsDialogContinuation final : public UIFrontendContinuation
+{
+	public:
+		explicit GameOptionsDialogContinuation(bool native_blocking_adapter)
+		{
+			m_Presenter.Refresh();
+			IgnoreInput = true;
+			Keyboard->Clear();
+			m_Screen = UI_Game_Options_Screen_Continuation(m_Presenter, native_blocking_adapter);
+		}
+
+		~GameOptionsDialogContinuation(void) override
+		{
+			if (!m_Finished) Finish();
+		}
+
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			if (m_Completed || m_Finished) return(m_LastStep);
+			if (m_Screen == nullptr) {
+				m_Result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+				m_Completed = true;
+				m_LastStep = OpenTS_UIModal::UIModalStepResult::Complete;
+			} else {
+				m_LastStep = m_Screen->Step();
+				if (m_LastStep == OpenTS_UIModal::UIModalStepResult::Complete
+					|| m_LastStep == OpenTS_UIModal::UIModalStepResult::SessionEnded
+					|| m_LastStep == OpenTS_UIModal::UIModalStepResult::Fault) {
+					m_Result = m_Screen->Result();
+					if (!m_Screen->Finish()) m_Result.Outcome = UIResult::OUTCOME_SESSION_ENDED;
+					m_Screen.reset();
+					m_Completed = true;
+				}
+			}
+			if (m_Completed && !m_PostApplied) {
+				Game_Options_Finish(m_Presenter);
+				m_PostApplied = true;
+			}
+			return(m_LastStep);
+		}
+
+		UIResult const & Result(void) const noexcept override { return(m_Result); }
+
+		bool Finish(void) noexcept override
+		{
+			if (m_Finished) return(true);
+			bool success = true;
+			if (m_Screen != nullptr) {
+				if (!m_Completed) m_Result = m_Screen->Result();
+				success = m_Screen->Finish();
+				m_Screen.reset();
+			}
+			if (m_Completed && !m_PostApplied) {
+				Game_Options_Finish(m_Presenter);
+				m_PostApplied = true;
+			}
+			m_Finished = true;
+			return(success);
+		}
+
+	private:
+		UIGameOptionsPresenterClass m_Presenter;
+		std::unique_ptr<UIFrontendContinuation> m_Screen;
+		UIResult m_Result;
+		OpenTS_UIModal::UIModalStepResult m_LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		bool m_Completed = false;
+		bool m_PostApplied = false;
+		bool m_Finished = false;
+};
+
+
+class AbortDialogContinuation final : public UIFrontendContinuation
+{
+	public:
+		explicit AbortDialogContinuation(bool native_blocking_adapter)
+		{
+			m_Presenter.Refresh();
+			m_Screen = UI_Abort_Screen_Continuation(m_Presenter, native_blocking_adapter);
+		}
+
+		~AbortDialogContinuation(void) override
+		{
+			if (!m_Finished) Finish();
+		}
+
+		OpenTS_UIModal::UIModalStepResult Step(void) noexcept override
+		{
+			if (m_Completed || m_Finished) return(m_LastStep);
+			if (m_Screen == nullptr) {
+				m_Result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+				m_Result.Value = (int)UIAbortDialogOutcome::PRESENTATION_FAILURE;
+				m_Completed = true;
+				m_LastStep = OpenTS_UIModal::UIModalStepResult::Complete;
+				return(m_LastStep);
+			}
+			m_LastStep = m_Screen->Step();
+			if (m_LastStep == OpenTS_UIModal::UIModalStepResult::Complete
+				|| m_LastStep == OpenTS_UIModal::UIModalStepResult::SessionEnded
+				|| m_LastStep == OpenTS_UIModal::UIModalStepResult::Fault) {
+				UIResult const presentation = m_Screen->Result();
+				UIAbortDialogOutcome const outcome = UI_Abort_Dialog_Result(presentation, m_Presenter.Choice);
+				m_Result = presentation;
+				m_Result.Value = (int)outcome;
+				if (outcome == UIAbortDialogOutcome::PRESENTATION_FAILURE) {
+					m_Result.Outcome = UIResult::OUTCOME_FAILED_TO_OPEN;
+				} else if (outcome == UIAbortDialogOutcome::CANCEL) {
+					m_Result.Outcome = UIResult::OUTCOME_CANCELLED;
+				} else {
+					m_Result.Outcome = UIResult::OUTCOME_ACCEPTED;
+				}
+				if (!m_Screen->Finish()) m_Result.Outcome = UIResult::OUTCOME_SESSION_ENDED;
+				m_Screen.reset();
+				m_Completed = true;
+			}
+			return(m_LastStep);
+		}
+
+		UIResult const & Result(void) const noexcept override { return(m_Result); }
+
+		bool Finish(void) noexcept override
+		{
+			if (m_Finished) return(true);
+			bool success = true;
+			if (m_Screen != nullptr) {
+				if (!m_Completed) {
+					m_Result = m_Screen->Result();
+					m_Result.Value = (int)UI_Abort_Dialog_Result(m_Result, m_Presenter.Choice);
+				}
+				success = m_Screen->Finish();
+				m_Screen.reset();
+			}
+			m_Finished = true;
+			return(success);
+		}
+
+	private:
+		UIAbortPresenterClass m_Presenter;
+		std::unique_ptr<UIFrontendContinuation> m_Screen;
+		UIResult m_Result;
+		OpenTS_UIModal::UIModalStepResult m_LastStep = OpenTS_UIModal::UIModalStepResult::Active;
+		bool m_Completed = false;
+		bool m_Finished = false;
+};
+
+} // namespace
+
+
+std::unique_ptr<UIFrontendContinuation> Game_Options_Dialog_Continuation(bool native_blocking_adapter)
+{
+	return(std::make_unique<GameOptionsDialogContinuation>(native_blocking_adapter));
 }
 
 
@@ -118,9 +268,13 @@ void Game_Options_Dialog(void)
 /// outcome.</returns>
 UIAbortDialogOutcome Abort_Dialog(void)
 {
-	UIAbortPresenterClass screen;
-	screen.Refresh();
-	UIResult const result = UI_Abort_Screen(screen);
+	std::unique_ptr<UIFrontendContinuation> continuation = Abort_Dialog_Continuation(true);
+	UIResult const result = UI_Run_Frontend_Continuation(*continuation);
+	return((UIAbortDialogOutcome)result.Value);
+}
 
-	return(UI_Abort_Dialog_Result(result, screen.Choice));
+
+std::unique_ptr<UIFrontendContinuation> Abort_Dialog_Continuation(bool native_blocking_adapter)
+{
+	return(std::make_unique<AbortDialogContinuation>(native_blocking_adapter));
 }

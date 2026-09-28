@@ -16,7 +16,9 @@
 #pragma once
 
 #include "uiscreen.h"
+#include "uifrontendcontinuation.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,9 +35,16 @@ inline constexpr char const * UI_GAMEOPT_SPEED = "speed";            // Value: s
 inline constexpr char const * UI_GAMEOPT_CONNECTION = "connection";  // Value: slider step
 
 
-class UIGameOptionsPresenterClass : public UIPresenterClass
+class LoadOptionsClass;
+class UISaveBrowserPresenterClass;
+
+
+class UIGameOptionsPresenterClass : public UIPresenterClass, public UIChildContinuationProvider
 {
 	public:
+		UIGameOptionsPresenterClass(void);
+		~UIGameOptionsPresenterClass(void) override;
+
 		// What the player settled on. The driver maps this onto the value its own caller
 		// expects; no control identifier reaches this class.
 		enum ChoiceType {
@@ -65,6 +74,8 @@ class UIGameOptionsPresenterClass : public UIPresenterClass
 		// Runs the sub-screen an executed intent asked for and clears the request. Safe to
 		// call with nothing pending.
 		void Run_Pending(void);
+		std::unique_ptr<UIFrontendContinuation> Start_Child_Continuation(bool native_blocking_adapter) override;
+		void Complete_Child_Continuation(UIResult const & result) override;
 
 		/*
 		**	The view-model. Plain values, and the only thing a view reads.
@@ -96,6 +107,12 @@ class UIGameOptionsPresenterClass : public UIPresenterClass
 		SubScreenType Pending = SUB_NONE;
 
 	private:
+		std::unique_ptr<LoadOptionsClass> ChildOptions;
+		std::unique_ptr<UISaveBrowserPresenterClass> ChildSaveBrowser;
+		char ChildDescription[512] = {};
+		bool ChildIsLoad = false;
+		bool ChildIsDiskFull = false;
+
 		void Finish(ChoiceType choice, UIResult::OutcomeType outcome);
 };
 
@@ -103,3 +120,6 @@ class UIGameOptionsPresenterClass : public UIPresenterClass
 // Shows the screen through its RmlUi view. FAILED_TO_OPEN leaves nothing shown and the
 // caller falls through to the legacy dialog.
 UIResult UI_Game_Options_Screen(UIGameOptionsPresenterClass & presenter);
+std::unique_ptr<UIFrontendContinuation> UI_Game_Options_Screen_Continuation(
+	UIGameOptionsPresenterClass & presenter,
+	bool native_blocking_adapter = false);
