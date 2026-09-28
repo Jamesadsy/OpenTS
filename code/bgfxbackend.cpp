@@ -357,17 +357,33 @@ bool Backend_Init(NativeWindow const & window, int drawablewidth, int drawablehe
 	_ResetFlags = BGFX_RESET_FLIP_AFTER_RENDER | (vsync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE);
 
 	bgfx::Init init;
+#ifdef __EMSCRIPTEN__
+	// bgfx's HTML5 GL context consumes the canvas selector in nwh and creates its own
+	// WebGL context. SDL owns the canvas element, but its SDL_Window pointer is not an
+	// Emscripten native window handle.
+	init.platformData.ndt = nullptr;
+	init.platformData.nwh = window.Handle;
+	init.platformData.context = nullptr;
+	init.platformData.type = bgfx::NativeWindowHandleType::Default;
+#else
 	init.platformData.ndt = window.Display;
 	init.platformData.nwh = window.Handle;
 	init.platformData.type = window.Type == NATIVE_WINDOW_WAYLAND
 		? bgfx::NativeWindowHandleType::Wayland
 		: bgfx::NativeWindowHandleType::Default;
+#endif
 	init.resolution.width = (uint32_t)drawablewidth;
 	init.resolution.height = (uint32_t)drawableheight;
 	init.resolution.reset = _ResetFlags;
 	init.callback = &_Callback;
 	init.allocator = &_Allocator;
 
+#ifdef __EMSCRIPTEN__
+	// The current bgfx Emscripten build exposes its browser renderer through OpenGL ES.
+	// Choosing it explicitly prevents a native desktop renderer preference from leaking in.
+	(void)renderer;
+	init.type = bgfx::RendererType::OpenGLES;
+#else
 	switch (renderer) {
 		case BACKEND_RENDERER_D3D11:
 			init.type = bgfx::RendererType::Direct3D11;
@@ -389,6 +405,7 @@ bool Backend_Init(NativeWindow const & window, int drawablewidth, int drawablehe
 			init.type = bgfx::RendererType::Count;
 			break;
 	}
+#endif
 
 	if (!bgfx::init(init)) {
 		return(false);

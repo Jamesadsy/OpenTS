@@ -121,7 +121,11 @@ extern "C" HWND CreateWindowEx(DWORD exstyle, LPCSTR classname, LPCSTR windownam
 	int const openwidth = width > 0 ? (int)(width / density) : 640;
 	int const openheight = height > 0 ? (int)(height / density) : 480;
 
+#ifdef __EMSCRIPTEN__
+	SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#else
 	SDL_WindowFlags flags = SDL_WINDOW_METAL | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
 	if ((style & WS_POPUP) != 0) {
 		flags |= SDL_WINDOW_BORDERLESS;
 	}
@@ -852,6 +856,11 @@ extern "C" void * Win32Compat_Native_Window_Handle(HWND handle)
 		return(NULL);
 	}
 
+#ifdef __EMSCRIPTEN__
+	SDL_PropertiesID const properties = SDL_GetWindowProperties(window->Handle);
+	char const * const canvas = SDL_GetStringProperty(properties, SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING, NULL);
+	return(const_cast<char *>(canvas));
+#else
 	if (_MetalView == NULL) {
 		_MetalView = SDL_Metal_CreateView(window->Handle);
 	}
@@ -861,6 +870,7 @@ extern "C" void * Win32Compat_Native_Window_Handle(HWND handle)
 	}
 
 	return(SDL_Metal_GetLayer(_MetalView));
+#endif
 }
 
 

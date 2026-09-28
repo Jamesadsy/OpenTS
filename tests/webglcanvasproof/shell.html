@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VV-TS1A 124F WebGL Canvas Proof</title>
+  <style>
+    body { margin: 0; background: #101820; color: #e8eef2; font: 14px monospace; }
+    #canvas { display: block; }
+    #proof-status { white-space: pre-wrap; margin: 12px; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="640" height="480" tabindex="0"></canvas>
+  <pre id="proof-status" data-status="loading">Loading 124F renderer proof…</pre>
+  <script>
+    (function () {
+      const output = document.getElementById('proof-status');
+      const runtimeErrors = [];
+      const capturedConsole = [];
+      let proofFinished = false;
+      let callbackStarted = 0;
+      let callbackReturned = 0;
+      let heartbeat = 0;
+      let heartbeatAtResize = 0;
+      let heartbeatAtFirstCallback = 0;
+      let heartbeatAtLastCallback = 0;
+      let presentAtResize = 0;
+      let resizeSucceeded = false;
+
+      function append(text) {
+        output.textContent += '\n' + String(text);
+      }
+
+      const originalConsoleError = console.error.bind(console);
+      console.error = function (...args) {
+        capturedConsole.push(args.map(String).join(' '));
+        originalConsoleError(...args);
+      };
+      window.addEventListener('error', function (event) {
+        runtimeErrors.push(event.message || String(event.error || 'window error'));
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        runtimeErrors.push(String(event.reason || 'unhandled rejection'));
+      });
+
+      function complete(status, details) {
+        if (proofFinished) return;
+        proofFinished = true;
+        clearInterval(heartbeatTimer);
+        const result = Object.assign({
+          status,
+          browser: navigator.userAgent,
+          canvasExists: document.getElementById('canvas') instanceof HTMLCanvasElement,
+          webglContextExists: !!(document.getElementById('canvas').getContext('webgl2')
+            || document.getElementById('canvas').getContext('webgl')),
+          canvasWidth: document.getElementById('canvas').width,
+          canvasHeight: document.getElementById('canvas').height,
+          callbacksStarted: callbackStarted,
+          callbacksReturned: callbackReturned,
+          everyCallbackReturnedToJavaScript: callbackStarted === callbackReturned
+            && callbackReturned === 360,
+          heartbeatCount: heartbeat,
+          heartbeatAtFirstCallback,
+          heartbeatAtResize,
+          heartbeatAtLastCallback,
+          presentCount: Module._VV124F_Present_Count(),
+          presentAtResize,
+          presentsAfterResize: Module._VV124F_Present_Count() - presentAtResize,
+          initialDrawable: [Module._VV124F_Initial_Width(), Module._VV124F_Initial_Height()],
+          resizedDrawable: [Module._VV124F_Resized_Width(), Module._VV124F_Resized_Height()],
+          renderer: UTF8ToString(Module._VV124F_Renderer_Name()),
+          resizeSucceeded,
+          runtimeErrors,
+          consoleErrors: capturedConsole
+        }, details || {});
+        window.vv124fProof = result;
+        output.dataset.status = status;
+        output.textContent = JSON.stringify(result, null, 2);
+      }
+
+      const heartbeatTimer = setInterval(function () {
+        heartbeat += 1;
+      }, 10);
+
+      function startProof() {
+        if (!document.getElementById('canvas')) {
+          complete('failed', { failure: 'canvas element missing' });
+          return;
+        }
+
+        let initialized = 0;
+        try {
+          initialized = Module._VV124F_Begin();
+        } catch (error) {
+          runtimeErrors.push(String(error));
+          complete('failed', { failure: 'native renderer initialization threw' });
+          return;
+        }
+        if (!initialized) {
+          complete('failed', { failure: 'SDL window or bgfx initialization failed' });
+          return;
+        }
+        append('bgfx renderer: ' + UTF8ToString(Module._VV124F_Renderer_Name()));
+
+        const targetCallbacks = 360;
+        const resizeCallback = 150;
+        function tick() {
+          callbackStarted += 1;
+          if (callbackStarted === 1) heartbeatAtFirstCallback = heartbeat;
+          let returned = 0;
+          try {
+            returned = Module._VV124F_Frame();
+          } catch (error) {
+            runtimeErrors.push(String(error));
+          }
+          if (!returned) {
+            complete('failed', { failure: 'native clear/present callback failed' });
+            return;
+          }
+          callbackReturned += 1;
+
+          if (callbackReturned === resizeCallback) {
+            presentAtResize = Module._VV124F_Present_Count();
+            heartbeatAtResize = heartbeat;
+            resizeSucceeded = Module._VV124F_Resize(800, 600) === 1;
+            if (!resizeSucceeded) {
+              complete('failed', { failure: 'SDL drawable resize did not reach 800x600' });
+              return;
+            }
+          }
+
+          if (callbackReturned >= targetCallbacks) {
+            heartbeatAtLastCallback = heartbeat;
+            const passed = callbackStarted === targetCallbacks
+              && callbackReturned === targetCallbacks
+              && Module._VV124F_Present_Count() === targetCallbacks
+              && heartbeat > 0
+              && heartbeatAtLastCallback > heartbeatAtResize
+              && Module._VV124F_Resized_Width() === 800
+              && Module._VV124F_Resized_Height() === 600
+              && Module._VV124F_Present_Count() > presentAtResize
+              && runtimeErrors.length === 0
+              && capturedConsole.length === 0;
+            complete(passed ? 'passed' : 'failed', passed ? {} : { failure: 'proof gate assertion failed' });
+            return;
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      }
+
+      window.__vv124fStart = function () {
+        setTimeout(startProof, 0);
+      };
+
+      window.__vv124fRuntimeError = function (message) {
+        runtimeErrors.push(String(message));
+      };
+    })();
+
+    var Module = {
+      canvas: document.getElementById('canvas'),
+      print: function (text) { if (text) console.log('[OpenTS proof]', text); },
+      printErr: function (text) { if (text) { console.error('[OpenTS proof]', text); } },
+      onRuntimeInitialized: function () { window.__vv124fStart(); },
+      onAbort: function (reason) { window.__vv124fRuntimeError('Emscripten abort: ' + reason); }
+    };
+  </script>
+  {{{ SCRIPT }}}
+</body>
+</html>
