@@ -370,6 +370,9 @@ struct BrowserStartupState
 	bool BootstrapComplete = false;
 	bool MainGameBeginAttempted = false;
 	bool OwnerDataBoundaryReached = false;
+	bool BootstrapMixfilesOpened = false;
+	bool SecondaryMixfilesOpened = false;
+	bool ProofStopRequested = false;
 	bool ShutdownRequested = false;
 	bool Finished = false;
 	bool RendererInitialized = false;
@@ -583,7 +586,8 @@ extern "C" int OpenTS_Browser_Startup_Begin_MainGame(void)
 
 extern "C" int OpenTS_Browser_Startup_Step_MainGame(void)
 {
-	if (!BrowserStartup.MainGameBeginAttempted || BrowserStartup.OwnerDataBoundaryReached) return(-1);
+	if (!BrowserStartup.MainGameBeginAttempted) return(-1);
+	if (BrowserStartup.ProofStopRequested) return(1);
 	MainGameStepResult const result = BrowserMainGame.Step();
 	if (result == MainGameStepResult::Waiting) return(0);
 	if (result == MainGameStepResult::Complete) return(1);
@@ -668,7 +672,49 @@ extern "C" int OpenTS_Browser_Startup_OwnerData_Boundary(void)
 extern "C" void OpenTS_Browser_Startup_Reach_OwnerData_Boundary(void)
 {
 	BrowserStartup.OwnerDataBoundaryReached = true;
-	DebugString("OpenTS browser proof stopped before Init_Bootstrap_Mixfiles owner-data access.\n");
+	DebugString("OpenTS browser runtime reached the imported owner-data boundary.\n");
+}
+
+
+extern "C" void OpenTS_Browser_Startup_Record_Bootstrap_Mixfiles(void)
+{
+	BrowserStartup.BootstrapMixfilesOpened = true;
+}
+
+
+extern "C" void OpenTS_Browser_Startup_Record_Secondary_Mixfiles(void)
+{
+	BrowserStartup.SecondaryMixfilesOpened = true;
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Bootstrap_Mixfiles_Opened(void)
+{
+	return(BrowserStartup.BootstrapMixfilesOpened ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Secondary_Mixfiles_Opened(void)
+{
+	return(BrowserStartup.SecondaryMixfilesOpened ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Frontend_Ready(void)
+{
+	SelectGameSession * const selection = BrowserMainGame.Selection();
+	return(BrowserStartup.OwnerDataBoundaryReached
+		&& BrowserStartup.BootstrapMixfilesOpened
+		&& BrowserStartup.SecondaryMixfilesOpened
+		&& BrowserStartup.MainGameBeginAttempted
+		&& BrowserMainGame.Phase() == MainGamePhase::SelectGame
+		&& selection != nullptr && selection->Phase == SelectGamePhase::MainMenu ? 1 : 0);
+}
+
+
+extern "C" void OpenTS_Browser_Startup_Request_Proof_Stop(void)
+{
+	BrowserStartup.ProofStopRequested = true;
 }
 
 

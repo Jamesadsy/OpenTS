@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright 2026 OpenTS contributors
  *
- * Synthetic-only browser storage contract probes. This file does not decode or
- * open game archives; the startup probe stops at the existing bootstrap guard.
+ * Browser storage contract probes. The 124H path keeps its synthetic sentinel;
+ * the 126 path checks the mounted owner-data profile before engine bootstrap.
  ******************************************************************************/
 
 #ifdef __EMSCRIPTEN__
@@ -25,6 +25,8 @@ namespace
 {
 
 bool StorageReady = false;
+bool ImportedOwnerDataReady = false;
+bool ImportedOwnerDataProbePassed = false;
 bool DataProbePassed = false;
 bool BoundaryProbePassed = false;
 bool DataRootStable = true;
@@ -248,6 +250,41 @@ extern "C" int OpenTS_124H_User_Remove(void)
 {
 	std::string const path = User_File_Write_Name("124h-synthetic-user.bin");
 	return(std::remove(path.c_str()) == 0 ? 1 : 0);
+}
+
+extern "C" int OpenTS_126_Storage_Mark_Ready(void)
+{
+	ImportedOwnerDataReady = Is_Directory("/data") && Is_Directory("/userdata");
+	return(ImportedOwnerDataReady ? 1 : 0);
+}
+
+extern "C" int OpenTS_126_Storage_Is_Ready(void)
+{
+	return(ImportedOwnerDataReady && Is_Directory("/data") && Is_Directory("/userdata") ? 1 : 0);
+}
+
+extern "C" int OpenTS_126_Data_Probe(void)
+{
+	if (!OpenTS_126_Storage_Is_Ready()) return(0);
+	struct stat tibsun = {};
+	struct stat scores = {};
+	bool const required_archives = stat("/data/TIBSUN.MIX", &tibsun) == 0
+		&& S_ISREG(tibsun.st_mode) && tibsun.st_size > 0
+		&& stat("/data/SCORES.MIX", &scores) == 0 && S_ISREG(scores.st_mode) && scores.st_size > 0;
+	FILE * archive = required_archives ? std::fopen("/data/TIBSUN.MIX", "rb") : NULL;
+	unsigned char signature[4] = {};
+	bool const readable = archive != NULL && std::fread(signature, 1, sizeof(signature), archive) == sizeof(signature);
+	if (archive != NULL) std::fclose(archive);
+	std::vector<std::string> root;
+	std::vector<std::string> rewound;
+	bool const enumerable = List_Directory("/data", root, rewound) && root == rewound;
+	ImportedOwnerDataProbePassed = required_archives && readable && enumerable && !root.empty();
+	return(ImportedOwnerDataProbePassed ? 1 : 0);
+}
+
+extern "C" int OpenTS_126_Data_Probe_Passed(void)
+{
+	return(ImportedOwnerDataProbePassed ? 1 : 0);
 }
 
 #endif // __EMSCRIPTEN__

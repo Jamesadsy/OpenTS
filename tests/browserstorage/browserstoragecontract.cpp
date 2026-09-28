@@ -50,6 +50,15 @@ void Test_Synthetic_Browser_Storage_Contract(void)
 		&& mixfiles != std::string::npos && readiness < boundary && boundary < sentinel
 		&& sentinel < stop && stop < mixfiles,
 		"storage readiness and synthetic sentinel probe stay before the existing owner-data return");
+	std::size_t const imported_readiness = init.find("OpenTS_126_Storage_Is_Ready()", bootstrap);
+	std::size_t const imported_probe = init.find("OpenTS_126_Data_Probe()", imported_readiness);
+	std::size_t const imported_boundary = init.find("OpenTS_Browser_Startup_Reach_OwnerData_Boundary();", imported_probe);
+	std::size_t const real_mixfiles = init.find("if (!Init_Bootstrap_Mixfiles())", imported_boundary);
+	Check(imported_readiness != std::string::npos && imported_probe != std::string::npos
+		&& imported_boundary != std::string::npos && real_mixfiles != std::string::npos
+		&& imported_readiness < imported_probe && imported_probe < imported_boundary
+		&& imported_boundary < real_mixfiles,
+		"imported TS OPFS data passes its native profile probe before real engine MIX bootstrap");
 	Check(helper.find("opendir(path)") != std::string::npos
 		&& helper.find("rewinddir(directory)") != std::string::npos
 		&& helper.find("List_Directory(\"/data\", root_first, root_rewound)") != std::string::npos
@@ -70,6 +79,12 @@ void Test_Synthetic_Browser_Storage_Contract(void)
 		&& storage.find("FS.syncfs(populate") != std::string::npos
 		&& storage.find("OpenTS/124H/generations/synthetic-v1") != std::string::npos,
 		"Data generation and separate IDBFS User root have explicit mount/hydrate/flush seams");
+	Check(storage.find("prepareImportedOwnerData") != std::string::npos
+		&& storage.find("installedFiles(scope, undefined, TS_GAME)") != std::string::npos
+		&& storage.find("copiedOwnerData: false") != std::string::npos
+		&& harness.find("OpenTS_Browser_Frontend_Ready") != std::string::npos
+		&& harness.find("OpenTS_Browser_Request_Proof_Stop") != std::string::npos,
+		"126 mounts the installed TS generation in place and stops after stable native frontend readiness");
 	Check(harness.find("noInitialRun: true") != std::string::npos
 		&& harness.find("await storage.hydrateUser(Module, false)") < harness.find("Module.callMain(")
 		&& harness.find("location.replace(\"?stage=readback\")") != std::string::npos
@@ -95,6 +110,12 @@ void Test_Synthetic_Browser_Storage_Contract(void)
 		&& cmake.find("ASYNCIFY") == std::string::npos
 		&& cmake.find("JSPI") == std::string::npos,
 		"Emscripten exports the bounded storage proof with normal filesystem support, without Asyncify or JSPI");
+	Check(cmake.find("_OpenTS_126_Storage_Mark_Ready") != std::string::npos
+		&& cmake.find("_OpenTS_126_Data_Probe") != std::string::npos
+		&& cmake.find("_OpenTS_Browser_Frontend_Ready") != std::string::npos
+		&& cmake.find("_OpenTS_Browser_Bootstrap_Mixfiles_Opened") != std::string::npos
+		&& cmake.find("_OpenTS_Browser_Secondary_Mixfiles_Opened") != std::string::npos,
+		"Emscripten exports the imported-data and engine-bootstrap acceptance probes");
 }
 
 } // namespace

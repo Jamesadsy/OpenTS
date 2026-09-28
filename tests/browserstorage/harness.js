@@ -4,7 +4,9 @@
   var output = document.getElementById("proof");
   var storage = window.OpenTS124HStorage;
   var stateKey = "opents-124h-proof-state-v1";
-  var stage = new URL(location.href).searchParams.get("stage") || "write";
+  var pageUrl = new URL(location.href);
+  var ownerMode = pageUrl.searchParams.get("profile") === "ts-import";
+  var stage = pageUrl.searchParams.get("stage") || "write";
   var callbackCount = 0;
   var returnedCalls = 0;
   var heartbeatCount = 0;
@@ -17,8 +19,14 @@
   var finished = false;
   var startTime = 0;
   var maxStepMs = 0;
+  var ownerStableFrames = 0;
+  var ownerStopRequested = false;
+  var importedOwnerDataSummary = null;
   var state = readState();
-  if (stage === "write") {
+  if (ownerMode) {
+    state = {};
+    sessionStorage.removeItem(stateKey);
+  } else if (stage === "write") {
     state = {};
     sessionStorage.removeItem(stateKey);
   }
@@ -47,8 +55,8 @@
     window.__VV_TS1A_124H_PROOF__ = result;
     output.textContent = JSON.stringify(result, null, 2);
     document.body.dataset.proof = result.classification === "PASS" ? "pass" : "fail";
-    document.title = "OpenTS 124H local storage proof: " + result.classification;
-    document.dispatchEvent(new CustomEvent("vv-ts1a-124h-proof", { detail: result }));
+    document.title = (ownerMode ? "OpenTS TS local runtime proof: " : "OpenTS 124H local storage proof: ") + result.classification;
+    document.dispatchEvent(new CustomEvent(ownerMode ? "vv-ts1b-126-owner-runtime-proof" : "vv-ts1a-124h-proof", { detail: result }));
   }
 
   function check(condition, message) {
@@ -205,6 +213,69 @@
     }, 0);
   }
 
+  function finishImportedOwnerProcess() {
+    if (finished) return;
+    finished = true;
+    if (timeoutTimer) clearTimeout(timeoutTimer);
+    var finishResult = nativeValue("OpenTS_Browser_Finish");
+    var result = {
+      classification: "FAIL",
+      dataSource: "the installed Vanilla Vault TS OPFS generation",
+      copiedOwnerData: false,
+      importedFileCount: importedOwnerDataSummary ? importedOwnerDataSummary.fileCount : null,
+      importedBytes: importedOwnerDataSummary ? importedOwnerDataSummary.totalBytes : null,
+      dataRoot: nativeText("OpenTS_124H_Data_Root"),
+      dataPathStable: nativeValue("OpenTS_124H_Data_Root_Stable") === 1,
+      ownerDataProbePassed: nativeValue("OpenTS_126_Data_Probe_Passed") === 1,
+      ownerDataBoundaryReached: nativeValue("OpenTS_Browser_OwnerData_Boundary") === 1,
+      bootstrapMixfilesOpened: nativeValue("OpenTS_Browser_Bootstrap_Mixfiles_Opened") === 1,
+      secondaryMixfilesOpened: nativeValue("OpenTS_Browser_Secondary_Mixfiles_Opened") === 1,
+      frontendReadyFrames: ownerStableFrames,
+      frontendReadyBeforeShutdown: nativeValue("OpenTS_Browser_Frontend_Ready") === 1,
+      emscriptenMainReturned: nativeValue("OpenTS_Browser_Main_Returned") === 1,
+      beginCount: nativeValue("OpenTS_Browser_Begin_Count"),
+      beginResult: nativeValue("OpenTS_Browser_Begin_Result"),
+      mainGameSteps: nativeValue("OpenTS_Browser_MainGame_Steps"),
+      browserCallbacks: callbackCount,
+      returnedCallbacks: returnedCalls,
+      nativeProcessSteps: nativeValue("OpenTS_Browser_Step_Count"),
+      phaseProgression: phaseProgression,
+      finishResult: finishResult,
+      finishCount: nativeValue("OpenTS_Browser_Finish_Count"),
+      finalProcessStatus: nativeValue("OpenTS_Browser_Status"),
+      rendererInitialized: nativeValue("OpenTS_Browser_Renderer_Initialized") === 1,
+      rendererName: nativeText("OpenTS_Browser_Renderer_Name"),
+      canvasExists: document.getElementById("canvas") instanceof HTMLCanvasElement,
+      webglContextAvailable: !!(document.getElementById("canvas").getContext("webgl2")
+        || document.getElementById("canvas").getContext("webgl")),
+      heartbeatTicks: heartbeatCount,
+      maxNativeStepMs: Number(maxStepMs.toFixed(3)),
+      elapsedMs: Number((performance.now() - startTime).toFixed(3)),
+      ownerDataRequests: ownerRequests(),
+      runtimeErrors: runtimeErrors.slice(),
+      consoleErrors: consoleErrors.slice(),
+      movieNetworkPersistenceOrGameplayExpansion: false,
+      asyncify: false,
+      jspi: false
+    };
+    var pass = result.ownerDataProbePassed && result.ownerDataBoundaryReached
+      && result.bootstrapMixfilesOpened && result.secondaryMixfilesOpened
+      && result.frontendReadyFrames >= 8 && result.frontendReadyBeforeShutdown
+      && result.emscriptenMainReturned && result.beginCount === 1 && result.beginResult === 1
+      && result.mainGameSteps >= 8 && result.browserCallbacks > 0
+      && result.browserCallbacks === result.returnedCallbacks
+      && result.returnedCallbacks === result.nativeProcessSteps
+      && result.phaseProgression.indexOf(6) !== -1
+      && result.finishResult === 1 && result.finishCount === 1 && result.finalProcessStatus === 6
+      && result.rendererInitialized && !!result.rendererName && result.canvasExists
+      && result.webglContextAvailable && result.dataRoot === "/data/" && result.dataPathStable
+      && result.heartbeatTicks > 0 && result.ownerDataRequests.length === 0
+      && result.runtimeErrors.length === 0 && result.consoleErrors.length === 0;
+    result.classification = pass ? "PASS" : "FAIL";
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    publish(result);
+  }
+
   function fail(error) {
     if (finished) return;
     finished = true;
@@ -213,8 +284,46 @@
     state.runtimeErrors = (state.runtimeErrors || []).concat(runtimeErrors);
     state.consoleErrors = (state.consoleErrors || []).concat(consoleErrors);
     state.failure = errorText(error);
-    saveState();
-    publish({ classification: "FAIL", stage: stage, reason: errorText(error), state: state });
+    if (ownerMode) {
+      publish({
+        classification: "FAIL",
+        stage: stage,
+        reason: errorText(error),
+        dataSource: "the installed Vanilla Vault TS OPFS generation",
+        copiedOwnerData: false,
+        importedFileCount: importedOwnerDataSummary ? importedOwnerDataSummary.fileCount : null,
+        importedBytes: importedOwnerDataSummary ? importedOwnerDataSummary.totalBytes : null,
+        frontendReadyFrames: ownerStableFrames,
+        nativeState: {
+          phase: nativeValue("OpenTS_Browser_Status"),
+          faultCode: nativeValue("OpenTS_Browser_Fault_Code"),
+          beginCount: nativeValue("OpenTS_Browser_Begin_Count"),
+          beginResult: nativeValue("OpenTS_Browser_Begin_Result"),
+          mainGameSteps: nativeValue("OpenTS_Browser_MainGame_Steps"),
+          bootstrapStage: nativeValue("OpenTS_Browser_Bootstrap_Stage"),
+          rendererInitialized: nativeValue("OpenTS_Browser_Renderer_Initialized") === 1,
+          rendererName: nativeText("OpenTS_Browser_Renderer_Name"),
+          dataProbePassed: nativeValue("OpenTS_126_Data_Probe_Passed") === 1,
+          ownerDataBoundaryReached: nativeValue("OpenTS_Browser_OwnerData_Boundary") === 1,
+          bootstrapMixfilesOpened: nativeValue("OpenTS_Browser_Bootstrap_Mixfiles_Opened") === 1,
+          secondaryMixfilesOpened: nativeValue("OpenTS_Browser_Secondary_Mixfiles_Opened") === 1,
+          frontendReady: nativeValue("OpenTS_Browser_Frontend_Ready") === 1,
+          dataRoot: nativeText("OpenTS_124H_Data_Root")
+        },
+        browserCallbacks: callbackCount,
+        returnedCallbacks: returnedCalls,
+        nativeProcessSteps: nativeValue("OpenTS_Browser_Step_Count"),
+        heartbeatTicks: heartbeatCount,
+        ownerDataRequests: ownerRequests(),
+        runtimeErrors: runtimeErrors.slice(),
+        consoleErrors: consoleErrors.slice(),
+        finishCount: nativeValue("OpenTS_Browser_Finish_Count"),
+        phaseProgression: phaseProgression
+      });
+    } else {
+      saveState();
+      publish({ classification: "FAIL", stage: stage, reason: errorText(error), state: state });
+    }
   }
 
   function onFrame() {
@@ -233,9 +342,21 @@
       if ((result !== 1 && result !== 2) || phase < 0 || phase > 7) {
         throw new Error("unexpected bounded native Step result/state: " + result + "/" + phase);
       }
+      if (ownerMode && phase < 6) {
+        if (nativeValue("OpenTS_Browser_Frontend_Ready") === 1) ownerStableFrames += 1;
+        else ownerStableFrames = 0;
+        if (ownerStableFrames >= 8 && !ownerStopRequested) {
+          nativeValue("OpenTS_Browser_Request_Proof_Stop");
+          ownerStopRequested = true;
+        }
+      }
       if (phase === 6) {
         check(returnedCalls === callbackCount, "browser callback did not return after each native Step");
         check(nativeValue("OpenTS_Browser_Step_Count") === returnedCalls, "native Step and browser callback counts differ");
+        if (ownerMode) {
+          finishImportedOwnerProcess();
+          return;
+        }
         check(nativeValue("OpenTS_124H_Boundary_Probe_Passed") === 1, "guard did not see the synthetic bootstrap sentinel");
         finishProcess();
         return;
@@ -353,9 +474,17 @@
   }
 
   async function startProcessStage(Module) {
-    var prepared = await storage.prepareData(Module);
+    var prepared = ownerMode
+      ? await storage.prepareImportedOwnerData(Module)
+      : await storage.prepareData(Module);
     storage.mountUserRoot(Module);
     await storage.hydrateUser(Module, false);
+    if (ownerMode) {
+      check(Module._OpenTS_126_Storage_Mark_Ready() === 1, "native imported TS storage readiness check failed");
+      check(Module._OpenTS_126_Storage_Is_Ready() === 1, "imported TS storage is not ready before startup main");
+      check(Module._OpenTS_126_Data_Probe() === 1, "native imported TS Data probe failed");
+      importedOwnerDataSummary = prepared.generation;
+    } else {
     check(Module._OpenTS_124H_Storage_Mark_Ready() === 1, "native storage readiness check failed");
     check(Module._OpenTS_124H_Storage_Is_Ready() === 1, "storage is not ready before startup main");
     var dataProbeResult = Module._OpenTS_124H_Data_Probe();
@@ -365,6 +494,7 @@
     state.dataGeneration = prepared.generation;
     window.__VV124H_GENERATION__ = prepared.generation;
     saveState();
+    }
     startTime = performance.now();
     check(nativeValue("OpenTS_Browser_Status") === 0, "process was not Idle before Emscripten main");
     recordPhase(nativeValue("OpenTS_Browser_Status"));
@@ -373,7 +503,7 @@
       "Emscripten main did not return after Begin");
     check(nativeValue("OpenTS_Browser_Begin_Count") === 1
       && nativeValue("OpenTS_Browser_Begin_Result") === 1, "process Begin did not succeed exactly once");
-    timeoutTimer = setTimeout(function () { fail(new Error("browser process proof timed out")); }, 30000);
+    timeoutTimer = setTimeout(function () { fail(new Error("browser process proof timed out")); }, ownerMode ? 300000 : 30000);
     requestAnimationFrame(onFrame);
   }
 
@@ -401,7 +531,7 @@
       heartbeatTimer = setInterval(function () { heartbeatCount += 1; }, 4);
       timeoutTimer = setTimeout(function () {
         fail(new Error("bounded browser storage/process proof timed out"));
-      }, 60000);
+      }, ownerMode ? 300000 : 60000);
       window.focus();
       if (Module.canvas && Module.canvas.focus) Module.canvas.focus();
       var action = stage === "failure" ? startFailureStage(Module) : startProcessStage(Module);

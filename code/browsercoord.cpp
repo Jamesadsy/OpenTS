@@ -21,6 +21,10 @@ extern "C" int OpenTS_Browser_Startup_Bootstrap_Stage(void);
 extern "C" int OpenTS_Browser_Startup_Finish_Stage(void);
 extern "C" int OpenTS_Browser_Startup_ProgEnd_Stage(void);
 extern "C" char const * OpenTS_Browser_Startup_Renderer_Name(void);
+extern "C" int OpenTS_Browser_Startup_Bootstrap_Mixfiles_Opened(void);
+extern "C" int OpenTS_Browser_Startup_Secondary_Mixfiles_Opened(void);
+extern "C" int OpenTS_Browser_Startup_Frontend_Ready(void);
+extern "C" void OpenTS_Browser_Startup_Request_Proof_Stop(void);
 #endif
 
 namespace
@@ -351,6 +355,40 @@ extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_OwnerData_Boundary(void)
 	return(OpenTS_Browser_Startup_OwnerData_Boundary());
 #else
 	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Bootstrap_Mixfiles_Opened(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Bootstrap_Mixfiles_Opened());
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Secondary_Mixfiles_Opened(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Secondary_Mixfiles_Opened());
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Frontend_Ready(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Frontend_Ready());
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_EXPORT void OpenTS_Browser_Request_Proof_Stop(void)
+{
+#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Startup_Request_Proof_Stop();
 #endif
 }
 

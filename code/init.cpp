@@ -62,6 +62,10 @@
 extern "C" void OpenTS_Browser_Startup_Reach_OwnerData_Boundary(void);
 extern "C" int OpenTS_124H_Storage_Is_Ready(void);
 extern "C" int OpenTS_124H_AtOwnerDataBoundary(void);
+extern "C" int OpenTS_126_Storage_Is_Ready(void);
+extern "C" int OpenTS_126_Data_Probe(void);
+extern "C" void OpenTS_Browser_Startup_Record_Bootstrap_Mixfiles(void);
+extern "C" void OpenTS_Browser_Startup_Record_Secondary_Mixfiles(void);
 #endif
 
 #include "_bench.h"
@@ -402,6 +406,9 @@ int Init_Game(int , char * [])
 		DebugStringNoPrefix(" ...Failed!!!\n");
 		return(-1);
 	}
+#ifdef __EMSCRIPTEN__
+	OpenTS_Browser_Startup_Record_Secondary_Mixfiles();
+#endif
 
 	DebugStringNoPrefix(" ...OK\n");
 
@@ -2643,14 +2650,15 @@ static bool Bootstrap(void)
 	Mono_Clear_Screen();
 
 #ifdef __EMSCRIPTEN__
-	if (!OpenTS_124H_Storage_Is_Ready()) {
+	if (OpenTS_126_Storage_Is_Ready()) {
+		if (!OpenTS_126_Data_Probe()) return(false);
+		OpenTS_Browser_Startup_Reach_OwnerData_Boundary();
+	} else {
+		if (!OpenTS_124H_Storage_Is_Ready()) return(false);
+		OpenTS_Browser_Startup_Reach_OwnerData_Boundary();
+		if (!OpenTS_124H_AtOwnerDataBoundary()) return(false);
 		return(false);
 	}
-	OpenTS_Browser_Startup_Reach_OwnerData_Boundary();
-	if (!OpenTS_124H_AtOwnerDataBoundary()) {
-		return(false);
-	}
-	return(false);
 #endif
 
 	/*
@@ -2663,6 +2671,9 @@ static bool Bootstrap(void)
 		DebugString("Failed to initialize bootstrap mixfiles!\n");
 		return(false);
 	}
+#ifdef __EMSCRIPTEN__
+	OpenTS_Browser_Startup_Record_Bootstrap_Mixfiles();
+#endif
 
 	/*
 	**	Initialize the resident font pointers.

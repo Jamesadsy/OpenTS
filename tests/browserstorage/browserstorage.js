@@ -6,6 +6,7 @@
   const BLOCK_BYTES = 256 * 1024;
   const CACHE_LIMIT_BYTES = 16 * 1024 * 1024;
   const GENERATION_PATH = "OpenTS/124H/generations/synthetic-v1";
+  const TS_GAME = "ts";
   const DATA_FILES = [
     { path: "ROOT.TST", size: 97, seed: 11 },
     { path: "NESTED/SAMPLE.BIN", size: 513, seed: 37 },
@@ -262,6 +263,40 @@
     FS.mount(idbfs, {}, USER_ROOT);
   }
 
+  async function prepareImportedOwnerData(Module) {
+    if (!navigator.storage || typeof navigator.storage.getDirectory !== "function") {
+      throw new Error("OPFS is unavailable; imported TS data cannot be mounted.");
+    }
+    const [deviceStorage, profile] = await Promise.all([
+      import("/device/storage.mjs"),
+      import("/device/profile.mjs")
+    ]);
+    const scope = deviceStorage.localInstallationScope();
+    const installed = await deviceStorage.installedFiles(scope, undefined, TS_GAME);
+    if (!installed) throw new Error("Import the accepted TS .vcvault on this device before opening OpenTS.");
+    const readiness = profile.profileReadiness(TS_GAME, installed.state.files);
+    if (!readiness.ready) throw new Error("The installed TS profile is incomplete.");
+
+    const entries = installed.files.map(entry => ({
+      path: entry.path,
+      file: entry.file,
+      size: entry.sizeBytes
+    }));
+    const mount = mountReadOnlyData(Module.FS, entries, DATA_ROOT);
+    const totalBytes = entries.reduce((total, entry) => total + entry.size, 0);
+    return {
+      generation: {
+        game: TS_GAME,
+        generation: installed.state.generation,
+        fileCount: entries.length,
+        totalBytes,
+        contentSource: "the installed Vanilla Vault TS OPFS generation",
+        copiedOwnerData: false
+      },
+      mount
+    };
+  }
+
   function syncfs(FS, populate) {
     return new Promise((resolve, reject) => {
       FS.syncfs(populate, error => error ? reject(error) : resolve());
@@ -279,6 +314,7 @@
       const mount = mountReadOnlyData(Module.FS, generation.entries, DATA_ROOT);
       return { generation: { ...generation, entries: undefined }, mount };
     },
+    prepareImportedOwnerData,
     mountUserRoot(Module) { mountUserRoot(Module.FS); },
     hydrateUser(Module, injectFailure) {
       if (injectFailure) {
