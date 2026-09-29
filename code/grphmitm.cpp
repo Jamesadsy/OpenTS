@@ -170,3 +170,16 @@ void GraphicMenuItem::Action(MSEngine * engine)
 		SelectSound->Play();
 	}
 }
+
+
+bool GraphicMenuItem::Begin_Action(MSEngine * engine)
+{
+	Action(engine);
+	return(true);
+}
+
+
+bool GraphicMenuItem::Action_Complete(MSEngine *)
+{
+	return(true);
+}

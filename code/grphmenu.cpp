@@ -11,6 +11,7 @@
 
 #include "grphmenu.h"
 
+#include "hostclock.h"
 #include "_keyboar.h"
 #include "_surface.h"
 #include "ccfile.h"
@@ -21,6 +22,7 @@
 #include "msanim.h"
 #include "drawhelp.h"
 #include "theme.h"
+#include "video.h"
 
 GraphicMenu * _Graphic_Menu(INIClass const & ini, const char * name);
 GraphicMenuItem * GM_Create_Item_From_INI(const char * name, INIClass const & ini, MSEngine & engine, Point2D & image_size);
@@ -127,6 +129,7 @@ GraphicMenu::GraphicMenu(void) :
 /// </summary>
 GraphicMenu::~GraphicMenu(void)
 {
+	Presentation_Finish();
 	BackgroundName.Release();
 	ThemeName.Release();
 
@@ -162,77 +165,165 @@ void GraphicMenu::Set_Item_Enabled(int id, bool enabled)
 /// <returns>Returns with the identifier of the menu item the player chose.</returns>
 int GraphicMenu::Presentation(void)
 {
+	if (!Presentation_Begin()) return(-1);
+	for (;;) {
+		GraphicMenuStepResult const result = Presentation_Step();
+		if (result == GraphicMenuStepResult::Complete) break;
+		if (result == GraphicMenuStepResult::Fault) {
+			Presentation_Finish();
+			return(-1);
+		}
+		Host_Sleep(Video_Milliseconds_Until_Present());
+	}
+	Presentation_Finish();
+	return(Presentation_Result());
+}
+
+
+bool GraphicMenu::Presentation_Begin(void)
+{
+	if (PresentationState != PresentationPhase::Idle) return(false);
 	Theme.Play_Song(Theme.From_Name(ThemeName.Peek()));
-
 	Release_Pointer_To_Host();
-
 	HiddenSurface->Fill(0);
 	AlternateSurface->Fill(0);
-
-	bool done = false;
-	GraphicMenuItem * item = NULL;
-
 	Keyboard->Clear();
+	Engine.Request_Rebuild();
+	PresentationState = PresentationPhase::AwaitInitialAnimation;
+	return(true);
+}
 
-	if (CurrentAnim != NULL) {
-		Engine.Wait_For_Anim(CurrentAnim);
+
+GraphicMenuStepResult GraphicMenu::Presentation_Step(void)
+{
+	using StepResult = GraphicMenuStepResult;
+	using Phase = PresentationPhase;
+	if (PresentationState == Phase::Complete) return(StepResult::Complete);
+	if (PresentationState == Phase::Fault || PresentationState == Phase::Idle) {
+		PresentationState = Phase::Fault;
+		return(StepResult::Fault);
 	}
 
-	Engine.Restore_Anims(AlternateSurface->Get_Rect());
-	Engine.Restore_And_Advance();
-
-	while (!done) {
-		Hide_Mouse();
-		Engine.Wait_For_Focus();
-		Show_Mouse();
-
-		Point2D mouse(Get_Mouse_X(), Get_Mouse_Y());
-
-		if (Keyboard->Check() != KN_NONE) {
-			KeyNumType key = Keyboard->Get();
-			GraphicMenuItem * temp = (key == KN_LMOUSE || key == KN_RETURN) ? Get_Item_Under_Mouse(mouse) : Get_Item_For_Key(key);
-
-			if (temp != NULL) {
-				if (item != temp) {
-					if (item != NULL) {
-						item->Set_Selected(false);
-					}
-					item = temp;
-					if (temp != NULL) {
-						temp->Set_Selected(true);
-					}
-				}
-				done = true;
+	switch (PresentationState) {
+		case Phase::AwaitInitialAnimation:
+			if (Engine.Has_Animation(CurrentAnim)) {
+				Engine.Cooperative_Service_Step(true);
+				return(StepResult::Waiting);
 			}
-		} else {
-			GraphicMenuItem * temp = Get_Item_Under_Mouse(mouse);
-			if (temp != item) {
-				if (item != NULL) {
-					item->Set_Selected(false);
-				}
-				item = temp;
-				if (temp != NULL) {
-					temp->Set_Selected(true);
-				}
+			Engine.Restore_Anims(AlternateSurface->Get_Rect());
+			Engine.Request_Rebuild();
+			Engine.Cooperative_Service_Step(true);
+			PresentationState = Phase::Interactive;
+			return(StepResult::Waiting);
+
+		case Phase::Interactive: {
+			if (!PresentationMouseHidden) {
+				Hide_Mouse();
+				PresentationMouseHidden = true;
 			}
+			if (!GameInFocus) {
+				Engine.Cooperative_Service_Step(false);
+				if (GameInFocus && PresentationMouseHidden) {
+					Show_Mouse();
+					PresentationMouseHidden = false;
+				}
+				return(StepResult::Waiting);
+			}
+			Show_Mouse();
+			PresentationMouseHidden = false;
+
+			Point2D const mouse(Get_Mouse_X(), Get_Mouse_Y());
+			GraphicMenuItem * candidate = NULL;
+			bool chosen = false;
+			if (Keyboard->Check() != KN_NONE) {
+				PendingKey = Keyboard->Get();
+				candidate = (PendingKey == KN_LMOUSE || PendingKey == KN_RETURN)
+					? Get_Item_Under_Mouse(mouse) : Get_Item_For_Key(PendingKey);
+				chosen = candidate != NULL;
+			} else {
+				candidate = Get_Item_Under_Mouse(mouse);
+			}
+
+			if (candidate != SelectedItem) {
+				if (SelectedItem != NULL) SelectedItem->Set_Selected(false);
+				SelectedItem = candidate;
+				if (SelectedItem != NULL) SelectedItem->Set_Selected(true);
+			}
+			if (chosen) PresentationState = Phase::ItemAction;
+			Engine.Cooperative_Service_Step(true);
+			return(StepResult::Waiting);
 		}
 
-		Engine.Wait_Delay(1);
+		case Phase::ItemAction:
+			if (SelectedItem == NULL) {
+				PresentationState = Phase::Finish;
+				return(StepResult::Waiting);
+			}
+			if (!PresentationActionStarted) {
+				PresentationActionStarted = true;
+				PresentationActionComplete = SelectedItem->Begin_Action(&Engine);
+			}
+			if (PresentationActionComplete) {
+				PresentationState = Phase::Finish;
+				return(StepResult::Waiting);
+			}
+			Engine.Cooperative_Service_Step(true);
+			PresentationState = Phase::AwaitSelectVQ;
+			return(StepResult::Waiting);
+
+		case Phase::AwaitSelectVQ:
+			if (SelectedItem == NULL || SelectedItem->Action_Complete(&Engine)) {
+				PresentationState = Phase::Finish;
+				return(StepResult::Waiting);
+			}
+			Engine.Cooperative_Service_Step(true);
+			return(StepResult::Waiting);
+
+		case Phase::Finish:
+			PresentationResult = SelectedItem != NULL ? SelectedItem->Get_ID() : -1;
+			Presentation_Finish();
+			PresentationState = Phase::Complete;
+			return(StepResult::Complete);
+
+		case Phase::Idle:
+		case Phase::Complete:
+		case Phase::Fault:
+			break;
 	}
 
-	if (item != NULL) {
-		item->Action(&Engine);
-	}
+	PresentationState = Phase::Fault;
+	return(StepResult::Fault);
+}
 
+
+int GraphicMenu::Presentation_Result(void) const
+{
+	return(PresentationResult);
+}
+
+
+bool GraphicMenu::Presentation_Awaiting_Action(void) const
+{
+	return(PresentationState == PresentationPhase::ItemAction
+		|| PresentationState == PresentationPhase::AwaitSelectVQ);
+}
+
+
+bool GraphicMenu::Presentation_Finish(void)
+{
+	if (PresentationCleanupDone) return(true);
+	if (PresentationState == PresentationPhase::Idle) return(true);
+	if (PresentationMouseHidden) {
+		Show_Mouse();
+		PresentationMouseHidden = false;
+	}
 	Recapture_Pointer();
-
 	Theme.Fade_Out();
-
-	if (item != NULL) {
-		return(item->Get_ID());
+	PresentationCleanupDone = true;
+	if (PresentationState != PresentationPhase::Fault) {
+		PresentationState = PresentationPhase::Complete;
 	}
-
-	return(-1);
+	return(true);
 }
 
 

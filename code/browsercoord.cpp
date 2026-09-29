@@ -24,6 +24,12 @@ extern "C" char const * OpenTS_Browser_Startup_Renderer_Name(void);
 extern "C" int OpenTS_Browser_Startup_Bootstrap_Mixfiles_Opened(void);
 extern "C" int OpenTS_Browser_Startup_Secondary_Mixfiles_Opened(void);
 extern "C" int OpenTS_Browser_Startup_Frontend_Ready(void);
+extern "C" int OpenTS_Browser_Startup_Menu_State(void);
+extern "C" int OpenTS_Browser_Startup_Selected_Product(void);
+extern "C" int OpenTS_Browser_Startup_Title_Media_Available(void);
+extern "C" int OpenTS_Browser_Startup_Title_Media_Natural(void);
+extern "C" int OpenTS_Browser_Startup_Title_Media_Skipped(void);
+extern "C" int OpenTS_Browser_Startup_Later_Boundary(void);
 extern "C" void OpenTS_Browser_Startup_Request_Proof_Stop(void);
 #endif
 
@@ -69,6 +75,7 @@ StartupAction StepMainGame(void *)
 		case 0: return(StartupAction::Waiting);
 		case 1: return(StartupAction::Complete);
 		case 2: return(StartupAction::NativeChild);
+		case 3: return(StartupAction::Boundary);
 		default: return(StartupAction::Fault);
 	}
 }
@@ -96,6 +103,7 @@ OpenTS_Browser::BrowserProcessOperations ProductionOperations()
 	operations.WaitFocus = &WaitFocus;
 	operations.BeginMainGame = &BeginMainGame;
 	operations.StepMainGame = &StepMainGame;
+	operations.BoundaryCode = [](void *) { return(OpenTS_Browser_Startup_Later_Boundary()); };
 	operations.ShutdownRequest = &ShutdownRequest;
 	operations.ShutdownDrain = &ShutdownDrain;
 	operations.Finish = &FinishStartup;
@@ -248,6 +256,12 @@ CooperativeResult Step(BrowserProcessSession & session) noexcept
 					SetFault(session, FaultNativeChild);
 					return(CooperativeResult::Fault);
 				}
+				if (result == Action::Boundary) {
+					session.LaterBoundaryCode = session.Operations.BoundaryCode != nullptr
+						? session.Operations.BoundaryCode(session.Operations.Context) : 0;
+					session.Phase = Phase::ShutdownRequest;
+					return(CooperativeResult::Waiting);
+				}
 			}
 			break;
 
@@ -385,6 +399,56 @@ extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Frontend_Ready(void)
 #endif
 }
 
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Menu_State(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Menu_State());
+#else
+	return(0);
+#endif
+}
+
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Selected_Product(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Selected_Product());
+#else
+	return(-1);
+#endif
+}
+
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Title_Media_Available(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Title_Media_Available());
+#else
+	return(0);
+#endif
+}
+
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Title_Media_Natural(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Title_Media_Natural());
+#else
+	return(0);
+#endif
+}
+
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Title_Media_Skipped(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(OpenTS_Browser_Startup_Title_Media_Skipped());
+#else
+	return(0);
+#endif
+}
+
 extern "C" OPENTS_BROWSER_EXPORT void OpenTS_Browser_Request_Proof_Stop(void)
 {
 #if defined(__EMSCRIPTEN__)
@@ -393,6 +457,7 @@ extern "C" OPENTS_BROWSER_EXPORT void OpenTS_Browser_Request_Proof_Stop(void)
 }
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Fault_Code(void) { return(Session.FaultCode); }
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Later_Boundary(void) { return(Session.LaterBoundaryCode); }
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Finish_Count(void) { return(FinishCount); }
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_124H_Browser_Fault_Finish_Proof(void)

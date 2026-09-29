@@ -26,6 +26,7 @@ enum class MainGamePhase : std::uint8_t {
 	IngameModal,
 	GameCleanup,
 	ReturnFrontend,
+	LaterBoundary,
 	Complete,
 	Fault,
 };
@@ -33,6 +34,7 @@ enum class MainGamePhase : std::uint8_t {
 enum class MainGameStepResult : std::uint8_t {
 	Waiting,
 	NativeChild,
+	LaterBoundary,
 	Complete,
 	Fault,
 };
@@ -76,7 +78,8 @@ class MainGameSession
 		bool Complete_Gameplay_Preparation(bool success) noexcept;
 		bool Finish(void) noexcept;
 
-		MainGamePhase Phase(void) const noexcept;
+	MainGamePhase Phase(void) const noexcept;
+	SelectGameLaterBoundary Later_Boundary(void) const noexcept;
 		bool Fade(void) const noexcept;
 		bool Init_Game_Owned(void) const noexcept;
 		bool Gameplay_Prepared(void) const noexcept;

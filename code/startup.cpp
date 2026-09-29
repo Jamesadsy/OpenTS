@@ -592,7 +592,14 @@ extern "C" int OpenTS_Browser_Startup_Step_MainGame(void)
 	if (result == MainGameStepResult::Waiting) return(0);
 	if (result == MainGameStepResult::Complete) return(1);
 	if (result == MainGameStepResult::NativeChild) return(2);
+	if (result == MainGameStepResult::LaterBoundary) return(3);
 	return(-1);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Later_Boundary(void)
+{
+	return((int)BrowserMainGame.Later_Boundary());
 }
 
 
@@ -703,12 +710,52 @@ extern "C" int OpenTS_Browser_Startup_Secondary_Mixfiles_Opened(void)
 extern "C" int OpenTS_Browser_Startup_Frontend_Ready(void)
 {
 	SelectGameSession * const selection = BrowserMainGame.Selection();
+	bool const legacy_frontend_ready = selection != nullptr
+		&& selection->Phase == SelectGamePhase::MainMenu;
+	bool const selected_product_ready = selection != nullptr
+		&& selection->Phase == SelectGamePhase::NewMenuChild
+		&& selection->Product_Menu_Ready();
 	return(BrowserStartup.OwnerDataBoundaryReached
 		&& BrowserStartup.BootstrapMixfilesOpened
 		&& BrowserStartup.SecondaryMixfilesOpened
 		&& BrowserStartup.MainGameBeginAttempted
 		&& BrowserMainGame.Phase() == MainGamePhase::SelectGame
-		&& selection != nullptr && selection->Phase == SelectGamePhase::MainMenu ? 1 : 0);
+		&& (legacy_frontend_ready || selected_product_ready) ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Menu_State(void)
+{
+	SelectGameSession * const selection = BrowserMainGame.Selection();
+	return(selection != nullptr ? selection->Browser_Menu_State() : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Selected_Product(void)
+{
+	SelectGameSession * const selection = BrowserMainGame.Selection();
+	return(selection != nullptr ? selection->Selected_Product() : -1);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Title_Media_Available(void)
+{
+	SelectGameSession * const selection = BrowserMainGame.Selection();
+	return(selection != nullptr && selection->Title_Media_Available() ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Title_Media_Natural(void)
+{
+	SelectGameSession * const selection = BrowserMainGame.Selection();
+	return(selection != nullptr && selection->Title_Media_Completed_Naturally() ? 1 : 0);
+}
+
+
+extern "C" int OpenTS_Browser_Startup_Title_Media_Skipped(void)
+{
+	SelectGameSession * const selection = BrowserMainGame.Selection();
+	return(selection != nullptr && selection->Title_Media_Skipped() ? 1 : 0);
 }
 
 

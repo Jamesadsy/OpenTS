@@ -132,7 +132,7 @@ MainGameStepResult MainGameSession::Step(void) noexcept
 			SelectGameStepResult const selection = m_Impl->Ops.StepSelection != nullptr
 				? m_Impl->Ops.StepSelection(m_Impl->Ops.Context, m_Impl->Selection)
 				: m_Impl->Selection.Step();
-			switch (selection) {
+				switch (selection) {
 				case SelectGameStepResult::Waiting:
 					return(Result::Waiting);
 				case SelectGameStepResult::NativeChild:
@@ -140,6 +140,9 @@ MainGameStepResult MainGameSession::Step(void) noexcept
 						m_Impl->Phase = MainGamePhase::PrepareGameplay;
 					}
 					return(Result::NativeChild);
+				case SelectGameStepResult::LaterBoundary:
+					m_Impl->Phase = MainGamePhase::LaterBoundary;
+					return(Result::LaterBoundary);
 				case SelectGameStepResult::ReadyForGameplay:
 					m_Impl->Phase = MainGamePhase::PrepareGameplay;
 					return(Result::NativeChild);
@@ -281,6 +284,9 @@ MainGameStepResult MainGameSession::Step(void) noexcept
 		case MainGamePhase::Complete:
 			return(Result::Complete);
 
+		case MainGamePhase::LaterBoundary:
+			return(Result::LaterBoundary);
+
 		case MainGamePhase::Fault:
 			return(Result::Fault);
 	}
@@ -341,6 +347,10 @@ bool MainGameSession::Finish(void) noexcept
 
 
 MainGamePhase MainGameSession::Phase(void) const noexcept { return(m_Impl->Phase); }
+SelectGameLaterBoundary MainGameSession::Later_Boundary(void) const noexcept
+{
+	return(m_Impl->Selection.Later_Boundary());
+}
 bool MainGameSession::Fade(void) const noexcept { return(m_Impl->Fade); }
 bool MainGameSession::Init_Game_Owned(void) const noexcept { return(m_Impl->InitOwned); }
 bool MainGameSession::Gameplay_Prepared(void) const noexcept { return(m_Impl->GameplayPrepared); }

@@ -424,6 +424,60 @@ void MSEngine::Wait_For_Focus(void)
 }
 
 
+void MSEngine::Cooperative_Service_Step(bool advance_animations)
+{
+	Call_Back();
+	Process_Idle();
+
+	if (GameInFocus) {
+		if (CooperativeFocusPaused) {
+			for (int index = 0; index < Anims.Count(); index++) {
+				Anims[index]->Resume();
+			}
+			CooperativeFocusPaused = false;
+		}
+		if (advance_animations) {
+			Advance(HiddenSurface);
+			Blit_All(HiddenSurface);
+		}
+	} else if (!CooperativeFocusPaused) {
+		for (int index = 0; index < Anims.Count(); index++) {
+			Anims[index]->Pause();
+		}
+		CooperativeFocusPaused = true;
+	}
+
+	MSEngine_Service_Legacy_Input(
+		[]() { Win_Gamepad_Service(); },
+		[]() { Win_Gamepad_Discard_Actions(); },
+		[]() { Windows_Message_Handler(); });
+
+	if (!GameInFocus && !CooperativeFocusPaused) {
+		for (int index = 0; index < Anims.Count(); index++) {
+			Anims[index]->Pause();
+		}
+		CooperativeFocusPaused = true;
+	} else if (GameInFocus && CooperativeFocusPaused) {
+		for (int index = 0; index < Anims.Count(); index++) {
+			Anims[index]->Resume();
+		}
+		CooperativeFocusPaused = false;
+	}
+}
+
+
+bool MSEngine::Has_Animation(MSAnim * anim) const
+{
+	return(anim != NULL && Anims.ID(anim) != -1);
+}
+
+
+void MSEngine::Request_Rebuild(void)
+{
+	_RebuildFromAlternate = true;
+}
+
+
 /// <summary>
 /// Registers a sound effect with the engine.
 /// The screen driving this engine names its sounds rather than its files, so that

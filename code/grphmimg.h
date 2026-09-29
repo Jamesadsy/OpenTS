@@ -22,6 +22,8 @@ class GraphicMenuImageItem : public GraphicMenuItem
 
 		virtual bool Is_Mouse_Over(Point2D const & mouse) override;
 		virtual void Action(MSEngine * engine) override;
+		virtual bool Begin_Action(MSEngine * engine) override;
+		virtual bool Action_Complete(MSEngine * engine) override;
 		virtual void On_Selected_Change(bool) override;
 		virtual void On_Enabled_Change(bool) override;
 
@@ -58,4 +60,5 @@ class GraphicMenuImageItem : public GraphicMenuItem
 		 * after the item's action and the menu waits for it to finish.
 		 */
 		char SelectVQ[64];
+		MSAnim * SelectAnimation = NULL;
 };

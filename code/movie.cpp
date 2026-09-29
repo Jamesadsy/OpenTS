@@ -20,6 +20,7 @@
 #include "_rect.h"
 #include "_surface.h"
 #include "ccfile.h"
+#include "conquer.h"
 #include "dbgprint.h"
 #include "dsurface.h"
 #include "globals.h"
@@ -27,11 +28,19 @@
 #include "gscreen.h"
 #include "movies.h"
 #include "movieskip.h"
+#include "legacyinputpolicy.hh"
 #include "session.h"
+#include "theme.h"
 #include "vector.h"
 #include "vqa.h"
+#include "video.h"
+#include "win.h"
+#include "winstub.h"
 
 #include "vq.hh"
+
+#include <memory>
+#include <string>
 
 
 /// <summary>
@@ -53,6 +62,162 @@ void Rebuild_Interpolated_Palette(unsigned char * interpal)
 unsigned char 	* InterpolatedPalettes[100];
 BOOL				PalettesRead;
 unsigned			PaletteCounter;
+
+
+struct TitleMovieSession::Impl
+{
+	enum class Phase : std::uint8_t { Idle, Playing, Complete, Fault };
+	Phase State = Phase::Idle;
+	std::string Name;
+	std::unique_ptr<VQHandle> Handle;
+	std::unique_ptr<MovieSkip::Playback> Playback;
+	bool ClrScreenAfter = false;
+	bool Available = false;
+	bool MouseHidden = false;
+	bool PlaybackBegun = false;
+	bool NaturalCompletion = false;
+	bool Skipped = false;
+	bool CleanupDone = false;
+};
+
+
+TitleMovieSession::TitleMovieSession(void) : m_Impl(std::make_unique<Impl>())
+{
+}
+
+
+TitleMovieSession::~TitleMovieSession(void)
+{
+	Finish();
+}
+
+
+bool TitleMovieSession::Begin(
+	char const * name,
+	ThemeType theme,
+	bool clrscrn_after,
+	bool stretch,
+	bool clrscrn_before)
+{
+	if (m_Impl->State != Impl::Phase::Idle || name == NULL) return(false);
+	if (Session.Type != GAME_NORMAL && !Session.PlayMovies) {
+		m_Impl->State = Impl::Phase::Complete;
+		return(true);
+	}
+
+	m_Impl->Name = name;
+	m_Impl->ClrScreenAfter = clrscrn_after;
+	m_Impl->Playback = std::make_unique<MovieSkip::Playback>(m_Impl->Name.c_str());
+	if (!CCFileClass(m_Impl->Name.c_str()).Is_Available()) {
+		m_Impl->State = Impl::Phase::Complete;
+		return(true);
+	}
+	m_Impl->Available = true;
+	Keyboard->Clear();
+
+	m_Impl->Handle.reset(Movie_Create(
+		m_Impl->Name.c_str(), HiddenSurface, Rect(0,0,0,0), Rect(0,0,0,0), 255, true));
+	if (m_Impl->Handle == nullptr || m_Impl->Handle->VQA == nullptr) {
+		m_Impl->State = Impl::Phase::Fault;
+		return(false);
+	}
+
+	if (m_Impl->Handle->VQA->Get_VQA_Width() < 320 && m_Impl->Handle->VQA->Get_VQA_Height() < 200) {
+		m_Impl->State = Impl::Phase::Fault;
+		return(false);
+	}
+
+	bool const do_stretch = stretch && Options.StretchMovies;
+	if (DSurface::AllowStretchBlits && do_stretch && m_Impl->Handle->InitialRect.Is_Valid()) {
+		double const scale_x = (double)VisibleRect.Width / (double)m_Impl->Handle->InitialRect.Width;
+		double const scale_y = (double)VisibleRect.Height / (double)m_Impl->Handle->InitialRect.Height;
+		double const scale = scale_x < scale_y ? scale_x : scale_y;
+		m_Impl->Handle->StretchRect.Width = (int)(m_Impl->Handle->InitialRect.Width * scale);
+		m_Impl->Handle->StretchRect.Height = (int)(m_Impl->Handle->InitialRect.Height * scale);
+		m_Impl->Handle->StretchRect.X = (VisibleRect.Width - m_Impl->Handle->StretchRect.Width) / 2;
+		m_Impl->Handle->StretchRect.Y = (VisibleRect.Height - m_Impl->Handle->StretchRect.Height) / 2;
+	}
+
+	if (clrscrn_before || m_Impl->Handle->StretchRect != VisibleRect) {
+		HiddenSurface->Fill(0);
+		Update_Visible_Surface(HiddenSurface);
+	}
+	if (Session.Type == GAME_IPX || Session.Type == GAME_INTERNET) {
+		m_Impl->Handle->VQA->Set_Pause_On_Focus_Loss(false);
+	}
+	if (!Movie_Begin_Cooperative_Playback(m_Impl->Handle.get())) {
+		m_Impl->State = Impl::Phase::Fault;
+		return(false);
+	}
+	m_Impl->PlaybackBegun = true;
+	Hide_Mouse();
+	m_Impl->MouseHidden = true;
+	if (theme != THEME_NONE) Theme.Queue_Song(theme);
+	m_Impl->State = Impl::Phase::Playing;
+	return(true);
+}
+
+
+TitleMovieStepResult TitleMovieSession::Step(void)
+{
+	using Result = TitleMovieStepResult;
+	if (m_Impl->State == Impl::Phase::Complete) return(Result::Complete);
+	if (m_Impl->State != Impl::Phase::Playing) return(Result::Fault);
+
+	Call_Back();
+	MSEngine_Service_Legacy_Input(
+		[]() { Win_Gamepad_Service(); },
+		[]() { Win_Gamepad_Discard_Actions(); },
+		[]() { VQA_Message_Handler(); });
+	if (MovieSkip::Idle()) {
+		m_Impl->Skipped = true;
+		Finish();
+		m_Impl->State = Impl::Phase::Complete;
+		return(Result::Complete);
+	}
+
+	bool finished = false;
+	Movie_Advance_Cooperative_Frame(m_Impl->Handle.get(), finished);
+	if (finished) {
+		m_Impl->NaturalCompletion = true;
+		Finish();
+		m_Impl->State = Impl::Phase::Complete;
+		return(Result::Complete);
+	}
+	return(Result::Waiting);
+}
+
+
+bool TitleMovieSession::Finish(void)
+{
+	if (m_Impl->CleanupDone) return(true);
+	if (m_Impl->PlaybackBegun) {
+		Movie_End_Cooperative_Playback(m_Impl->Handle.get());
+		m_Impl->PlaybackBegun = false;
+	}
+	if (m_Impl->MouseHidden) {
+		Show_Mouse();
+		m_Impl->MouseHidden = false;
+	}
+	if (m_Impl->Handle != nullptr) {
+		Movie_Destroy(m_Impl->Handle.get());
+		m_Impl->Handle.reset();
+		if (m_Impl->ClrScreenAfter) {
+			HiddenSurface->Fill(0);
+			Update_Visible_Surface(HiddenSurface);
+		}
+		Map.Flag_To_Redraw(GS_REDRAW_ALL);
+		Keyboard->Clear();
+	}
+	m_Impl->Playback.reset();
+	m_Impl->CleanupDone = true;
+	return(true);
+}
+
+
+bool TitleMovieSession::Was_Available(void) const { return(m_Impl->Available); }
+bool TitleMovieSession::Finished_Naturally(void) const { return(m_Impl->NaturalCompletion); }
+bool TitleMovieSession::Was_Skipped(void) const { return(m_Impl->Skipped); }
 
 
 /***********************************************************************************************

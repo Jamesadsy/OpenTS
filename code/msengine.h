@@ -42,6 +42,9 @@ class MSEngine
 
 		void Wait_Delay(int delay);
 		void Wait_For_Focus(void);
+		void Cooperative_Service_Step(bool advance_animations);
+		bool Has_Animation(MSAnim * anim) const;
+		void Request_Rebuild(void);
 
 		bool Add_Sound_Effect(char const * name, char const * file_name);
 		void Play_Sound_Effect(char const * name, int volume);
@@ -71,4 +74,7 @@ class MSEngine
 		 * one is asked to be played. The engine owns them and destroys them with itself.
 		 */
 		DynamicVectorClass<MSSfx *> Sounds;
+
+	private:
+		bool CooperativeFocusPaused = false;
 };

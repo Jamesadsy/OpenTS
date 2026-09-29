@@ -14,10 +14,18 @@
 #include "msengine.h"
 #include "rect.h"
 
+#include <cstdint>
+
 class GraphicMenuItem;
 class INIClass;
 class MSSfxEntry;
 template<class T> class DynamicVectorClass;
+
+enum class GraphicMenuStepResult : std::uint8_t {
+	Waiting,
+	Complete,
+	Fault,
+};
 
 class GraphicMenuString
 {
@@ -104,6 +112,11 @@ class GraphicMenu
 
 		void Set_Item_Enabled(int item_id, bool enabled);
 		int Presentation(void);
+		bool Presentation_Begin(void);
+		GraphicMenuStepResult Presentation_Step(void);
+		int Presentation_Result(void) const;
+		bool Presentation_Awaiting_Action(void) const;
+		bool Presentation_Finish(void);
 		GraphicMenuItem * Get_Item_Under_Mouse(Point2D const & mouse);
 		GraphicMenuItem * Get_Item_For_Key(KeyNumType key);
 
@@ -141,6 +154,26 @@ class GraphicMenu
 		 * them along with itself.
 		 */
 		ITEM_LIST Items;
+
+		enum class PresentationPhase : std::uint8_t {
+			Idle,
+			AwaitInitialAnimation,
+			Interactive,
+			ItemAction,
+			AwaitSelectVQ,
+			Finish,
+			Complete,
+			Fault,
+		};
+
+		PresentationPhase PresentationState = PresentationPhase::Idle;
+		GraphicMenuItem * SelectedItem = NULL;
+		KeyNumType PendingKey = KN_NONE;
+		int PresentationResult = -1;
+		bool PresentationCleanupDone = false;
+		bool PresentationMouseHidden = false;
+		bool PresentationActionStarted = false;
+		bool PresentationActionComplete = false;
 };
 
 

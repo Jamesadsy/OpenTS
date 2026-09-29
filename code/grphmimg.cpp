@@ -97,6 +97,7 @@ GraphicMenuImageItem::GraphicMenuImageItem(int id, MSEngine & engine, Point2D co
 	HighlightSound = snd;
 
 	strncpy(SelectVQ, select_vq != NULL ? select_vq : "", sizeof(SelectVQ));
+	SelectVQ[sizeof(SelectVQ) - 1] = '\0';
 
 	if (strlen(highlight_image)) {
 		HighlightImage = new MSPCXAnim(highlight_image, engine.Get_Anims(), origin, true);
@@ -162,7 +163,7 @@ void GraphicMenuImageItem::On_Selected_Change(bool selected)
 		DisabledImage->Set_Active(Enabled == false);
 	}
 	Engine->Restore_Anims(ActiveRect);
-	Engine->Restore_And_Advance();
+	Engine->Add_Update_Rect(ActiveRect);
 	if (selected) {
 		if (HighlightSound != NULL) {
 			HighlightSound->Play();
@@ -189,7 +190,7 @@ void GraphicMenuImageItem::On_Enabled_Change(bool active)
 		DisabledImage->Set_Active(active == false);
 	}
 	Engine->Restore_Anims(ActiveRect);
-	Engine->Restore_And_Advance();
+	Engine->Add_Update_Rect(ActiveRect);
 }
 
 
@@ -208,4 +209,21 @@ void GraphicMenuImageItem::Action(MSEngine * engine)
 			engine->Wait_For_Anim(anim);
 		}
 	}
+}
+
+
+bool GraphicMenuImageItem::Begin_Action(MSEngine * engine)
+{
+	GraphicMenuItem::Action(engine);
+	SelectAnimation = NULL;
+	if (SelectVQ[0] != '\0' && CCFileClass(SelectVQ).Is_Available()) {
+		SelectAnimation = new MSVQAnim(SelectVQ, AlternateSurface, engine->Get_Anims(), true);
+	}
+	return(SelectAnimation == NULL);
+}
+
+
+bool GraphicMenuImageItem::Action_Complete(MSEngine * engine)
+{
+	return(SelectAnimation == NULL || !engine->Has_Animation(SelectAnimation));
 }

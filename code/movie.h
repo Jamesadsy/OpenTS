@@ -16,6 +16,9 @@
 #include "theme.hh"
 #include "vq.hh"
 
+#include <cstdint>
+#include <memory>
+
 template<class T> class DynamicVectorClass;
 
 extern DynamicVectorClass<char const *> Movies;
@@ -30,3 +33,30 @@ void Play_Ingame_Movie(VQType vq);
 void Pause_Ingame_Movie(bool pause);
 void Stop_Ingame_Movie(void);
 bool Has_Ingame_Movies(void);
+
+enum class TitleMovieStepResult : std::uint8_t {
+	Waiting,
+	Complete,
+	Fault,
+};
+
+class TitleMovieSession
+{
+	public:
+		TitleMovieSession(void);
+		~TitleMovieSession(void);
+		TitleMovieSession(TitleMovieSession const &) = delete;
+		TitleMovieSession & operator=(TitleMovieSession const &) = delete;
+
+		bool Begin(char const * name, ThemeType theme, bool clrscrn_after, bool stretch, bool clrscrn_before);
+		TitleMovieStepResult Step(void);
+		bool Finish(void);
+
+		bool Was_Available(void) const;
+		bool Finished_Naturally(void) const;
+		bool Was_Skipped(void) const;
+
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> m_Impl;
+};

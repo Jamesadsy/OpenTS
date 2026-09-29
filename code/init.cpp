@@ -209,6 +209,7 @@ extern "C" void OpenTS_Browser_Startup_Record_Secondary_Mixfiles(void);
 #include "bench.hh"
 #include "scrnsel.hh"
 #include "ui/uicampaign.h"
+#include "ui/uimainoptions.h"
 #include "ui/uimainmenu.h"
 #include "ui/uifrontendcontinuation.h"
 
@@ -896,16 +897,24 @@ struct SelectGameSession::Impl
 		None,
 		MainMenu,
 		Campaign,
+		MainOptions,
+		Version,
 	};
 
 	std::unique_ptr<UIFrontendContinuation> Child;
+	std::unique_ptr<NewMenuSession> NewMenu;
 	UIMainMenuPresenterClass MainMenuPresenter;
 	UICampaignPresenterClass CampaignPresenter;
+	UIMainOptionsPresenterClass MainOptionsPresenter;
 	ChildType ActiveChild = ChildType::None;
+	SelectGameLaterBoundary LaterBoundary = SelectGameLaterBoundary::None;
 	bool NativeBlockingAdapter = false;
 	bool AtIterationStart = true;
 	bool NeedsMenuCallback = false;
 	bool ImmediateExit = false;
+	bool TitleMediaAvailable = false;
+	bool TitleMediaCompletedNaturally = false;
+	bool TitleMediaSkipped = false;
 };
 
 
@@ -927,6 +936,10 @@ void SelectGameSession::Begin(bool fade, bool native_blocking_adapter)
 
 void SelectGameSession::Reset(void)
 {
+	if (m_Impl->NewMenu != nullptr) {
+		m_Impl->NewMenu->Finish();
+		m_Impl->NewMenu.reset();
+	}
 	if (m_Impl->Child != nullptr) {
 		m_Impl->Child->Finish();
 		m_Impl->Child.reset();
@@ -940,9 +953,13 @@ void SelectGameSession::Reset(void)
 	CampaignOutcome = SelectGameCampaignOutcome::Pending;
 	Phase = SelectGamePhase::Reset;
 	m_Impl->ActiveChild = Impl::ChildType::None;
+	m_Impl->LaterBoundary = SelectGameLaterBoundary::None;
 	m_Impl->AtIterationStart = true;
 	m_Impl->NeedsMenuCallback = false;
 	m_Impl->ImmediateExit = false;
+	m_Impl->TitleMediaAvailable = false;
+	m_Impl->TitleMediaCompletedNaturally = false;
+	m_Impl->TitleMediaSkipped = false;
 }
 
 
@@ -965,6 +982,51 @@ bool SelectGameSession::Complete_Native_Child(
 		m_Impl->NeedsMenuCallback = selection_from_menu;
 	}
 	return(true);
+}
+
+
+SelectGameLaterBoundary SelectGameSession::Later_Boundary(void) const
+{
+	return(m_Impl->LaterBoundary);
+}
+
+
+bool SelectGameSession::Title_Media_Available(void) const
+{
+	return(m_Impl->NewMenu != nullptr
+		? m_Impl->NewMenu->TitleMediaAvailable() : m_Impl->TitleMediaAvailable);
+}
+
+
+bool SelectGameSession::Title_Media_Completed_Naturally(void) const
+{
+	return(m_Impl->NewMenu != nullptr
+		? m_Impl->NewMenu->TitleMediaCompletedNaturally() : m_Impl->TitleMediaCompletedNaturally);
+}
+
+
+bool SelectGameSession::Title_Media_Skipped(void) const
+{
+	return(m_Impl->NewMenu != nullptr
+		? m_Impl->NewMenu->TitleMediaSkipped() : m_Impl->TitleMediaSkipped);
+}
+
+
+int SelectGameSession::Browser_Menu_State(void) const
+{
+	return(m_Impl->NewMenu != nullptr ? m_Impl->NewMenu->Browser_Menu_State() : 0);
+}
+
+
+int SelectGameSession::Selected_Product(void) const
+{
+	return(m_Impl->NewMenu != nullptr ? m_Impl->NewMenu->Selected_Product() : -1);
+}
+
+
+bool SelectGameSession::Product_Menu_Ready(void) const
+{
+	return(m_Impl->NewMenu != nullptr && m_Impl->NewMenu->Product_Menu_Ready());
 }
 
 
@@ -995,8 +1057,48 @@ SelectGameStepResult SelectGameSession::Step(void)
 		Phase = SelectGamePhase::ChildModal;
 		return(SelectGameStepResult::Waiting);
 	};
+	auto begin_main_menu = [this]() -> SelectGameStepResult {
+		m_Impl->MainMenuPresenter.Result.reset();
+		m_Impl->MainMenuPresenter.IsClosing = false;
+		m_Impl->MainMenuPresenter.VersionPending = false;
+		m_Impl->MainMenuPresenter.Choice = UIMainMenuPresenterClass::CHOICE_NONE;
+		m_Impl->MainMenuPresenter.Refresh();
+		Draw_Title_Screen();
+		m_Impl->Child = UI_Main_Menu_Screen_Continuation(
+			m_Impl->MainMenuPresenter, m_Impl->NativeBlockingAdapter);
+		if (m_Impl->Child == nullptr) {
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		m_Impl->ActiveChild = Impl::ChildType::MainMenu;
+		Phase = SelectGamePhase::ChildModal;
+		return(SelectGameStepResult::Waiting);
+	};
+	auto begin_options = [this]() -> SelectGameStepResult {
+		m_Impl->MainOptionsPresenter.Choice = UIMainOptionsPresenterClass::CHOICE_NONE;
+		m_Impl->MainOptionsPresenter.Refresh();
+		m_Impl->Child = UI_Main_Options_Screen_Continuation(
+			m_Impl->MainOptionsPresenter, m_Impl->NativeBlockingAdapter);
+		if (m_Impl->Child == nullptr) {
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		m_Impl->ActiveChild = Impl::ChildType::MainOptions;
+		Phase = SelectGamePhase::ChildModal;
+		return(SelectGameStepResult::Waiting);
+	};
+	auto begin_version = [this]() -> SelectGameStepResult {
+		m_Impl->Child = UI_Version_Screen_Continuation(m_Impl->NativeBlockingAdapter);
+		if (m_Impl->Child == nullptr) {
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		m_Impl->ActiveChild = Impl::ChildType::Version;
+		Phase = SelectGamePhase::ChildModal;
+		return(SelectGameStepResult::Waiting);
+	};
 
-	auto dispatch_selection = [this, &begin_campaign]() -> SelectGameStepResult {
+	auto dispatch_selection = [this, &begin_campaign, &begin_main_menu, &begin_options, &begin_version]() -> SelectGameStepResult {
 		if (!Process) {
 			Phase = SelectGamePhase::ReadyForGameplay;
 			return(SelectGameStepResult::ReadyForGameplay);
@@ -1013,6 +1115,35 @@ SelectGameStepResult SelectGameSession::Step(void)
 			m_Impl->AtIterationStart = true;
 			return(SelectGameStepResult::Waiting);
 		}
+		if (!m_Impl->NativeBlockingAdapter) {
+			if (Selection == SEL_OPTIONS) return(begin_options());
+			if (Selection == SEL_VERSION) return(begin_version());
+			if (Selection == SEL_LOAD_GAME) {
+				m_Impl->LaterBoundary = SelectGameLaterBoundary::Load;
+				Phase = SelectGamePhase::LaterBoundary;
+				return(SelectGameStepResult::LaterBoundary);
+			}
+			if (Selection == SEL_INTRO) {
+				m_Impl->LaterBoundary = SelectGameLaterBoundary::Intro;
+				Phase = SelectGamePhase::LaterBoundary;
+				return(SelectGameStepResult::LaterBoundary);
+			}
+			if (Selection == SEL_VIEW_CREDITS) {
+				m_Impl->LaterBoundary = SelectGameLaterBoundary::Credits;
+				Phase = SelectGamePhase::LaterBoundary;
+				return(SelectGameStepResult::LaterBoundary);
+			}
+			if (Selection == SEL_MULTIPLAYER_GAME) {
+				if (Session.Type == GAME_IPX) m_Impl->LaterBoundary = SelectGameLaterBoundary::Lan;
+				else if (Session.Type == GAME_SKIRMISH) m_Impl->LaterBoundary = SelectGameLaterBoundary::Skirmish;
+				else if (Session.Type == GAME_INTERNET) m_Impl->LaterBoundary = SelectGameLaterBoundary::Online;
+				if (m_Impl->LaterBoundary != SelectGameLaterBoundary::None) {
+					Phase = SelectGamePhase::LaterBoundary;
+					return(SelectGameStepResult::LaterBoundary);
+				}
+			}
+		}
+		if (Selection == SEL_NONE && !m_Impl->NativeBlockingAdapter) return(begin_main_menu());
 		Phase = SelectGamePhase::NativeChild;
 		return(SelectGameStepResult::NativeChild);
 	};
@@ -1102,20 +1233,18 @@ SelectGameStepResult SelectGameSession::Step(void)
 				if (PacketTransport) Ipx.Shutdown();
 				if ((Selection == SEL_NONE) && !Debug_ForceScenario) {
 					if (Get_New_Menu()->MixFile) {
-						Phase = SelectGamePhase::NativeChild;
-						return(SelectGameStepResult::NativeChild);
+						Session.Type = GAME_NORMAL;
+						Session.IsWDT = false;
+						m_Impl->NewMenu = std::make_unique<NewMenuSession>();
+						if (!m_Impl->NewMenu->Begin()) {
+							Phase = SelectGamePhase::Fault;
+							return(SelectGameStepResult::Fault);
+						}
+						m_Impl->ActiveChild = Impl::ChildType::None;
+						Phase = SelectGamePhase::NewMenuChild;
+						return(SelectGameStepResult::Waiting);
 					}
-					m_Impl->MainMenuPresenter.Result.reset();
-					m_Impl->MainMenuPresenter.IsClosing = false;
-					m_Impl->MainMenuPresenter.VersionPending = false;
-					m_Impl->MainMenuPresenter.Choice = UIMainMenuPresenterClass::CHOICE_NONE;
-					m_Impl->MainMenuPresenter.Refresh();
-					Draw_Title_Screen();
-					m_Impl->Child = UI_Main_Menu_Screen_Continuation(
-						m_Impl->MainMenuPresenter, m_Impl->NativeBlockingAdapter);
-					m_Impl->ActiveChild = Impl::ChildType::MainMenu;
-					Phase = SelectGamePhase::ChildModal;
-					return(SelectGameStepResult::Waiting);
+					return(begin_main_menu());
 				}
 				if (Debug_ForceScenario) Selection = SEL_CAMPAIGN_GAME;
 				Call_Back();
@@ -1123,6 +1252,32 @@ SelectGameStepResult SelectGameSession::Step(void)
 			}
 			Phase = SelectGamePhase::Fault;
 			return(SelectGameStepResult::Fault);
+
+		case SelectGamePhase::NewMenuChild: {
+			if (m_Impl->NewMenu == nullptr) {
+				Phase = SelectGamePhase::Fault;
+				return(SelectGameStepResult::Fault);
+			}
+			NewMenuStepResult const child_step = m_Impl->NewMenu->Step();
+			if (child_step == NewMenuStepResult::Waiting) return(SelectGameStepResult::Waiting);
+			if (child_step == NewMenuStepResult::Fault) {
+				Phase = SelectGamePhase::Fault;
+				return(SelectGameStepResult::Fault);
+			}
+
+			int const menu_selection = m_Impl->NewMenu->Result();
+			m_Impl->TitleMediaAvailable = m_Impl->NewMenu->TitleMediaAvailable();
+			m_Impl->TitleMediaCompletedNaturally = m_Impl->NewMenu->TitleMediaCompletedNaturally();
+			m_Impl->TitleMediaSkipped = m_Impl->NewMenu->TitleMediaSkipped();
+			if (!m_Impl->NewMenu->Finish()) {
+				Phase = SelectGamePhase::Fault;
+				return(SelectGameStepResult::Fault);
+			}
+			m_Impl->NewMenu.reset();
+			if (menu_selection == NSEL_OLD_MENU) return(begin_main_menu());
+			Selection = New_Main_Menu_Apply_Result(menu_selection, m_Impl->NativeBlockingAdapter);
+			return(dispatch_selection());
+		}
 
 		case SelectGamePhase::ChildModal: {
 			if (m_Impl->Child == nullptr) {
@@ -1155,6 +1310,20 @@ SelectGameStepResult SelectGameSession::Step(void)
 				SetFocus(MainWindow);
 				Call_Back();
 				return(dispatch_selection());
+			}
+
+			if (m_Impl->ActiveChild == Impl::ChildType::MainOptions
+				|| m_Impl->ActiveChild == Impl::ChildType::Version) {
+				if (!m_Impl->Child->Finish()) {
+					Phase = SelectGamePhase::Fault;
+					return(SelectGameStepResult::Fault);
+				}
+				m_Impl->Child.reset();
+				m_Impl->ActiveChild = Impl::ChildType::None;
+				Selection = SEL_NONE;
+				Phase = SelectGamePhase::MainMenu;
+				m_Impl->AtIterationStart = true;
+				return(SelectGameStepResult::Waiting);
 			}
 
 			if (m_Impl->ActiveChild == Impl::ChildType::Campaign) {
@@ -1226,6 +1395,9 @@ SelectGameStepResult SelectGameSession::Step(void)
 
 		case SelectGamePhase::NativeChild:
 			return(SelectGameStepResult::NativeChild);
+
+		case SelectGamePhase::LaterBoundary:
+			return(SelectGameStepResult::LaterBoundary);
 
 		case SelectGamePhase::ScenarioPrepare:
 			return(SelectGameStepResult::NativeChild);
@@ -6489,7 +6661,12 @@ int New_Main_Menu(void)
 			UIMainMenuFallbackRoute::DONOR_RMLUI_MAIN_MENU);
 		return(Main_Menu(TIMER_MINUTE));
 	}
+	return(New_Main_Menu_Apply_Result(selection, true));
+}
 
+
+int New_Main_Menu_Apply_Result(int selection, bool prepare_native_multiplayer)
+{
 	switch (selection) {
 		case NSEL_START_NEW_GAME:
 			return(SEL_CAMPAIGN_GAME);
@@ -6525,10 +6702,12 @@ int New_Main_Menu(void)
 	}
 
 	if (Session.Type != GAME_NORMAL) {
-		Session.Read_MultiPlayer_Settings();
-		Prepare_Side_Roster();
-		Session.Suspended = false;
-		Session.Read_Scenario_Descriptions();
+		if (prepare_native_multiplayer) {
+			Session.Read_MultiPlayer_Settings();
+			Prepare_Side_Roster();
+			Session.Suspended = false;
+			Session.Read_Scenario_Descriptions();
+		}
 		return(SEL_MULTIPLAYER_GAME);
 	}
 

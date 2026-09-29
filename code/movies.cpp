@@ -29,6 +29,39 @@ DynamicVectorClass<char const *> Movies;
 VQHandle *CurrentVQ = NULL;
 int MovieInt1 = 0;
 
+namespace
+{
+	struct CooperativePlaybackState
+	{
+		VQHandle * Handle = NULL;
+		int StartFrame = 0;
+		int EndFrame = -1;
+		int Iterations = 0;
+	int FrameCursor = 0;
+	};
+
+	CooperativePlaybackState CooperativePlayback;
+
+	void Cooperative_Begin_Pass(void)
+	{
+		if (CooperativePlayback.Handle->PlayMode == 2 || CooperativePlayback.StartFrame != 0) {
+			CooperativePlayback.Handle->VQA->Seek_To_Frame(CooperativePlayback.StartFrame);
+		}
+		CooperativePlayback.FrameCursor = CooperativePlayback.StartFrame;
+	}
+
+	bool Cooperative_End_Pass(void)
+	{
+		VQHandle * const movie = CooperativePlayback.Handle;
+		if (movie->PlayMode == 1) CooperativePlayback.Iterations = 0;
+		movie->VQA->Reset_VQA();
+		if (CooperativePlayback.Iterations > 0) CooperativePlayback.Iterations--;
+		if (CooperativePlayback.Iterations == 0) return(true);
+		Cooperative_Begin_Pass();
+		return(false);
+	}
+}
+
 
 /// <summary>
 /// Locks the drawing surface for the movie player.
@@ -288,6 +321,60 @@ bool Movie_Advance_Frame(VQHandle * handle, bool &finished)
 	bool res = handle->VQA->Advance_Frame(finished);
 	CurrentVQ = NULL;
 	return(res);
+}
+
+
+bool Movie_Begin_Cooperative_Playback(VQHandle * handle)
+{
+	if (handle == NULL || handle->VQA == NULL || CurrentVQ != NULL) return(false);
+	handle->IsInitialized = true;
+	CurrentVQ = handle;
+	CooperativePlayback = CooperativePlaybackState{};
+	CooperativePlayback.Handle = handle;
+	if (Get_Option(OPTION_USE_LOOPS)) {
+		CooperativePlayback.StartFrame = handle->StartFrame;
+		if (handle->EndFrame >= 0) CooperativePlayback.EndFrame = handle->EndFrame;
+		CooperativePlayback.Iterations = handle->Iterations;
+		if (handle->PlayMode == 1) {
+			if (handle->LoopMode == 0) handle->VQA->Set_Loop(handle->LoopID, handle->Iterations);
+			else handle->VQA->Set_Loop(
+				CooperativePlayback.StartFrame,
+				CooperativePlayback.EndFrame,
+				handle->Iterations);
+		}
+	}
+	Cooperative_Begin_Pass();
+	return(true);
+}
+
+
+bool Movie_Advance_Cooperative_Frame(VQHandle * handle, bool &finished)
+{
+	if (handle == NULL || handle->VQA == NULL || CurrentVQ != handle) {
+		finished = false;
+		return(false);
+	}
+	bool const advanced = handle->VQA->Advance_Frame(finished);
+	if (finished) {
+		finished = Cooperative_End_Pass();
+		return(advanced);
+	}
+	if (advanced) {
+		if (CooperativePlayback.EndFrame >= 0
+			&& CooperativePlayback.FrameCursor >= CooperativePlayback.EndFrame) {
+			finished = Cooperative_End_Pass();
+		} else {
+			CooperativePlayback.FrameCursor++;
+		}
+	}
+	return(advanced);
+}
+
+
+void Movie_End_Cooperative_Playback(VQHandle * handle)
+{
+	if (CurrentVQ == handle) CurrentVQ = NULL;
+	if (CooperativePlayback.Handle == handle) CooperativePlayback = CooperativePlaybackState{};
 }
 
 

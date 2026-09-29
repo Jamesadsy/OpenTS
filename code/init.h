@@ -44,7 +44,9 @@ enum class SelectGamePhase : std::uint8_t {
 	ConnectionSetup,
 	InitialPresentation,
 	NativeChild,
+	NewMenuChild,
 	ReadyForGameplay,
+	LaterBoundary,
 	Exit,
 	Fault,
 };
@@ -53,8 +55,19 @@ enum class SelectGameStepResult : std::uint8_t {
 	Waiting,
 	NativeChild,
 	ReadyForGameplay,
+	LaterBoundary,
 	Exited,
 	Fault,
+};
+
+enum class SelectGameLaterBoundary : std::uint8_t {
+	None,
+	Load,
+	Intro,
+	Credits,
+	Lan,
+	Skirmish,
+	Online,
 };
 
 enum class SelectGameCampaignOutcome : std::uint8_t {
@@ -83,6 +96,13 @@ class SelectGameSession
 			int selection,
 			bool game_loaded,
 			bool selection_from_menu = false);
+		SelectGameLaterBoundary Later_Boundary(void) const;
+		bool Title_Media_Available(void) const;
+		bool Title_Media_Completed_Naturally(void) const;
+		bool Title_Media_Skipped(void) const;
+		int Browser_Menu_State(void) const;
+		int Selected_Product(void) const;
+		bool Product_Menu_Ready(void) const;
 
 		bool GameLoaded = false;
 		int Selection = 0;
@@ -140,3 +160,4 @@ void Draw_Version_Text(Surface * surface);
 
 ObjectClass * Best_Selected_Object(void);
 int New_Main_Menu(void);
+int New_Main_Menu_Apply_Result(int menu_selection, bool prepare_native_multiplayer);

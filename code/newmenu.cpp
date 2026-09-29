@@ -15,31 +15,27 @@
 #include "addon.h"
 #include "ccfile.h"
 #include "grphmenu.h"
+#include "hostclock.h"
 #include "init.h"
 #include "loaddlg.h"
 #include "mixfile.h"
 #include "movie.h"
 #include "vector.h"
+#include "video.h"
 
 
 /// <summary>
 /// Fetches the one and only new menu object.
-/// This routine is used by the menu code and by the background draw helper to reach the
-/// graphical menu without having to pass it around.
 /// </summary>
-/// <returns>Returns with a pointer to the global new menu object.</returns>
 NewMenuClass * Get_New_Menu(void)
 {
 	static NewMenuClass _menu;
-
 	return(&_menu);
 }
 
 
 /// <summary>
 /// Draws the title page behind the menus.
-/// This routine is used by the various menu and dialog screens to restore the backdrop
-/// before they draw themselves over it.
 /// </summary>
 void Draw_Menu_Background(void)
 {
@@ -47,12 +43,6 @@ void Draw_Menu_Background(void)
 }
 
 
-/// <summary>
-/// Constructor for the new menu object.
-/// This routine will attach the graphical menu mix file if it is installed and pick the
-/// title page that the menus draw behind themselves. A missing mix file is how the game
-/// detects that it must fall back to the old menu system.
-/// </summary>
 NewMenuClass::NewMenuClass(void) :
 	MixFile(NULL),
 	GameMode(-1),
@@ -73,11 +63,6 @@ NewMenuClass::NewMenuClass(void) :
 }
 
 
-/// <summary>
-/// Destructor for the new menu object.
-/// This routine will release the graphical menu mix file, which detaches its contents
-/// from the file system.
-/// </summary>
 NewMenuClass::~NewMenuClass(void)
 {
 	delete [] Background;
@@ -85,249 +70,316 @@ NewMenuClass::~NewMenuClass(void)
 }
 
 
-/// <summary>
-/// Handles the top level loop of the graphical menu.
-/// This routine will move between the game select page and the Tiberian Sun or Firestorm
-/// main menus as the player picks a game or backs out of one, playing the appropriate
-/// title movie on the way in. It only returns once the player has chosen something that
-/// the caller must act upon.
-/// </summary>
-/// <returns>Returns with the menu selection the player made.</returns>
-__forceinline int NewMenuClass::Game_Select_Loop(NewMenuClass * menu)
-{
-	int item = 0;
-
-	while (true) {
-		switch (menu->GameMode) {
-			default:
-				if (Addon_Installed(ADDON_FIRESTORM)) {
-					item = menu->Select_Game_Type();
-				} else {
-					item = GMENU_TIBSUN;
-				}
-				switch (item) {
-					case GMENU_TIBSUN:
-						menu->GameMode = 0;
-						if (CCFileClass("TS_Title.VQA").Is_Available()) {
-							Play_Movie("TS_Title.VQA", THEME_NONE, false, true, false);
-						}
-						continue;
-
-					case GMENU_FIRESTORM:
-						menu->GameMode = 1;
-						if (CCFileClass("FS_Title.VQA").Is_Available()) {
-							Play_Movie("FS_Title.VQA", THEME_NONE, false, true, false);
-						}
-						continue;
-
-					case GMENU_BACK:
-						continue;
-				}
-
-				switch (item) {
-					case NSEL_EXIT:
-						return(NSEL_EXIT);
-
-					case NSEL_VERSION:
-						return(NSEL_VERSION);
-
-					case NSEL_VIEW_CREDITS:
-						return(NSEL_VIEW_CREDITS);
-				}
-				break;
-
-			case 0:
-				item = menu->Display_Tiberian_Sun_Menu();
-				if (item == GMENU_BACK) {
-					menu->GameMode = -1;
-					continue;
-				}
-#ifdef OPENTS_IOS
-				if (item == NSEL_EXIT) {
-					menu->GameMode = -1;
-					continue;
-				}
-#endif
-				return(item);
-
-			case 1:
-				item = menu->Display_Firestorm_Menu();
-				if (item == GMENU_BACK) {
-					menu->GameMode = -1;
-					continue;
-				}
-#ifdef OPENTS_IOS
-				if (item == NSEL_EXIT) {
-					menu->GameMode = -1;
-					continue;
-				}
-#endif
-				return(item);
-		}
-	}
-}
-
-
-/// <summary>
-/// Runs the graphical main menu.
-/// This routine is the entry point the startup code uses to display the new menu. If the
-/// graphical menu data was never installed, it bows out immediately so that the caller
-/// can fall back to the old menu system.
-/// </summary>
-/// <returns>Returns with the menu selection the player made, or NSEL_OLD_MENU if the
-/// graphical menu is unavailable.</returns>
-int NewMenuClass::Process_Game_Select(void)
-{
-	if (MixFile == NULL) {
-		return(NSEL_OLD_MENU);
-	}
-
-	return(Game_Select_Loop(this));
-}
-
-
-/// <summary>
-/// Displays a menu page with every option enabled.
-/// </summary>
-/// <param name="section">The NewMenu.INI section that describes the menu page.</param>
-/// <returns>Returns with the selection the player made.</returns>
-int NewMenuClass::Display_Game_Select_Menu(char const * section)
-{
-	static DynamicVectorClass<int> options;
-	return(Display_Menu(section, options));
-}
-
-
-/// <summary>
-/// Displays a menu page and waits for the player to choose.
-/// This routine will build the menu described by the INI section, adopt the background
-/// page that comes with it, gray out the options that are not available, and then run the
-/// menu until the player picks something.
-/// </summary>
-/// <param name="section">The NewMenu.INI section that describes the menu page.</param>
-/// <param name="options">The menu items that should be shown disabled.</param>
-/// <returns>Returns with the selection the player made, or NSEL_OLD_MENU if the menu
-/// could not be built.</returns>
-int NewMenuClass::Display_Menu(char const * section, DynamicVectorClass<int> & options)
+GraphicMenu * NewMenuClass::Build_Menu(char const * section, DynamicVectorClass<int> & options)
 {
 	GraphicMenu * menu = Do_Graphic_Menu("NewMenu.INI", section);
-
-	if (menu == NULL) {
-		return(NSEL_OLD_MENU);
-	}
+	if (menu == NULL) return(NULL);
 
 	delete Background;
 	char const * bgname = menu->BackgroundName.Peek();
-	if (bgname == NULL) {
-		bgname = "Title.PCX";
-	}
+	if (bgname == NULL) bgname = "Title.PCX";
 	Background = new char[strlen(bgname) + 1];
 	strcpy(Background, bgname);
 
-	for (int option : options) {
-		menu->Set_Item_Enabled(option, false);
-	}
-
-	int result = menu->Presentation();
-	delete menu;
-	return((int)result);
+	for (int option : options) menu->Set_Item_Enabled(option, false);
+	return(menu);
 }
 
 
-/// <summary>
-/// Handles the choice between Tiberian Sun and Firestorm.
-/// This routine will display the game select page and put the addon system into the state
-/// that matches the player's choice. Firestorm needs its disc, so the page is shown again
-/// if the player cannot supply one. The scenario descriptions are reloaded before
-/// returning, since they differ between the two games.
-/// </summary>
-/// <returns>Returns with the game the player selected.</returns>
-int NewMenuClass::Select_Game_Type(void)
+int NewMenuClass::Process_Game_Select(void)
 {
-	int result;
-
-	Disable_Addon(ADDON_ANY);
-
-	bool retry = true;
-	while (retry) {
-		result = Display_Game_Select_Menu("MainMenu");
-		switch (result) {
-			case GMENU_TIBSUN:
-				Disable_Addon(ADDON_ANY);
-				Set_Required_Addon(ADDON_BASE_GAME);
-				retry = false;
-				break;
-
-			case GMENU_FIRESTORM:
-				Disable_Addon(ADDON_ANY);
-				Enable_Addon(ADDON_FIRESTORM);
-				Set_Required_Addon(ADDON_FIRESTORM);
-				retry = false;
-				break;
-
-			default:
-				retry = false;
-				break;
+	NewMenuSession session;
+	if (!session.Begin()) return(NSEL_OLD_MENU);
+	for (;;) {
+		NewMenuStepResult const result = session.Step();
+		if (result == NewMenuStepResult::Complete) break;
+		if (result == NewMenuStepResult::Fault) {
+			session.Finish();
+			return(NSEL_OLD_MENU);
 		}
+		Host_Sleep(Video_Milliseconds_Until_Present());
 	}
-
-	Session.Read_Scenario_Descriptions();
+	int const result = session.Result();
+	session.Finish();
 	return(result);
 }
 
 
-/// <summary>
-/// Displays the Tiberian Sun main menu.
-/// This routine will switch the addon system over to the base game before showing the
-/// menu, and disable any option that would lead nowhere -- offering to load a mission
-/// when there are no saved games, for instance.
-/// </summary>
-/// <returns>Returns with the selection the player made.</returns>
-int NewMenuClass::Display_Tiberian_Sun_Menu(void)
+NewMenuSession::NewMenuSession(void) = default;
+
+
+NewMenuSession::~NewMenuSession(void)
 {
-	Disable_Addon(ADDON_ANY);
-	Set_Required_Addon(ADDON_BASE_GAME);
-
-	DynamicVectorClass<int> options;
-
-	if (!Addon_Installed(ADDON_ANY)) {
-		options.Add(102);
-	}
-
-	if (!LoadOptionsClass().Files_Present()) {
-		options.Add(NSEL_LOAD_MISSION);
-	}
-
-	// The button is drawn by the menu artwork, so it is disabled rather than taken away.
-	options.Add(NSEL_INTERNET);
-
-	return(Display_Menu("TiberianSunMenu", options));
+	Finish();
 }
 
 
-/// <summary>
-/// Displays the Firestorm main menu.
-/// This routine will enable the Firestorm addon before showing the menu, and disable the
-/// load option when there are no saved games to offer.
-/// </summary>
-/// <returns>Returns with the selection the player made.</returns>
-int NewMenuClass::Display_Firestorm_Menu(void)
+bool NewMenuSession::Begin(void)
 {
-	Disable_Addon(ADDON_ANY);
-	Enable_Addon(ADDON_FIRESTORM);
-	Set_Required_Addon(ADDON_FIRESTORM);
+	if (Begun) return(false);
+	Menu = Get_New_Menu();
+	Begun = true;
+	CurrentPhase = NewMenuPhase::Begin;
+	return(true);
+}
 
-	DynamicVectorClass<int> options;
-	if (!LoadOptionsClass().Files_Present()) {
-		options.Add(NSEL_LOAD_MISSION);
+
+bool NewMenuSession::Begin_Page(char const * section, DynamicVectorClass<int> & options, PageKind kind)
+{
+	OwnedPage.reset(Menu->Build_Menu(section, options));
+	Page = OwnedPage.get();
+	if (Page == NULL) {
+		PendingResult = NSEL_OLD_MENU;
+		CurrentPhase = NewMenuPhase::LegacyFallback;
+		return(true);
+	}
+	if (!Page->Presentation_Begin()) return(false);
+	CurrentPage = kind;
+	CurrentPhase = NewMenuPhase::PresentProductPage;
+	return(true);
+}
+
+
+bool NewMenuSession::Begin_Title_Media(char const * name)
+{
+	if (!CCFileClass(name).Is_Available()) {
+		CurrentPhase = Menu->GameMode == 0 ? NewMenuPhase::PrepareTS : NewMenuPhase::PrepareFirestorm;
+		return(true);
+	}
+	TitleMedia = std::make_unique<TitleMovieSession>();
+	if (!TitleMedia->Begin(name, THEME_NONE, false, true, false)) return(false);
+	TitleWasAvailable = TitleMedia->Was_Available();
+	CurrentPhase = NewMenuPhase::AwaitTitleMedia;
+	return(true);
+}
+
+
+void NewMenuSession::Apply_Product_Choice(int item)
+{
+	if (item == GMENU_TIBSUN) {
+		Menu->GameMode = 0;
+		Disable_Addon(ADDON_ANY);
+		Set_Required_Addon(ADDON_BASE_GAME);
+	} else {
+		Menu->GameMode = 1;
+		Disable_Addon(ADDON_ANY);
+		Enable_Addon(ADDON_FIRESTORM);
+		Set_Required_Addon(ADDON_FIRESTORM);
+	}
+	Session.Read_Scenario_Descriptions();
+}
+
+
+NewMenuStepResult NewMenuSession::Fault(void)
+{
+	CurrentPhase = NewMenuPhase::Fault;
+	return(NewMenuStepResult::Fault);
+}
+
+
+NewMenuStepResult NewMenuSession::Step(void)
+{
+	using Result = NewMenuStepResult;
+	using Phase = NewMenuPhase;
+	if (!Begun) return(Fault());
+	if (CurrentPhase == Phase::Complete) return(Result::Complete);
+	if (CurrentPhase == Phase::Fault) return(Result::Fault);
+
+	switch (CurrentPhase) {
+		case Phase::Begin:
+			if (Menu == NULL) return(Fault());
+			if (Menu->MixFile == NULL) {
+				PendingResult = NSEL_OLD_MENU;
+				CurrentPhase = Phase::LegacyFallback;
+			} else {
+				CurrentPhase = Phase::ChooseProduct;
+			}
+			return(Result::Waiting);
+
+		case Phase::ChooseProduct:
+			if (Menu->GameMode == -1) {
+				if (Addon_Installed(ADDON_FIRESTORM)) {
+					Disable_Addon(ADDON_ANY);
+					DynamicVectorClass<int> options;
+					if (!Begin_Page("MainMenu", options, PageKind::Selector)) return(Fault());
+					return(Result::Waiting);
+				}
+				Menu->GameMode = 0;
+				if (!Begin_Title_Media("TS_Title.VQA")) return(Fault());
+				return(Result::Waiting);
+			}
+			CurrentPhase = Menu->GameMode == 0 ? Phase::PrepareTS : Phase::PrepareFirestorm;
+			return(Result::Waiting);
+
+		case Phase::AwaitTitleMedia: {
+			if (TitleMedia == nullptr) return(Fault());
+			TitleMovieStepResult const result = TitleMedia->Step();
+			if (result == TitleMovieStepResult::Fault) return(Fault());
+			if (result == TitleMovieStepResult::Waiting) return(Result::Waiting);
+			TitleWasAvailable = TitleMedia->Was_Available();
+			TitleCompletedNaturally = TitleMedia->Finished_Naturally();
+			TitleWasSkipped = TitleMedia->Was_Skipped();
+			if (TitleWasAvailable && !TitleCompletedNaturally && !TitleWasSkipped) return(Fault());
+			if (!TitleMedia->Finish()) return(Fault());
+			TitleMedia.reset();
+			CurrentPhase = Menu->GameMode == 0 ? Phase::PrepareTS : Phase::PrepareFirestorm;
+			return(Result::Waiting);
+		}
+
+		case Phase::PrepareTS: {
+			Disable_Addon(ADDON_ANY);
+			Set_Required_Addon(ADDON_BASE_GAME);
+			DynamicVectorClass<int> options;
+			if (!Addon_Installed(ADDON_ANY)) options.Add(102);
+			if (!LoadOptionsClass().Files_Present()) options.Add(NSEL_LOAD_MISSION);
+			options.Add(NSEL_INTERNET);
+			if (!Begin_Page("TiberianSunMenu", options, PageKind::TiberianSun)) return(Fault());
+			return(Result::Waiting);
+		}
+
+		case Phase::PrepareFirestorm: {
+			Disable_Addon(ADDON_ANY);
+			Enable_Addon(ADDON_FIRESTORM);
+			Set_Required_Addon(ADDON_FIRESTORM);
+			DynamicVectorClass<int> options;
+			if (!LoadOptionsClass().Files_Present()) options.Add(NSEL_LOAD_MISSION);
+			options.Add(NSEL_INTERNET);
+			options.Add(NSEL_WDT);
+			if (!Begin_Page("FirestormMenu", options, PageKind::Firestorm)) return(Fault());
+			return(Result::Waiting);
+		}
+
+		case Phase::PresentProductPage:
+		case Phase::AwaitGraphicAction: {
+			if (Page == NULL) return(Fault());
+			GraphicMenuStepResult const result = Page->Presentation_Step();
+			if (result == GraphicMenuStepResult::Fault) return(Fault());
+			if (result == GraphicMenuStepResult::Waiting) {
+				CurrentPhase = Page->Presentation_Awaiting_Action()
+					? Phase::AwaitGraphicAction : Phase::PresentProductPage;
+				return(Result::Waiting);
+			}
+			PendingResult = Page->Presentation_Result();
+			if (!Page->Presentation_Finish()) return(Fault());
+			OwnedPage.reset();
+			Page = NULL;
+			CurrentPhase = Phase::MapResult;
+			return(Result::Waiting);
+		}
+
+		case Phase::MapResult:
+			if (CurrentPage == PageKind::Selector) {
+				CurrentPage = PageKind::None;
+				if (PendingResult == GMENU_TIBSUN || PendingResult == GMENU_FIRESTORM) {
+					Apply_Product_Choice(PendingResult);
+					if (!Begin_Title_Media(PendingResult == GMENU_TIBSUN
+						? "TS_Title.VQA" : "FS_Title.VQA")) return(Fault());
+					return(Result::Waiting);
+				}
+				Session.Read_Scenario_Descriptions();
+				if (PendingResult == GMENU_BACK) {
+					CurrentPhase = Phase::ChooseProduct;
+				} else if (PendingResult == NSEL_EXIT || PendingResult == NSEL_VERSION
+					|| PendingResult == NSEL_VIEW_CREDITS) {
+					CurrentPhase = Phase::Complete;
+				} else {
+					CurrentPhase = Phase::ChooseProduct;
+				}
+				return(Result::Waiting);
+			}
+
+			CurrentPage = PageKind::None;
+			if (PendingResult == GMENU_BACK) {
+				Menu->GameMode = -1;
+				CurrentPhase = Phase::ChooseProduct;
+				return(Result::Waiting);
+			}
+#ifdef OPENTS_IOS
+			if (PendingResult == NSEL_EXIT) {
+				Menu->GameMode = -1;
+				CurrentPhase = Phase::ChooseProduct;
+				return(Result::Waiting);
+			}
+#endif
+			if (PendingResult == NSEL_LAN || PendingResult == NSEL_SKIRMISH) {
+				CurrentPhase = Phase::LaterSessionBoundary;
+				return(Result::Waiting);
+			}
+			CurrentPhase = Phase::Complete;
+			return(Result::Waiting);
+
+		case Phase::LaterSessionBoundary:
+			CurrentPhase = Phase::Complete;
+			return(Result::Waiting);
+
+		case Phase::LegacyFallback:
+			CurrentPhase = Phase::Complete;
+			return(Result::Waiting);
+
+		case Phase::Complete:
+			return(Result::Complete);
+
+		case Phase::Fault:
+			return(Result::Fault);
+
+		case Phase::Idle:
+			break;
 	}
 
-	// Both buttons are drawn by the menu artwork, so they are disabled rather than taken
-	// away. Neither the online service they led to nor the tour it hosted can be reached.
-	options.Add(NSEL_INTERNET);
-	options.Add(NSEL_WDT);
+	return(Fault());
+}
 
-	return(Display_Menu("FirestormMenu", options));
+
+bool NewMenuSession::Finish(void)
+{
+	if (Finished) return(true);
+	bool success = true;
+	if (TitleMedia != nullptr) {
+		success = TitleMedia->Finish() && success;
+		TitleWasAvailable = TitleMedia->Was_Available();
+		TitleCompletedNaturally = TitleMedia->Finished_Naturally();
+		TitleWasSkipped = TitleMedia->Was_Skipped();
+		TitleMedia.reset();
+	}
+	if (Page != NULL) success = Page->Presentation_Finish() && success;
+	OwnedPage.reset();
+	Page = NULL;
+	Finished = true;
+	return(success);
+}
+
+
+int NewMenuSession::Result(void) const { return(PendingResult); }
+NewMenuPhase NewMenuSession::Phase(void) const { return(CurrentPhase); }
+bool NewMenuSession::TitleMediaAvailable(void) const { return(TitleWasAvailable); }
+bool NewMenuSession::TitleMediaCompletedNaturally(void) const { return(TitleCompletedNaturally); }
+bool NewMenuSession::TitleMediaSkipped(void) const { return(TitleWasSkipped); }
+
+
+int NewMenuSession::Browser_Menu_State(void) const
+{
+	if (Page == nullptr || (CurrentPhase != NewMenuPhase::PresentProductPage
+		&& CurrentPhase != NewMenuPhase::AwaitGraphicAction)) return(0);
+	switch (CurrentPage) {
+		case PageKind::Selector: return(1);
+		case PageKind::TiberianSun: return(2);
+		case PageKind::Firestorm: return(3);
+		case PageKind::None: return(0);
+	}
+	return(0);
+}
+
+
+int NewMenuSession::Selected_Product(void) const
+{
+	return(Menu != nullptr ? Menu->GameMode : -1);
+}
+
+
+bool NewMenuSession::Product_Menu_Ready(void) const
+{
+	int const state = Browser_Menu_State();
+	return(state == 2 || state == 3);
 }
 
 

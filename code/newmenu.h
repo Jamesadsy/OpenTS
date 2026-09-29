@@ -11,6 +11,9 @@
 
 #include "_mixfile.h"
 
+#include <cstdint>
+#include <memory>
+
 template<class T> class DynamicVectorClass;
 
 enum {
@@ -36,18 +39,15 @@ enum {
 
 class NewMenuClass
 {
+	friend class NewMenuSession;
+
 	public:
 		NewMenuClass(void);
 		~NewMenuClass(void);
 		int Process_Game_Select(void);
 
 	private:
-		static __forceinline int Game_Select_Loop(NewMenuClass * menu);
-		int Display_Game_Select_Menu(char const * section);
-		int Display_Menu(char const * section, DynamicVectorClass<int> & options);
-		int Select_Game_Type(void);
-		int Display_Tiberian_Sun_Menu(void);
-		int Display_Firestorm_Menu(void);
+		class GraphicMenu * Build_Menu(char const * section, DynamicVectorClass<int> & options);
 
 	public:
 		/*
@@ -70,6 +70,72 @@ class NewMenuClass
 		 * changes along with the page.
 		 */
 		char * Background;
+};
+
+
+enum class NewMenuStepResult : std::uint8_t {
+	Waiting,
+	Complete,
+	Fault,
+};
+
+enum class NewMenuPhase : std::uint8_t {
+	Idle,
+	Begin,
+	ChooseProduct,
+	AwaitTitleMedia,
+	PrepareTS,
+	PrepareFirestorm,
+	PresentProductPage,
+	AwaitGraphicAction,
+	MapResult,
+	LegacyFallback,
+	LaterSessionBoundary,
+	Complete,
+	Fault,
+};
+
+
+class NewMenuSession
+{
+	public:
+		NewMenuSession(void);
+		~NewMenuSession(void);
+		NewMenuSession(NewMenuSession const &) = delete;
+		NewMenuSession & operator=(NewMenuSession const &) = delete;
+
+		bool Begin(void);
+		NewMenuStepResult Step(void);
+		bool Finish(void);
+		int Result(void) const;
+		NewMenuPhase Phase(void) const;
+		bool TitleMediaAvailable(void) const;
+		bool TitleMediaCompletedNaturally(void) const;
+		bool TitleMediaSkipped(void) const;
+		int Browser_Menu_State(void) const;
+		int Selected_Product(void) const;
+		bool Product_Menu_Ready(void) const;
+
+	private:
+		enum class PageKind : std::uint8_t { None, Selector, TiberianSun, Firestorm };
+		bool Begin_Page(char const * section, DynamicVectorClass<int> & options, PageKind kind);
+		bool Begin_Title_Media(char const * name);
+		void Apply_Product_Choice(int item);
+		NewMenuStepResult Fault(void);
+
+		NewMenuClass * Menu = nullptr;
+		class GraphicMenu * Page = nullptr;
+		std::unique_ptr<class GraphicMenu> OwnedPage;
+		std::unique_ptr<class TitleMovieSession> TitleMedia;
+		NewMenuPhase CurrentPhase = NewMenuPhase::Idle;
+		PageKind CurrentPage = PageKind::None;
+		int PendingResult = NSEL_EXIT;
+		bool Begun = false;
+		bool Finished = false;
+		bool ResultApplied = false;
+		bool TitleWasAvailable = false;
+		bool TitleCompletedNaturally = false;
+		bool TitleWasSkipped = false;
 };
 
 NewMenuClass * Get_New_Menu(void);

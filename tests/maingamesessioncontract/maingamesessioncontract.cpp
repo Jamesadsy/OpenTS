@@ -33,6 +33,10 @@ void SelectGameSession::Begin(bool fade, bool)
 }
 void SelectGameSession::Reset(void) { Phase = SelectGamePhase::Idle; }
 SelectGameStepResult SelectGameSession::Step(void) { return(SelectGameStepResult::Waiting); }
+SelectGameLaterBoundary SelectGameSession::Later_Boundary(void) const
+{
+	return(SelectGameLaterBoundary::None);
+}
 bool SelectGameSession::Complete_Native_Child(bool, int, bool, bool)
 {
 	Phase = SelectGamePhase::ScenarioPrepare;
