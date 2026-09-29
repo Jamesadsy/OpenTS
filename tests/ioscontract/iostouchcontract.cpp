@@ -76,9 +76,15 @@ void Test_Tap(void)
 	Win32_Touch_Test_Set_Now(50 * MS);
 	Win32_Touch_Service();
 	Check(Left_Down(), "simple tap emits one primary-button press");
+	Check(Win32_Touch_Test_Button_Down_Count() == 1
+		&& Win32_Touch_Test_Button_Up_Count() == 0,
+		"one browser touch produces exactly one native menu-button down");
 	Win32_Touch_Test_Set_Now(100 * MS);
 	Win32_Touch_Service();
 	Check(!Left_Down(), "simple tap releases its primary button");
+	Check(Win32_Touch_Test_Button_Down_Count() == 1
+		&& Win32_Touch_Test_Button_Up_Count() == 1,
+		"the native menu-button up is delivered exactly once");
 	Win32_Pointer_Position(&x, &y);
 	Check(x == 160.0f && y == 120.0f,
 		"completed touch leaves the effective pointer at the last touch target");

@@ -177,6 +177,8 @@ bool _Test_Direct_Device_Override;
 bool _Test_Direct_Device;
 bool _Test_Now_Enabled;
 Uint64 _Test_Now;
+unsigned int _Test_Button_Down_Count;
+unsigned int _Test_Button_Up_Count;
 #endif
 
 
@@ -425,6 +427,9 @@ void Move_To(float x, float y)
 
 void Press(Uint8 button)
 {
+#ifdef OPENTS_TOUCH_TEST
+	_Test_Button_Down_Count++;
+#endif
 	_HeldButton = button;
 	Win32_Pointer_Button(button, true);
 	Win32_Post_Pointer_Message(button == SDL_BUTTON_RIGHT ? WM_RBUTTONDOWN : WM_LBUTTONDOWN);
@@ -435,6 +440,9 @@ void Press(Uint8 button)
 
 void Release_Now(Uint8 button)
 {
+#ifdef OPENTS_TOUCH_TEST
+	_Test_Button_Up_Count++;
+#endif
 	_HeldButton = 0;
 	Win32_Pointer_Button(button, false);
 	Win32_Post_Pointer_Message(button == SDL_BUTTON_RIGHT ? WM_RBUTTONUP : WM_LBUTTONUP);
@@ -1082,6 +1090,8 @@ void Win32_Touch_Test_Reset(void)
 	_Test_Direct_Device = true;
 	_Test_Now_Enabled = false;
 	_Test_Now = 0;
+	_Test_Button_Down_Count = 0;
+	_Test_Button_Up_Count = 0;
 	Win32_Pointer_Set_Direct_Touch(false);
 	Win32_Pointer_Move(0.0f, 0.0f);
 
@@ -1109,5 +1119,17 @@ void Win32_Touch_Test_Set_Now(Uint64 now)
 {
 	_Test_Now_Enabled = true;
 	_Test_Now = now;
+}
+
+
+unsigned int Win32_Touch_Test_Button_Down_Count(void)
+{
+	return(_Test_Button_Down_Count);
+}
+
+
+unsigned int Win32_Touch_Test_Button_Up_Count(void)
+{
+	return(_Test_Button_Up_Count);
 }
 #endif

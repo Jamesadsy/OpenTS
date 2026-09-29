@@ -350,6 +350,7 @@ if(EMSCRIPTEN)
 	set_property(TARGET OpenTS APPEND PROPERTY LINK_DEPENDS
 		"${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.html"
 		"${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.js"
+		"${CMAKE_SOURCE_DIR}/tests/browserstorage/runtime-input.js"
 		"${CMAKE_SOURCE_DIR}/tests/browserstorage/browserstorage.js"
 	)
 	set_target_properties(OpenTS PROPERTIES
@@ -378,6 +379,9 @@ if(EMSCRIPTEN)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/tests/browserstorage/harness.js"
             "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-storage-proof.js"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/tests/browserstorage/runtime-input.js"
+            "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-storage-input.js"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_SOURCE_DIR}/tests/browserstorage/browserstorage.js"
             "$<TARGET_FILE_DIR:OpenTS>/OpenTS-browser-storage-runtime.js"

@@ -36,6 +36,11 @@ int main(int argc, char ** argv)
 {
 #ifdef __EMSCRIPTEN__
 	Win32_Record_Arguments(argc, argv);
+	// OpenTS's native touch recognizer turns one-finger gestures into the mouse messages
+	// the menus already consume. Keep SDL from also manufacturing compatibility mouse
+	// events for the same browser touch, which would activate a menu option twice.
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
 	(void)OpenTS_Browser_Begin();
 	OpenTS_Browser_Main_Entry_Returned();
 	return(0);

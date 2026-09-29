@@ -18,3 +18,5 @@ void Win32_Touch_Test_Reset(void);
 void Win32_Touch_Test_Set_Window_Size(float width, float height);
 void Win32_Touch_Test_Set_Direct_Device(bool direct);
 void Win32_Touch_Test_Set_Now(Uint64 now);
+unsigned int Win32_Touch_Test_Button_Down_Count(void);
+unsigned int Win32_Touch_Test_Button_Up_Count(void);

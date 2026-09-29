@@ -2,6 +2,10 @@
   "use strict";
 
   var output = document.getElementById("proof");
+  var runtimeStatus = document.getElementById("runtime-status");
+  var runtimeHeading = document.getElementById("runtime-heading");
+  var runtimeCustody = document.getElementById("runtime-custody");
+  var runtimeDiagnostics = document.getElementById("runtime-diagnostics");
   var storage = window.OpenTS124HStorage;
   var stateKey = "opents-124h-proof-state-v1";
   var pageUrl = new URL(location.href);
@@ -18,10 +22,16 @@
   var timeoutTimer = 0;
   var finished = false;
   var startTime = 0;
+  var routeStartedAt = performance.now();
   var maxStepMs = 0;
-  var ownerStableFrames = 0;
-  var ownerStopRequested = false;
   var importedOwnerDataSummary = null;
+  var ownerTimeline = [];
+  var ownerInputEvents = [];
+  var ownerPhaseKey = "";
+  var ownerLastSnapshot = null;
+  var ownerStableMenuFrames = 0;
+  var ownerFinished = false;
+  var nativeFinishCalled = false;
   var state = readState();
   if (ownerMode) {
     state = {};
@@ -29,6 +39,75 @@
   } else if (stage === "write") {
     state = {};
     sessionStorage.removeItem(stateKey);
+  }
+
+  function refreshOwnerDiagnostics() {
+    if (!ownerMode || !runtimeDiagnostics.open) return;
+    var resourceTimings = performance.getEntriesByType("resource")
+      .filter(function (entry) { return /OpenTS\.(?:js|wasm)(?:$|\?)/i.test(entry.name); })
+      .map(function (entry) {
+        return { resource: entry.name.split("/").pop(), startMs: Number(entry.startTime.toFixed(1)),
+          durationMs: Number(entry.duration.toFixed(1)), transferBytes: entry.transferSize || null };
+      });
+    output.textContent = JSON.stringify({
+      runtime: "Tiberian Sun development runtime",
+      ownerDataCustody: "installed OPFS generation is read-only; /userdata remains local",
+      elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)),
+      routeStartedAt: new Date(performance.timeOrigin).toISOString(),
+      timeline: ownerTimeline,
+      latestNativeState: ownerLastSnapshot,
+      input: ownerInputEvents.slice(-24),
+      canvas: window.OpenTSRuntimeInput && window.Module && window.Module.canvas
+        ? window.OpenTSRuntimeInput.measure(window.Module.canvas) : null,
+      runtimeResources: resourceTimings,
+      importedGeneration: importedOwnerDataSummary ? {
+        generation: importedOwnerDataSummary.generation,
+        fileCount: importedOwnerDataSummary.fileCount,
+        totalBytes: importedOwnerDataSummary.totalBytes,
+        copiedOwnerData: importedOwnerDataSummary.copiedOwnerData
+      } : null,
+      runtimeErrors: runtimeErrors.slice(),
+      consoleErrors: consoleErrors.slice()
+    }, null, 2);
+  }
+
+  function setOwnerPhase(key, label, detail) {
+    if (!ownerMode) return;
+    if (runtimeStatus) runtimeStatus.textContent = label;
+    if (document.body) document.body.dataset.runtime = key === "failed" ? "failed" : "running";
+    if (key !== ownerPhaseKey) {
+      ownerPhaseKey = key;
+      ownerTimeline.push({ phase: key, status: label,
+        elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)), detail: detail || null });
+      if (window.parent !== window) {
+        try {
+          window.parent.postMessage({ type: "vv-ts-runtime-phase", phase: key, status: label,
+            elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)) }, location.origin);
+        } catch (_) { /* The visible in-frame status does not depend on parent messaging. */ }
+      }
+    }
+    refreshOwnerDiagnostics();
+  }
+
+  if (ownerMode) {
+    document.body.classList.add("owner-runtime");
+    document.title = "Tiberian Sun development runtime";
+    runtimeHeading.textContent = "Tiberian Sun development runtime";
+    runtimeCustody.textContent = "The installed TS generation stays in this browser’s local OPFS. OpenTS mounts it read-only and keeps runtime user data local.";
+    setOwnerPhase("module-loading", "Loading OpenTS WebAssembly module…");
+    var inputBridge = window.OpenTSRuntimeInput.install(document.getElementById("canvas"), function (entry) {
+      ownerInputEvents.push({ elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)), event: entry });
+      if (ownerInputEvents.length > 64) ownerInputEvents.shift();
+      refreshOwnerDiagnostics();
+    });
+    runtimeDiagnostics.addEventListener("toggle", refreshOwnerDiagnostics);
+  } else {
+    document.body.classList.add("proof-mode");
+    document.title = "OpenTS 124H local storage proof";
+    runtimeHeading.textContent = "OpenTS 124H local storage proof";
+    runtimeCustody.textContent = "Synthetic browser storage fixture. No owner game data is used.";
+    runtimeStatus.textContent = "Preparing synthetic local storage…";
+    runtimeDiagnostics.open = true;
   }
 
   function textOf(value) {
@@ -55,7 +134,15 @@
     window.__VV_TS1A_124H_PROOF__ = result;
     output.textContent = JSON.stringify(result, null, 2);
     document.body.dataset.proof = result.classification === "PASS" ? "pass" : "fail";
-    document.title = (ownerMode ? "OpenTS TS local runtime proof: " : "OpenTS 124H local storage proof: ") + result.classification;
+    if (ownerMode) {
+      setOwnerPhase(result.classification === "PASS" ? "complete" : "failed",
+        result.classification === "PASS" ? "OpenTS runtime completed." : "OpenTS runtime stopped with an error.",
+        result.reason || null);
+      document.body.dataset.runtime = result.classification === "PASS" ? "ready" : "failed";
+      document.title = "Tiberian Sun development runtime";
+      return;
+    }
+    document.title = "OpenTS 124H local storage proof: " + result.classification;
     document.dispatchEvent(new CustomEvent(ownerMode ? "vv-ts1b-126-owner-runtime-proof" : "vv-ts1a-124h-proof", { detail: result }));
   }
 
@@ -213,67 +300,120 @@
     }, 0);
   }
 
-  function finishImportedOwnerProcess() {
-    if (finished) return;
-    finished = true;
-    if (timeoutTimer) clearTimeout(timeoutTimer);
-    var finishResult = nativeValue("OpenTS_Browser_Finish");
-    var result = {
-      classification: "FAIL",
-      dataSource: "the installed Vanilla Vault TS OPFS generation",
-      copiedOwnerData: false,
-      importedFileCount: importedOwnerDataSummary ? importedOwnerDataSummary.fileCount : null,
-      importedBytes: importedOwnerDataSummary ? importedOwnerDataSummary.totalBytes : null,
-      dataRoot: nativeText("OpenTS_124H_Data_Root"),
-      dataPathStable: nativeValue("OpenTS_124H_Data_Root_Stable") === 1,
-      ownerDataProbePassed: nativeValue("OpenTS_126_Data_Probe_Passed") === 1,
-      ownerDataBoundaryReached: nativeValue("OpenTS_Browser_OwnerData_Boundary") === 1,
+  function ownerNativeSnapshot() {
+    return {
+      status: nativeValue("OpenTS_Browser_Status"),
+      faultCode: nativeValue("OpenTS_Browser_Fault_Code"),
+      bootstrapStage: nativeValue("OpenTS_Browser_Bootstrap_Stage"),
+      rendererInitialized: nativeValue("OpenTS_Browser_Renderer_Initialized") === 1,
+      rendererName: nativeText("OpenTS_Browser_Renderer_Name"),
       bootstrapMixfilesOpened: nativeValue("OpenTS_Browser_Bootstrap_Mixfiles_Opened") === 1,
       secondaryMixfilesOpened: nativeValue("OpenTS_Browser_Secondary_Mixfiles_Opened") === 1,
-      frontendReadyFrames: ownerStableFrames,
-      frontendReadyBeforeShutdown: nativeValue("OpenTS_Browser_Frontend_Ready") === 1,
-      emscriptenMainReturned: nativeValue("OpenTS_Browser_Main_Returned") === 1,
+      frontendReady: nativeValue("OpenTS_Browser_Frontend_Ready") === 1,
+      menuState: nativeValue("OpenTS_Browser_Menu_State"),
+      selectedProduct: nativeValue("OpenTS_Browser_Selected_Product"),
+      titleMediaAvailable: nativeValue("OpenTS_Browser_Title_Media_Available") === 1,
+      titleMediaNatural: nativeValue("OpenTS_Browser_Title_Media_Natural") === 1,
+      titleMediaSkipped: nativeValue("OpenTS_Browser_Title_Media_Skipped") === 1,
       beginCount: nativeValue("OpenTS_Browser_Begin_Count"),
       beginResult: nativeValue("OpenTS_Browser_Begin_Result"),
       mainGameSteps: nativeValue("OpenTS_Browser_MainGame_Steps"),
-      browserCallbacks: callbackCount,
-      returnedCallbacks: returnedCalls,
-      nativeProcessSteps: nativeValue("OpenTS_Browser_Step_Count"),
-      phaseProgression: phaseProgression,
-      finishResult: finishResult,
       finishCount: nativeValue("OpenTS_Browser_Finish_Count"),
-      finalProcessStatus: nativeValue("OpenTS_Browser_Status"),
-      rendererInitialized: nativeValue("OpenTS_Browser_Renderer_Initialized") === 1,
-      rendererName: nativeText("OpenTS_Browser_Renderer_Name"),
-      canvasExists: document.getElementById("canvas") instanceof HTMLCanvasElement,
-      webglContextAvailable: !!(document.getElementById("canvas").getContext("webgl2")
-        || document.getElementById("canvas").getContext("webgl")),
-      heartbeatTicks: heartbeatCount,
-      maxNativeStepMs: Number(maxStepMs.toFixed(3)),
-      elapsedMs: Number((performance.now() - startTime).toFixed(3)),
-      ownerDataRequests: ownerRequests(),
-      runtimeErrors: runtimeErrors.slice(),
-      consoleErrors: consoleErrors.slice(),
-      movieNetworkPersistenceOrGameplayExpansion: false,
-      asyncify: false,
-      jspi: false
+      dataProbePassed: nativeValue("OpenTS_126_Data_Probe_Passed") === 1,
+      ownerDataBoundaryReached: nativeValue("OpenTS_Browser_OwnerData_Boundary") === 1,
+      dataRoot: nativeText("OpenTS_124H_Data_Root")
     };
-    var pass = result.ownerDataProbePassed && result.ownerDataBoundaryReached
-      && result.bootstrapMixfilesOpened && result.secondaryMixfilesOpened
-      && result.frontendReadyFrames >= 8 && result.frontendReadyBeforeShutdown
-      && result.emscriptenMainReturned && result.beginCount === 1 && result.beginResult === 1
-      && result.mainGameSteps >= 8 && result.browserCallbacks > 0
-      && result.browserCallbacks === result.returnedCallbacks
-      && result.returnedCallbacks === result.nativeProcessSteps
-      && result.phaseProgression.indexOf(6) !== -1
-      && result.finishResult === 1 && result.finishCount === 1 && result.finalProcessStatus === 6
-      && result.rendererInitialized && !!result.rendererName && result.canvasExists
-      && result.webglContextAvailable && result.dataRoot === "/data/" && result.dataPathStable
-      && result.heartbeatTicks > 0 && result.ownerDataRequests.length === 0
-      && result.runtimeErrors.length === 0 && result.consoleErrors.length === 0;
-    result.classification = pass ? "PASS" : "FAIL";
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    publish(result);
+  }
+
+  function recordOwnerMilestone(key, label, detail) {
+    if (ownerTimeline.some(function (item) { return item.milestone === key; })) return;
+    ownerTimeline.push({ milestone: key, status: label,
+      elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)), detail: detail || null });
+    refreshOwnerDiagnostics();
+  }
+
+  function updateOwnerProgress(snapshot) {
+    var previous = ownerLastSnapshot;
+    ownerLastSnapshot = snapshot;
+    recordPhase(snapshot.status);
+    if (snapshot.status > 0) recordOwnerMilestone("native-start", "OpenTS native startup began.", snapshot.status);
+    if (snapshot.rendererInitialized) {
+      recordOwnerMilestone("renderer-ready", "OpenTS renderer initialized.", snapshot.rendererName);
+    }
+    if (snapshot.bootstrapMixfilesOpened) recordOwnerMilestone("bootstrap-mix", "Initial TS MIX bootstrap completed.");
+    if (snapshot.secondaryMixfilesOpened) recordOwnerMilestone("secondary-mix", "Secondary TS MIX bootstrap completed.");
+    if (snapshot.frontendReady) recordOwnerMilestone("newmenu-ready", "Native TS/Firestorm NewMenu became ready.");
+    if (snapshot.titleMediaNatural) recordOwnerMilestone("title-natural", "Native title media completed naturally.");
+    if (snapshot.titleMediaSkipped) recordOwnerMilestone("title-skipped", "Native title-media skip completed.");
+
+    if (snapshot.menuState > 0 && previous && snapshot.menuState === previous.menuState) ownerStableMenuFrames += 1;
+    else ownerStableMenuFrames = snapshot.menuState > 0 ? 1 : 0;
+
+    if (snapshot.status === 7) {
+      throw new Error("OpenTS native runtime fault " + snapshot.faultCode);
+    }
+    if (snapshot.status === 6) {
+      finishOwnerRuntime(snapshot);
+      return;
+    }
+
+    if (snapshot.status === 1) {
+      var stage = snapshot.bootstrapStage || 0;
+      setOwnerPhase("native-bootstrap", stage >= 12
+        ? "Starting the OpenTS renderer and Tiberian Sun runtime…"
+        : "Initializing OpenTS runtime services…", { bootstrapStage: stage });
+    } else if (snapshot.status === 2) {
+      setOwnerPhase("waiting-for-focus", "Waiting for the OpenTS display to become active…");
+    } else if (snapshot.status === 3 && snapshot.menuState === 1) {
+      setOwnerPhase(ownerStableMenuFrames >= 8 ? "selector-interactive" : "selector-visible",
+        ownerStableMenuFrames >= 8
+          ? "TS / Firestorm selector is ready. Tap a product to continue."
+          : "TS / Firestorm selector is visible; native touch input is active.",
+        { menuState: snapshot.menuState, stableFrames: ownerStableMenuFrames });
+      if (ownerStableMenuFrames >= 8) recordOwnerMilestone("first-stable-menu", "TS / Firestorm selector is stable and interactive.");
+    } else if (snapshot.status === 3 && (snapshot.menuState === 2 || snapshot.menuState === 3)) {
+      var productName = snapshot.menuState === 2 ? "Tiberian Sun" : "Firestorm";
+      setOwnerPhase(ownerStableMenuFrames >= 8 ? "product-menu-interactive" : "product-menu-visible",
+        ownerStableMenuFrames >= 8
+          ? productName + " menu is ready. Tap a native menu option."
+          : productName + " menu is visible; native touch input is active.",
+        { menuState: snapshot.menuState, stableFrames: ownerStableMenuFrames });
+      if (ownerStableMenuFrames >= 8) recordOwnerMilestone("selected-product-menu", productName + " menu is stable and interactive.");
+    } else if (snapshot.status === 3 && snapshot.selectedProduct >= 0) {
+      var selectedName = snapshot.selectedProduct === 0 ? "Tiberian Sun" : "Firestorm";
+      setOwnerPhase("title-and-menu-loading", selectedName + " selected; native title and menu startup is in progress…",
+        { selectedProduct: snapshot.selectedProduct, titleMediaAvailable: snapshot.titleMediaAvailable });
+      if (!previous || previous.selectedProduct !== snapshot.selectedProduct) {
+        recordOwnerMilestone("product-selected", selectedName + " product selection accepted by native NewMenu.");
+        recordOwnerMilestone("title-media-stage", "Native title-media stage began.", selectedName);
+      }
+    } else if (snapshot.status === 3 && snapshot.frontendReady) {
+      setOwnerPhase("newmenu-starting", "Preparing the native TS / Firestorm selector…");
+    } else if (snapshot.status === 3 && snapshot.secondaryMixfilesOpened) {
+      setOwnerPhase("menu-assets", "Tiberian Sun menu data loaded; initializing the native selector…");
+    } else if (snapshot.status === 3 && snapshot.bootstrapMixfilesOpened) {
+      setOwnerPhase("mix-bootstrap", "Loading Tiberian Sun menu and title data…");
+    } else {
+      setOwnerPhase("engine-starting", "Starting the native Tiberian Sun frontend…", { status: snapshot.status });
+    }
+    refreshOwnerDiagnostics();
+  }
+
+  function finishOwnerRuntime(snapshot) {
+    if (ownerFinished) return;
+    ownerFinished = true;
+    finished = true;
+    var finishCount = nativeValue("OpenTS_Browser_Finish_Count");
+    var finishResult = null;
+    if (finishCount === 0 && !nativeFinishCalled) {
+      nativeFinishCalled = true;
+      finishResult = nativeValue("OpenTS_Browser_Finish");
+    }
+    setOwnerPhase("runtime-exited", "The OpenTS runtime has exited.", {
+      finishResult: finishResult, status: snapshot.status, faultCode: snapshot.faultCode
+    });
+    document.body.dataset.runtime = "ready";
+    refreshOwnerDiagnostics();
   }
 
   function fail(error) {
@@ -285,40 +425,27 @@
     state.consoleErrors = (state.consoleErrors || []).concat(consoleErrors);
     state.failure = errorText(error);
     if (ownerMode) {
+      var beginCount = nativeValue("OpenTS_Browser_Begin_Count");
+      var finishCount = nativeValue("OpenTS_Browser_Finish_Count");
+      if (beginCount === 1 && finishCount === 0 && !nativeFinishCalled) {
+        nativeFinishCalled = true;
+        nativeValue("OpenTS_Browser_Finish");
+      }
       publish({
         classification: "FAIL",
-        stage: stage,
         reason: errorText(error),
         dataSource: "the installed Vanilla Vault TS OPFS generation",
         copiedOwnerData: false,
         importedFileCount: importedOwnerDataSummary ? importedOwnerDataSummary.fileCount : null,
         importedBytes: importedOwnerDataSummary ? importedOwnerDataSummary.totalBytes : null,
-        frontendReadyFrames: ownerStableFrames,
-        nativeState: {
-          phase: nativeValue("OpenTS_Browser_Status"),
-          faultCode: nativeValue("OpenTS_Browser_Fault_Code"),
-          beginCount: nativeValue("OpenTS_Browser_Begin_Count"),
-          beginResult: nativeValue("OpenTS_Browser_Begin_Result"),
-          mainGameSteps: nativeValue("OpenTS_Browser_MainGame_Steps"),
-          bootstrapStage: nativeValue("OpenTS_Browser_Bootstrap_Stage"),
-          rendererInitialized: nativeValue("OpenTS_Browser_Renderer_Initialized") === 1,
-          rendererName: nativeText("OpenTS_Browser_Renderer_Name"),
-          dataProbePassed: nativeValue("OpenTS_126_Data_Probe_Passed") === 1,
-          ownerDataBoundaryReached: nativeValue("OpenTS_Browser_OwnerData_Boundary") === 1,
-          bootstrapMixfilesOpened: nativeValue("OpenTS_Browser_Bootstrap_Mixfiles_Opened") === 1,
-          secondaryMixfilesOpened: nativeValue("OpenTS_Browser_Secondary_Mixfiles_Opened") === 1,
-          frontendReady: nativeValue("OpenTS_Browser_Frontend_Ready") === 1,
-          dataRoot: nativeText("OpenTS_124H_Data_Root")
-        },
+        nativeState: ownerLastSnapshot || ownerNativeSnapshot(),
         browserCallbacks: callbackCount,
         returnedCallbacks: returnedCalls,
         nativeProcessSteps: nativeValue("OpenTS_Browser_Step_Count"),
-        heartbeatTicks: heartbeatCount,
         ownerDataRequests: ownerRequests(),
         runtimeErrors: runtimeErrors.slice(),
         consoleErrors: consoleErrors.slice(),
-        finishCount: nativeValue("OpenTS_Browser_Finish_Count"),
-        phaseProgression: phaseProgression
+        ownerTimeline: ownerTimeline
       });
     } else {
       saveState();
@@ -327,6 +454,30 @@
   }
 
   function onFrame() {
+    if (ownerMode) {
+      if (finished) return;
+      callbackCount += 1;
+      var ownerStepStarted = performance.now();
+      try {
+        var ownerStepResult = nativeValue("OpenTS_Browser_Step");
+        returnedCalls += 1;
+        maxStepMs = Math.max(maxStepMs, performance.now() - ownerStepStarted);
+        var ownerPhase = nativeValue("OpenTS_Browser_Status");
+        recordPhase(ownerPhase);
+        if (ownerStepResult === 3 || ownerPhase === 7) {
+          throw new Error("OpenTS native runtime fault " + nativeValue("OpenTS_Browser_Fault_Code"));
+        }
+        if ((ownerStepResult !== 1 && ownerStepResult !== 2) || ownerPhase < 0 || ownerPhase > 7) {
+          throw new Error("Unexpected OpenTS runtime Step result/state: " + ownerStepResult + "/" + ownerPhase);
+        }
+        updateOwnerProgress(ownerNativeSnapshot());
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      if (!finished) requestAnimationFrame(onFrame);
+      return;
+    }
     if (finished) return;
     callbackCount += 1;
     var started = performance.now();
@@ -342,21 +493,9 @@
       if ((result !== 1 && result !== 2) || phase < 0 || phase > 7) {
         throw new Error("unexpected bounded native Step result/state: " + result + "/" + phase);
       }
-      if (ownerMode && phase < 6) {
-        if (nativeValue("OpenTS_Browser_Frontend_Ready") === 1) ownerStableFrames += 1;
-        else ownerStableFrames = 0;
-        if (ownerStableFrames >= 8 && !ownerStopRequested) {
-          nativeValue("OpenTS_Browser_Request_Proof_Stop");
-          ownerStopRequested = true;
-        }
-      }
       if (phase === 6) {
         check(returnedCalls === callbackCount, "browser callback did not return after each native Step");
         check(nativeValue("OpenTS_Browser_Step_Count") === returnedCalls, "native Step and browser callback counts differ");
-        if (ownerMode) {
-          finishImportedOwnerProcess();
-          return;
-        }
         check(nativeValue("OpenTS_124H_Boundary_Probe_Passed") === 1, "guard did not see the synthetic bootstrap sentinel");
         finishProcess();
         return;
@@ -473,6 +612,59 @@
     sessionStorage.removeItem(stateKey);
   }
 
+  async function startOwnerRuntime(Module) {
+    var mountStartedAt = performance.now();
+    setOwnerPhase("opfs-mount", "Opening the accepted TS generation from this browser’s local OPFS…");
+    var prepared = await storage.prepareImportedOwnerData(Module);
+    importedOwnerDataSummary = prepared.generation;
+    recordOwnerMilestone("opfs-mounted", "Read-only TS OPFS mount is ready.", {
+      fileCount: prepared.generation.fileCount,
+      totalBytes: prepared.generation.totalBytes,
+      durationMs: Number((performance.now() - mountStartedAt).toFixed(1))
+    });
+
+    setOwnerPhase("userdata-mount", "Mounting local /userdata for OpenTS…");
+    storage.mountUserRoot(Module);
+    var hydrationStartedAt = performance.now();
+    setOwnerPhase("userdata-hydration", "Restoring local OpenTS settings and saves…");
+    await storage.hydrateUser(Module, false);
+    recordOwnerMilestone("userdata-hydrated", "Local /userdata hydration completed.", {
+      durationMs: Number((performance.now() - hydrationStartedAt).toFixed(1))
+    });
+
+    setOwnerPhase("profile-check", "Checking the installed TS profile before native startup…");
+    check(Module._OpenTS_126_Storage_Mark_Ready() === 1, "native imported TS storage readiness check failed");
+    check(Module._OpenTS_126_Storage_Is_Ready() === 1, "imported TS storage is not ready before startup main");
+    check(Module._OpenTS_126_Data_Probe() === 1, "native imported TS Data probe failed");
+    recordOwnerMilestone("profile-ready", "Native TS data profile check passed.", {
+      fileCount: prepared.generation.fileCount,
+      dataRoot: "/data/",
+      copiedOwnerData: false
+    });
+
+    startTime = performance.now();
+    check(nativeValue("OpenTS_Browser_Status") === 0, "process was not Idle before Emscripten main");
+    setOwnerPhase("native-bootstrap", "Starting the OpenTS renderer and Tiberian Sun runtime…");
+    await new Promise(function (resolve) { requestAnimationFrame(function () { resolve(); }); });
+    var nativeStart = performance.now();
+    Module.callMain(["-DATADIR=/data", "-USERDIR=/userdata"]);
+    var nativeDuration = performance.now() - nativeStart;
+    recordOwnerMilestone("module-main-returned", "OpenTS native entry point returned to the browser scheduler.", {
+      durationMs: Number(nativeDuration.toFixed(1)),
+      beginCount: nativeValue("OpenTS_Browser_Begin_Count"),
+      beginResult: nativeValue("OpenTS_Browser_Begin_Result"),
+      rendererInitialized: nativeValue("OpenTS_Browser_Renderer_Initialized") === 1,
+      rendererName: nativeText("OpenTS_Browser_Renderer_Name"),
+      bootstrapStage: nativeValue("OpenTS_Browser_Bootstrap_Stage"),
+      bootstrapMixfilesOpened: nativeValue("OpenTS_Browser_Bootstrap_Mixfiles_Opened") === 1,
+      secondaryMixfilesOpened: nativeValue("OpenTS_Browser_Secondary_Mixfiles_Opened") === 1
+    });
+    check(nativeValue("OpenTS_Browser_Main_Returned") === 1, "Emscripten main did not return after Begin");
+    check(nativeValue("OpenTS_Browser_Begin_Count") === 1
+      && nativeValue("OpenTS_Browser_Begin_Result") === 1, "native OpenTS Begin did not succeed exactly once");
+    requestAnimationFrame(onFrame);
+  }
+
   async function startProcessStage(Module) {
     var prepared = ownerMode
       ? await storage.prepareImportedOwnerData(Module)
@@ -528,13 +720,25 @@
     noExitRuntime: true,
     onRuntimeInitialized: function () {
       startTime = performance.now();
-      heartbeatTimer = setInterval(function () { heartbeatCount += 1; }, 4);
-      timeoutTimer = setTimeout(function () {
-        fail(new Error("bounded browser storage/process proof timed out"));
-      }, ownerMode ? 300000 : 60000);
-      window.focus();
+      if (!ownerMode) {
+        heartbeatTimer = setInterval(function () { heartbeatCount += 1; }, 4);
+        timeoutTimer = setTimeout(function () {
+          fail(new Error("bounded browser storage/process proof timed out"));
+        }, 60000);
+      } else {
+        var moduleResource = performance.getEntriesByType("resource")
+          .filter(function (entry) { return /OpenTS\.js(?:$|\?)/i.test(entry.name); }).pop();
+        recordOwnerMilestone("wasm-ready", "OpenTS WebAssembly module initialized.", {
+          durationMs: Number((performance.now() - routeStartedAt).toFixed(1)),
+          moduleResourceMs: moduleResource ? Number(moduleResource.duration.toFixed(1)) : null
+        });
+        setOwnerPhase("opfs-mount", "OpenTS module is ready; opening the accepted TS generation…");
+      }
+      try { window.focus(); } catch (_) { /* Canvas focus is retried on the user’s first pointerdown. */ }
       if (Module.canvas && Module.canvas.focus) Module.canvas.focus();
-      var action = stage === "failure" ? startFailureStage(Module) : startProcessStage(Module);
+      var action = ownerMode
+        ? startOwnerRuntime(Module)
+        : (stage === "failure" ? startFailureStage(Module) : startProcessStage(Module));
       action.catch(fail);
     },
     onAbort: function (reason) {

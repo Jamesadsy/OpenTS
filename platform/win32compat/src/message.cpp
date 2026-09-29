@@ -217,7 +217,7 @@ static void Translate_Event(SDL_Event const & event)
 			break;
 
 		case SDL_EVENT_MOUSE_MOTION:
-#ifdef OPENTS_IOS
+#if defined(OPENTS_IOS) || defined(__EMSCRIPTEN__)
 			// A host that turns touches into mouse events would fight the recognizer for
 			// the pointer, and the recognizer is the one that knows what the gesture was.
 			// The hint that asks for them is already off; this is the second lock.
@@ -232,7 +232,7 @@ static void Translate_Event(SDL_Event const & event)
 
 		case SDL_EVENT_MOUSE_BUTTON_DOWN:
 		case SDL_EVENT_MOUSE_BUTTON_UP: {
-#ifdef OPENTS_IOS
+#if defined(OPENTS_IOS) || defined(__EMSCRIPTEN__)
 			if (event.button.which == SDL_TOUCH_MOUSEID) {
 				return;
 			}
