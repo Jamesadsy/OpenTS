@@ -35,6 +35,9 @@ inline void Host_Sleep(unsigned int milliseconds)
 	#if defined(__EMSCRIPTEN__)
 	if (OpenTS_Browser_Step_Active()) {
 		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_HOST_SLEEP);
+		// requestAnimationFrame owns browser pacing. A native sleep here stalls the
+		// page event loop, so let this retained-state Step return to its host instead.
+		return;
 	}
 	#endif
 	if (milliseconds == 0) {

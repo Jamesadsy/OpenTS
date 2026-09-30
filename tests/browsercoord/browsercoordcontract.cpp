@@ -208,6 +208,19 @@ void Test_Entry_And_Boundary_Contracts(void)
 		&& startup.find("Windows_Message_Handler();\n\treturn(GameInFocus ? 1 : 0);") != std::string::npos
 		&& startup.find("OpenTS_Browser_Startup_Shutdown_Drain") != std::string::npos,
 		"browser focus and shutdown each use one native message-handler pass per action");
+
+	std::string const host_clock = ReadSource("code/hostclock.h");
+	std::size_t const browser_step = host_clock.find("if (OpenTS_Browser_Step_Active())");
+	std::size_t const sleep_counter = host_clock.find("OPENTS_TELEMETRY_HOST_SLEEP", browser_step);
+	std::size_t const browser_return = host_clock.find("return;", sleep_counter);
+	std::size_t const zero_wait = host_clock.find("if (milliseconds == 0)", browser_return);
+	std::size_t const real_sleep = host_clock.find("std::this_thread::sleep_for", zero_wait);
+	Check(browser_step != std::string::npos && sleep_counter != std::string::npos
+		&& browser_return != std::string::npos && zero_wait != std::string::npos
+		&& real_sleep != std::string::npos && browser_step < sleep_counter
+		&& sleep_counter < browser_return && browser_return < zero_wait
+		&& zero_wait < real_sleep,
+		"browser-facing Step records Host_Sleep requests and returns before any blocking wait");
 }
 
 void Test_Harness_And_Build_Contracts(void)
