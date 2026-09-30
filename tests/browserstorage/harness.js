@@ -95,12 +95,19 @@
     runtimeHeading.textContent = "Tiberian Sun development runtime";
     runtimeCustody.textContent = "The installed TS generation stays in this browser’s local OPFS. OpenTS mounts it read-only and keeps runtime user data local.";
     setOwnerPhase("module-loading", "Loading OpenTS WebAssembly module…");
-    var inputBridge = window.OpenTSRuntimeInput.install(document.getElementById("canvas"), function (entry) {
+    var ownerCanvas = document.getElementById("canvas");
+    var inputBridge = window.OpenTSRuntimeInput.install(ownerCanvas, function (entry) {
       ownerInputEvents.push({ elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)), event: entry });
       if (ownerInputEvents.length > 64) ownerInputEvents.shift();
       refreshOwnerDiagnostics();
     });
     runtimeDiagnostics.addEventListener("toggle", refreshOwnerDiagnostics);
+    window.addEventListener("message", function (event) {
+      var message = event.data;
+      if (event.origin !== location.origin || event.source !== window.parent || !message
+        || message.type !== "vv-ts-native-key" || typeof message.down !== "boolean") return;
+      window.OpenTSRuntimeInput.dispatchKey(ownerCanvas, message.key, message.down);
+    });
   } else {
     document.body.classList.add("proof-mode");
     document.title = "OpenTS 124H local storage proof";

@@ -92,5 +92,34 @@
     };
   }
 
-  global.OpenTSRuntimeInput = { install: install, mapClientToLogical: mapClientToLogical, measure: measure };
+  var nativeKeys = Object.freeze({
+    Escape: { key: "Escape", code: "Escape" },
+    Enter: { key: "Enter", code: "Enter" },
+    ArrowUp: { key: "ArrowUp", code: "ArrowUp" },
+    ArrowDown: { key: "ArrowDown", code: "ArrowDown" },
+    ArrowLeft: { key: "ArrowLeft", code: "ArrowLeft" },
+    ArrowRight: { key: "ArrowRight", code: "ArrowRight" }
+  });
+
+  function dispatchKey(canvas, value, down) {
+    var key = nativeKeys[value];
+    if (!canvas || !key || typeof down !== "boolean" || typeof global.KeyboardEvent !== "function") return false;
+    try { canvas.focus({ preventScroll: true }); }
+    catch (_) { try { canvas.focus(); } catch (_) { return false; } }
+    return canvas.dispatchEvent(new global.KeyboardEvent(down ? "keydown" : "keyup", {
+      key: key.key,
+      code: key.code,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      repeat: false
+    }));
+  }
+
+  global.OpenTSRuntimeInput = {
+    install: install,
+    mapClientToLogical: mapClientToLogical,
+    measure: measure,
+    dispatchKey: dispatchKey
+  };
 }(typeof globalThis === "undefined" ? window : globalThis));

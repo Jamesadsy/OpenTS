@@ -40,7 +40,10 @@ function setup() {
     ResizeObserver: ResizeObserverFake,
     innerWidth: 390,
     innerHeight: 700,
-    devicePixelRatio: 3
+    devicePixelRatio: 3,
+    KeyboardEvent: class KeyboardEventFake {
+      constructor(type, init) { this.type = type; Object.assign(this, init); }
+    }
   });
   vm.runInNewContext(runtimeInputSource, global, { filename: "runtime-input.js" });
 
@@ -50,8 +53,10 @@ function setup() {
     width: 640,
     height: 480,
     focusCalls: 0,
+    dispatched: [],
     getBoundingClientRect() { return rect; },
     focus(options) { this.focusCalls += 1; this.focusOptions = options; doc.activeElement = this; },
+    dispatchEvent(event) { this.dispatched.push(event); return true; },
     setRect(value) { rect = value; }
   });
   const events = [];
@@ -89,7 +94,8 @@ test("focuses the canvas without cancelling or translating one native pointer ev
   assert.deepEqual(JSON.parse(JSON.stringify(events[0].logical)), { x: 320, y: 240, inside: true, width: 640, height: 480 });
   assert.equal(prevented, false);
   assert.equal(stopped, false);
-  assert.doesNotMatch(runtimeInputSource, /dispatchEvent|setPointerCapture|stopPropagation/);
+  assert.doesNotMatch(runtimeInputSource, /new global\.(?:Mouse|Touch)Event|setPointerCapture|stopPropagation/);
+  assert.match(runtimeInputSource, /new global\.KeyboardEvent/);
 });
 
 test("recalculates logical mappings after orientation and viewport resizing", () => {
@@ -102,4 +108,20 @@ test("recalculates logical mappings after orientation and viewport resizing", ()
   assert.equal(events[0].type, "canvas-resize");
   assert.equal(events[1].type, "orientationchange");
   assert.equal(events[1].metrics.cssRect.width, 240);
+});
+
+test("forwards only the native menu keys as focused keydown and keyup events", () => {
+  const { global, canvas, doc } = setup();
+  assert.equal(global.OpenTSRuntimeInput.dispatchKey(canvas, "Enter", true), true);
+  assert.equal(global.OpenTSRuntimeInput.dispatchKey(canvas, "Enter", false), true);
+  assert.equal(doc.activeElement, canvas);
+  assert.deepEqual(canvas.dispatched.map(event => ({ type: event.type, key: event.key, code: event.code })), [
+    { type: "keydown", key: "Enter", code: "Enter" },
+    { type: "keyup", key: "Enter", code: "Enter" }
+  ]);
+  assert.equal(canvas.dispatched[0].bubbles, true);
+  assert.equal(canvas.dispatched[0].cancelable, true);
+  assert.equal(global.OpenTSRuntimeInput.dispatchKey(canvas, "UntrustedCommand", true), false);
+  assert.equal(global.OpenTSRuntimeInput.dispatchKey(canvas, "Escape", "down"), false);
+  assert.equal(canvas.dispatched.length, 2);
 });

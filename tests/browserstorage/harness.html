@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b100a">
   <title>Tiberian Sun development runtime</title>
+  <script>if (new URLSearchParams(location.search).get("presentation") === "stage") document.documentElement.dataset.presentation = "stage";</script>
   <style>
     :root { color-scheme: dark; font: 14px/1.45 system-ui, sans-serif; background: #0b100a; color: #e8edf2; }
     * { box-sizing: border-box; }
@@ -24,6 +25,16 @@
     #proof { margin: 9px 0 0; max-height: 32vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
     body[data-runtime="failed"] #runtime-status { border-color: #a34b3e; color: #ff9a81; }
     body[data-runtime="ready"] #runtime-status { border-color: #617344; color: #d4e5a8; }
+    html[data-presentation="stage"], html[data-presentation="stage"] body { height: 100%; min-height: 0; overflow: hidden; }
+    html[data-presentation="stage"] body { padding: 0; }
+    html[data-presentation="stage"] main { display: block; height: 100%; margin: 0; max-width: none; width: 100%; }
+    html[data-presentation="stage"] header,
+    html[data-presentation="stage"] #runtime-heading,
+    html[data-presentation="stage"] #runtime-custody,
+    html[data-presentation="stage"] #runtime-status,
+    html[data-presentation="stage"] #runtime-diagnostics { display: none; }
+    html[data-presentation="stage"] #runtime-stage { border: 0; height: 100%; min-height: 0; width: 100%; }
+    html[data-presentation="stage"] #canvas { aspect-ratio: auto; height: auto; max-height: 100%; max-width: 100%; width: auto; }
     @media (max-width: 760px) { body { padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); } main { gap: 8px; } #runtime-stage { min-height: 0; } #canvas { max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); width: min(100%, 640px, calc((100vh - 180px) * 4 / 3)); width: min(100%, 640px, calc((100dvh - 180px) * 4 / 3)); } }
   </style>
 </head>

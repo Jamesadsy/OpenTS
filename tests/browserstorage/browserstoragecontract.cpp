@@ -145,6 +145,8 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 	Check(html.find("Tiberian Sun development runtime") != std::string::npos
 		&& html.find("local OPFS") != std::string::npos
 		&& html.find("role=\"status\"") != std::string::npos
+		&& html.find("dataset.presentation = \"stage\"") != std::string::npos
+		&& html.find("#runtime-diagnostics { display: none;") != std::string::npos
 		&& html.find("<details id=\"runtime-diagnostics\">") != std::string::npos
 		&& html.find("touch-action: none") != std::string::npos
 		&& html.find("OpenTS 124H local storage proof") == std::string::npos
@@ -176,10 +178,17 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 	Check(input.find("pointerdown") != std::string::npos
 		&& input.find("canvas.focus({ preventScroll: true })") != std::string::npos
 		&& input.find("passive: true") != std::string::npos
-		&& input.find("dispatchEvent") == std::string::npos
+		&& input.find("new global.KeyboardEvent") != std::string::npos
+		&& input.find("new global.MouseEvent") == std::string::npos
+		&& input.find("new global.TouchEvent") == std::string::npos
 		&& input.find("setPointerCapture") == std::string::npos
 		&& input.find("stopPropagation") == std::string::npos,
-		"canvas focus observes pointer input without capturing, synthesizing, or duplicating native events");
+		"game touch remains native while the allowlisted controller keys focus the canvas and use down/up events");
+	Check(runtime.find("event.origin !== location.origin") != std::string::npos
+		&& runtime.find("event.source !== window.parent") != std::string::npos
+		&& runtime.find("message.type !== \"vv-ts-native-key\"") != std::string::npos
+		&& runtime.find("dispatchKey(ownerCanvas, message.key, message.down)") != std::string::npos,
+		"only the same-origin Vanilla Vault parent can forward controller keys into OpenTS");
 	Check(sdl.find("event->targetX * xscale") != std::string::npos
 		&& sdl.find("window_data->window->w / client_w") != std::string::npos
 		&& sdl.find("event->targetX / (client_w - 1)") != std::string::npos
