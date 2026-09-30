@@ -17,8 +17,9 @@
     };
   }
 
-  function measure(canvas) {
+  function measure(canvas, stage) {
     var rect = canvas.getBoundingClientRect();
+    var stageRect = stage && stage.getBoundingClientRect ? stage.getBoundingClientRect() : null;
     return {
       viewport: { width: global.innerWidth, height: global.innerHeight },
       visualViewport: global.visualViewport ? {
@@ -28,16 +29,39 @@
       } : null,
       devicePixelRatio: global.devicePixelRatio || 1,
       cssRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      stageRect: stageRect ? { left: stageRect.left, top: stageRect.top, width: stageRect.width, height: stageRect.height } : null,
       backing: { width: canvas.width, height: canvas.height }
     };
   }
 
-  function install(canvas, onEvent) {
+  function fitCanvasToStage(canvas, stage) {
+    if (!canvas || !stage || typeof stage.getBoundingClientRect !== "function"
+      || canvas.width <= 0 || canvas.height <= 0) return null;
+    var rect = stage.getBoundingClientRect();
+    var width = stage.clientWidth || rect.width;
+    var height = stage.clientHeight || rect.height;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+    var scale = Math.min(width / canvas.width, height / canvas.height);
+    if (!Number.isFinite(scale) || scale <= 0) return null;
+    var fittedWidth = canvas.width * scale;
+    var fittedHeight = canvas.height * scale;
+    canvas.style.width = fittedWidth + "px";
+    canvas.style.height = fittedHeight + "px";
+    return { width: fittedWidth, height: fittedHeight, scale: scale };
+  }
+
+  function install(canvas, onEvent, options) {
     var report = typeof onEvent === "function" ? onEvent : function () {};
+    var settings = options || {};
+    var stage = settings.fitToStage === true ? (settings.stage || canvas.parentElement) : null;
     var previousTouchAction = canvas.style.touchAction;
+    var previousWidth = canvas.style.width;
+    var previousHeight = canvas.style.height;
     var listeners = [];
     var observer = null;
+    var backingObserver = null;
     canvas.style.touchAction = "none";
+    fitCanvasToStage(canvas, stage);
 
     function listen(target, name, callback, options) {
       target.addEventListener(name, callback, options);
@@ -65,7 +89,10 @@
     }
 
     function preventBrowserContextMenu(event) { event.preventDefault(); }
-    function observeViewport(event) { report({ type: event.type || "resize", metrics: measure(canvas) }); }
+    function observeViewport(event) {
+      fitCanvasToStage(canvas, stage);
+      report({ type: event.type || "resize", metrics: measure(canvas, stage) });
+    }
 
     listen(canvas, "pointerdown", focusOnPointerDown, { passive: true });
     for (var type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
@@ -76,18 +103,26 @@
     listen(global, "orientationchange", observeViewport, { passive: true });
     if (global.visualViewport) listen(global.visualViewport, "resize", observeViewport, { passive: true });
     if (typeof global.ResizeObserver === "function") {
-      observer = new global.ResizeObserver(function () { observeViewport({ type: "canvas-resize" }); });
-      observer.observe(canvas);
+      observer = new global.ResizeObserver(function () { observeViewport({ type: "stage-resize" }); });
+      observer.observe(stage || canvas);
+    }
+    if (typeof global.MutationObserver === "function" && stage) {
+      backingObserver = new global.MutationObserver(function () { observeViewport({ type: "canvas-backing-resize" }); });
+      backingObserver.observe(canvas, { attributes: true, attributeFilter: ["width", "height"] });
     }
 
     return {
-      measure: function () { return measure(canvas); },
+      measure: function () { return measure(canvas, stage); },
+      fit: function () { return fitCanvasToStage(canvas, stage); },
       dispose: function () {
         if (observer) observer.disconnect();
+        if (backingObserver) backingObserver.disconnect();
         for (var listener of listeners) {
           listener.target.removeEventListener(listener.name, listener.callback, listener.options);
         }
         canvas.style.touchAction = previousTouchAction;
+        canvas.style.width = previousWidth;
+        canvas.style.height = previousHeight;
       }
     };
   }
@@ -118,6 +153,7 @@
 
   global.OpenTSRuntimeInput = {
     install: install,
+    fitCanvasToStage: fitCanvasToStage,
     mapClientToLogical: mapClientToLogical,
     measure: measure,
     dispatchKey: dispatchKey

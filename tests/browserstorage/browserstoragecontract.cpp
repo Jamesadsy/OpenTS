@@ -168,13 +168,21 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 		&& runtime.find("title-media-stage") != std::string::npos
 		&& runtime.find("first-stable-menu") != std::string::npos,
 		"runtime timeline records mount, hydration, WASM, renderer, MIX, NewMenu, title, and interactive-menu stages");
+	Check(runtime.find("visibilitychange") != std::string::npos
+		&& runtime.find("webglcontextlost") != std::string::npos
+		&& runtime.find("webglcontextrestored") != std::string::npos
+		&& runtime.find("OpenTSRuntimeDiagnostics") != std::string::npos,
+		"resume and rendering context changes are surfaced in the embedded runtime diagnostics");
 	Check(input.find("(clientX - rect.left) * canvas.width / rect.width") != std::string::npos
 		&& input.find("(clientY - rect.top) * canvas.height / rect.height") != std::string::npos
 		&& input.find("getBoundingClientRect()") != std::string::npos
 		&& input.find("devicePixelRatio") != std::string::npos
 		&& input.find("ResizeObserver") != std::string::npos
-		&& input.find("orientationchange") != std::string::npos,
-		"input diagnostics map CSS-scaled and DPR-backed pointers in logical canvas space and recalculate after viewport changes");
+		&& input.find("orientationchange") != std::string::npos
+		&& input.find("fitCanvasToStage") != std::string::npos
+		&& input.find("canvas.style.width = fittedWidth") != std::string::npos
+		&& input.find("canvas.style.height = fittedHeight") != std::string::npos,
+		"runtime fits its canvas to the shared stage and maps CSS-scaled, DPR-backed pointers through viewport changes");
 	Check(input.find("pointerdown") != std::string::npos
 		&& input.find("canvas.focus({ preventScroll: true })") != std::string::npos
 		&& input.find("passive: true") != std::string::npos

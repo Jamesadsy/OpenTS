@@ -27,6 +27,7 @@
   var importedOwnerDataSummary = null;
   var ownerTimeline = [];
   var ownerInputEvents = [];
+  var ownerLifecycleEvents = [];
   var ownerPhaseKey = "";
   var ownerLastSnapshot = null;
   var ownerStableMenuFrames = 0;
@@ -41,15 +42,15 @@
     sessionStorage.removeItem(stateKey);
   }
 
-  function refreshOwnerDiagnostics() {
-    if (!ownerMode || !runtimeDiagnostics.open) return;
+  function ownerDiagnostics() {
+    if (!ownerMode) return null;
     var resourceTimings = performance.getEntriesByType("resource")
       .filter(function (entry) { return /OpenTS\.(?:js|wasm)(?:$|\?)/i.test(entry.name); })
       .map(function (entry) {
         return { resource: entry.name.split("/").pop(), startMs: Number(entry.startTime.toFixed(1)),
           durationMs: Number(entry.duration.toFixed(1)), transferBytes: entry.transferSize || null };
       });
-    output.textContent = JSON.stringify({
+    return {
       runtime: "Tiberian Sun development runtime",
       ownerDataCustody: "installed OPFS generation is read-only; /userdata remains local",
       elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)),
@@ -57,8 +58,9 @@
       timeline: ownerTimeline,
       latestNativeState: ownerLastSnapshot,
       input: ownerInputEvents.slice(-24),
+      lifecycle: ownerLifecycleEvents.slice(-16),
       canvas: window.OpenTSRuntimeInput && window.Module && window.Module.canvas
-        ? window.OpenTSRuntimeInput.measure(window.Module.canvas) : null,
+        ? window.OpenTSRuntimeInput.measure(window.Module.canvas, document.getElementById("runtime-stage")) : null,
       runtimeResources: resourceTimings,
       importedGeneration: importedOwnerDataSummary ? {
         generation: importedOwnerDataSummary.generation,
@@ -68,7 +70,12 @@
       } : null,
       runtimeErrors: runtimeErrors.slice(),
       consoleErrors: consoleErrors.slice()
-    }, null, 2);
+    };
+  }
+
+  function refreshOwnerDiagnostics() {
+    if (!ownerMode || !runtimeDiagnostics.open) return;
+    output.textContent = JSON.stringify(ownerDiagnostics(), null, 2);
   }
 
   function setOwnerPhase(key, label, detail) {
@@ -96,10 +103,52 @@
     runtimeCustody.textContent = "The installed TS generation stays in this browser’s local OPFS. OpenTS mounts it read-only and keeps runtime user data local.";
     setOwnerPhase("module-loading", "Loading OpenTS WebAssembly module…");
     var ownerCanvas = document.getElementById("canvas");
+    var stagePresentation = document.documentElement.dataset.presentation === "stage";
     var inputBridge = window.OpenTSRuntimeInput.install(ownerCanvas, function (entry) {
       ownerInputEvents.push({ elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)), event: entry });
       if (ownerInputEvents.length > 64) ownerInputEvents.shift();
       refreshOwnerDiagnostics();
+    }, { fitToStage: stagePresentation, stage: document.getElementById("runtime-stage") });
+    window.OpenTSRuntimeDiagnostics = function () {
+      return ownerDiagnostics();
+    };
+    function recordLifecycle(name, detail) {
+      ownerLifecycleEvents.push({
+        type: name,
+        elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)),
+        visibility: document.visibilityState,
+        persisted: detail && typeof detail.persisted === "boolean" ? detail.persisted : null,
+        contextLost: name.indexOf("webglcontext") === 0 && detail && detail.target
+          ? Boolean(detail.target.isContextLost && detail.target.isContextLost()) : null
+      });
+      if (ownerLifecycleEvents.length > 32) ownerLifecycleEvents.shift();
+      refreshOwnerDiagnostics();
+    }
+    function restoreOwnerDisplay() {
+      inputBridge.fit();
+      try { ownerCanvas.focus({ preventScroll: true }); }
+      catch (_) { try { ownerCanvas.focus(); } catch (_) { /* iOS may require a user gesture. */ } }
+      ownerStableMenuFrames = 0;
+      ownerLastSnapshot = null;
+      setOwnerPhase("display-resuming", "Restoring the OpenTS display after returning…");
+    }
+    document.addEventListener("visibilitychange", function () {
+      recordLifecycle("visibilitychange", null);
+      if (document.visibilityState === "visible") restoreOwnerDisplay();
+    });
+    window.addEventListener("pageshow", function (event) {
+      recordLifecycle("pageshow", event);
+      if (event.persisted) restoreOwnerDisplay();
+    });
+    window.addEventListener("pagehide", function (event) { recordLifecycle("pagehide", event); });
+    ownerCanvas.addEventListener("webglcontextlost", function (event) {
+      event.preventDefault();
+      recordLifecycle("webglcontextlost", event);
+      setOwnerPhase("display-context-lost", "The OpenTS display context was lost; waiting for the browser to restore it…");
+    });
+    ownerCanvas.addEventListener("webglcontextrestored", function (event) {
+      recordLifecycle("webglcontextrestored", event);
+      restoreOwnerDisplay();
     });
     runtimeDiagnostics.addEventListener("toggle", refreshOwnerDiagnostics);
     window.addEventListener("message", function (event) {

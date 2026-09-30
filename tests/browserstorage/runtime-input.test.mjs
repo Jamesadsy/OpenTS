@@ -25,7 +25,7 @@ function target() {
   };
 }
 
-function setup() {
+function setup(options) {
   const doc = { activeElement: null };
   const visualViewport = Object.assign(target(), { width: 390, height: 700, scale: 1 });
   let resizeObserver;
@@ -48,20 +48,42 @@ function setup() {
   vm.runInNewContext(runtimeInputSource, global, { filename: "runtime-input.js" });
 
   let rect = { left: 20, top: 30, width: 320, height: 240 };
+  let stageRect = { left: 0, top: 0, width: 320, height: 400 };
+  const stage = Object.assign(target(), {
+    clientWidth: stageRect.width,
+    clientHeight: stageRect.height,
+    getBoundingClientRect() { return stageRect; },
+    setRect(value) {
+      stageRect = value;
+      this.clientWidth = value.width;
+      this.clientHeight = value.height;
+    }
+  });
   const canvas = Object.assign(target(), {
     style: { touchAction: "auto" },
     width: 640,
     height: 480,
+    parentElement: stage,
     focusCalls: 0,
     dispatched: [],
-    getBoundingClientRect() { return rect; },
+    getBoundingClientRect() {
+      return {
+        ...rect,
+        width: Number.parseFloat(this.style.width) || rect.width,
+        height: Number.parseFloat(this.style.height) || rect.height
+      };
+    },
     focus(options) { this.focusCalls += 1; this.focusOptions = options; doc.activeElement = this; },
     dispatchEvent(event) { this.dispatched.push(event); return true; },
     setRect(value) { rect = value; }
   });
   const events = [];
-  const bridge = global.OpenTSRuntimeInput.install(canvas, event => events.push(event));
-  return { global, canvas, doc, events, bridge, resizeObserver, setRect: value => { rect = value; } };
+  const bridge = global.OpenTSRuntimeInput.install(canvas, event => events.push(event), options);
+  return {
+    global, canvas, doc, events, bridge, resizeObserver, stage,
+    setRect: value => { rect = value; },
+    setStageRect: value => stage.setRect(value)
+  };
 }
 
 test("maps pointer and touch positions through CSS scaling into the logical canvas", () => {
@@ -105,9 +127,27 @@ test("recalculates logical mappings after orientation and viewport resizing", ()
   global.dispatch("orientationchange", {});
   const point = global.OpenTSRuntimeInput.mapClientToLogical(canvas, 140, 120);
   assert.deepEqual(JSON.parse(JSON.stringify(point)), { x: 320, y: 240, inside: true, width: 640, height: 480 });
-  assert.equal(events[0].type, "canvas-resize");
+  assert.equal(events[0].type, "stage-resize");
   assert.equal(events[1].type, "orientationchange");
   assert.equal(events[1].metrics.cssRect.width, 240);
+});
+
+test("fits the TS canvas to the shared stage while preserving the native aspect ratio", () => {
+  const { canvas, bridge, resizeObserver, events, setStageRect } = setup({ fitToStage: true });
+  assert.equal(canvas.style.width, "320px");
+  assert.equal(canvas.style.height, "240px");
+  assert.deepEqual(JSON.parse(JSON.stringify(bridge.measure().stageRect)), {
+    left: 0, top: 0, width: 320, height: 400
+  });
+
+  setStageRect({ left: 0, top: 0, width: 800, height: 360 });
+  resizeObserver.callback();
+  assert.equal(canvas.style.width, "480px");
+  assert.equal(canvas.style.height, "360px");
+  assert.equal(events.at(-1).type, "stage-resize");
+  assert.deepEqual(JSON.parse(JSON.stringify(events.at(-1).metrics.cssRect)), {
+    left: 20, top: 30, width: 480, height: 360
+  });
 });
 
 test("forwards only the native menu keys as focused keydown and keyup events", () => {
