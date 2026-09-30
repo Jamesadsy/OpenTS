@@ -197,7 +197,11 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 		"Emscripten and native touch recognizer convert CSS pointer coordinates to OpenTS logical window coordinates");
 	Check(message.find("event.motion.which == SDL_TOUCH_MOUSEID") != std::string::npos
 		&& message.find("event.button.which == SDL_TOUCH_MOUSEID") != std::string::npos
-		&& CountOccurrences(message, "#if defined(OPENTS_IOS) || defined(__EMSCRIPTEN__)") == 2
+		&& CountOccurrences(message, "#if defined(OPENTS_IOS) || defined(__EMSCRIPTEN__)") == 3
+		&& message.find("static void Activate_Main_Window_From_Input(HWND main)") != std::string::npos
+		&& message.find("Win32_Post_Message(main, WM_ACTIVATEAPP, 1, 0);") != std::string::npos
+		&& message.find("if (event.type == SDL_EVENT_FINGER_DOWN)") != std::string::npos
+		&& message.find("Activate_Main_Window_From_Input(main);") != std::string::npos
 		&& entry.find("SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, \"0\")")
 			< entry.find("OpenTS_Browser_Begin();")
 		&& entry.find("SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, \"0\")")
@@ -206,7 +210,7 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 		&& touch.find("button == SDL_BUTTON_RIGHT ? WM_RBUTTONUP : WM_LBUTTONUP") != std::string::npos
 		&& touch_test.find("Win32_Touch_Test_Button_Down_Count() == 1") != std::string::npos
 		&& touch_test.find("Win32_Touch_Test_Button_Up_Count() == 1") != std::string::npos,
-		"one iPhone tap reaches the native menu once while SDL compatibility mouse duplicates are suppressed");
+		"browser and iPhone finger-down activate the native window before the native touch recognizer while SDL compatibility mouse duplicates are suppressed");
 	Check(menu.find("PendingKey == KN_LMOUSE || PendingKey == KN_RETURN") != std::string::npos
 		&& menu.find("PresentationActionStarted") != std::string::npos
 		&& menu_test.find("fixture.Starts == 1 && fixture.Sound == 1 && fixture.VQ == 1") != std::string::npos,

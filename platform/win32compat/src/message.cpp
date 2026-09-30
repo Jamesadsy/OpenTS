@@ -12,6 +12,8 @@
 #include <deque>
 #include <vector>
 
+extern bool GameInFocus;
+
 // The engine speaks Win32 messages everywhere: the window procedure, the keyboard queue,
 // the scroll handler and the tooltip timer all switch on WM_ values, and so do the dialog
 // drivers. Translating host events into those messages leaves every one of those call
@@ -104,6 +106,22 @@ void Win32_Post_Pointer_Message(UINT message)
 	}
 
 	Win32_Post_Message(main, message, Mouse_Key_State(), Pointer_To_LParam());
+}
+
+
+// Some embedded browsers do not report a separate SDL window-focus event when
+// a user taps or uses a runtime control. Re-enter the ordinary Win32 focus path
+// before delivering that first native input so GameInFocus and the game menu
+// transition together.
+static void Activate_Main_Window_From_Input(HWND main)
+{
+	if (main == NULL || GameInFocus) {
+		return;
+	}
+
+	Win32_Gamepad_Set_Focus(true);
+	Win32_Post_Message(main, WM_ACTIVATEAPP, 1, 0);
+	Win32_Post_Message(main, WM_SETFOCUS, 0, 0);
 }
 
 
@@ -239,6 +257,9 @@ static void Translate_Event(SDL_Event const & event)
 #endif
 
 			bool const down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+			if (down) {
+				Activate_Main_Window_From_Input(main);
+			}
 			bool const doubled = down && event.button.clicks >= 2;
 			UINT message = 0;
 
@@ -290,6 +311,9 @@ static void Translate_Event(SDL_Event const & event)
 			}
 
 			bool const down = event.type == SDL_EVENT_KEY_DOWN;
+			if (down) {
+				Activate_Main_Window_From_Input(main);
+			}
 			bool const system = (event.key.mod & SDL_KMOD_ALT) != 0;
 			UINT const message = down
 				? (system ? WM_SYSKEYDOWN : WM_KEYDOWN)
@@ -299,13 +323,16 @@ static void Translate_Event(SDL_Event const & event)
 			break;
 		}
 
-#ifdef OPENTS_IOS
+#if defined(OPENTS_IOS) || defined(__EMSCRIPTEN__)
 		// Only a host whose pointer is a finger routes them. A trackpad reports fingers
 		// too, and its own pointer is already the right answer there.
 		case SDL_EVENT_FINGER_DOWN:
 		case SDL_EVENT_FINGER_MOTION:
 		case SDL_EVENT_FINGER_UP:
 		case SDL_EVENT_FINGER_CANCELED:
+			if (event.type == SDL_EVENT_FINGER_DOWN) {
+				Activate_Main_Window_From_Input(main);
+			}
 			Win32_Touch_Handle_Event(event);
 			break;
 #endif
