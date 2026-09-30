@@ -13,6 +13,10 @@
 #include <cstdint>
 #include <thread>
 
+#if defined(__EMSCRIPTEN__)
+#include "browsertelemetry.h"
+#endif
+
 // The engine's coarse clock, in milliseconds from a clock that only ever moves forward.
 // Every caller measures an interval with it and none depends on where it starts. The
 // reading wraps roughly every forty nine days, so compare differences and not the
@@ -28,6 +32,11 @@ inline uint32_t Host_Milliseconds(void)
 // up the rest of the current time slice without pausing, which is what the frame loops use.
 inline void Host_Sleep(unsigned int milliseconds)
 {
+	#if defined(__EMSCRIPTEN__)
+	if (OpenTS_Browser_Step_Active()) {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_HOST_SLEEP);
+	}
+	#endif
 	if (milliseconds == 0) {
 		std::this_thread::yield();
 		return;

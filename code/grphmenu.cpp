@@ -11,6 +11,8 @@
 
 #include "grphmenu.h"
 
+#include "browsertelemetry.h"
+
 #include "hostclock.h"
 #include "_keyboar.h"
 #include "_surface.h"
@@ -183,6 +185,7 @@ int GraphicMenu::Presentation(void)
 bool GraphicMenu::Presentation_Begin(void)
 {
 	if (PresentationState != PresentationPhase::Idle) return(false);
+	OpenTS_Browser_Theme_Requested(ThemeName.Peek());
 	Theme.Play_Song(Theme.From_Name(ThemeName.Peek()));
 	Release_Pointer_To_Host();
 	HiddenSurface->Fill(0);
@@ -372,7 +375,14 @@ void GraphicMenu::Add_Item(GraphicMenuItem * item)
 GraphicMenuItem * GraphicMenu::Get_Item_Under_Mouse(Point2D const & mouse)
 {
 	for (GraphicMenuItem * item : Items) {
-		if (item->Is_Mouse_Over(mouse)) {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MENU_CANDIDATE_CHECKS);
+		bool const hit = item->Is_Mouse_Over(mouse);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MENU_CANDIDATE_ID, item->Get_ID());
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MENU_ACTIVE_RECT_HIT, hit ? 1 : 0);
+		if (hit) {
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MENU_ACTIVE_RECT_HITS);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MENU_HIT_SEQUENCE,
+				OpenTS_Browser_Telemetry_Next_Event());
 			return(item);
 		}
 	}

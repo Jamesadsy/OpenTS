@@ -37,6 +37,9 @@ endif()
 
 # Consumers include <windows.h> and the rest of the surface by their Windows spellings.
 target_include_directories(win32compat PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/win32compat/include")
+if(EMSCRIPTEN)
+    target_include_directories(win32compat PRIVATE "${CMAKE_SOURCE_DIR}/code")
+endif()
 
 target_link_libraries(win32compat PUBLIC SDL3::SDL3-static)
 

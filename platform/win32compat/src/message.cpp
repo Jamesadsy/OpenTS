@@ -9,6 +9,10 @@
 
 #include "win32compat.h"
 
+#if defined(__EMSCRIPTEN__)
+#include "browsertelemetry.h"
+#endif
+
 #include <deque>
 #include <vector>
 
@@ -33,6 +37,38 @@ struct Win32Timer
 };
 
 static std::vector<Win32Timer> _Timers;
+
+#if defined(__EMSCRIPTEN__)
+static void Record_Browser_Finger_Event(SDL_Event const & event)
+{
+	int counter = OPENTS_TELEMETRY_SDL_FINGER_MOTION;
+	switch (event.type) {
+		case SDL_EVENT_FINGER_DOWN: counter = OPENTS_TELEMETRY_SDL_FINGER_DOWN; break;
+		case SDL_EVENT_FINGER_UP: counter = OPENTS_TELEMETRY_SDL_FINGER_UP; break;
+		case SDL_EVENT_FINGER_CANCELED: counter = OPENTS_TELEMETRY_SDL_FINGER_CANCELED; break;
+		default: break;
+	}
+	OpenTS_Browser_Telemetry_Increment(counter);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LAST_SDL_EVENT_TYPE, (int)event.type);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LAST_TOUCH_DEVICE_TYPE,
+		(int)SDL_GetTouchDeviceType(event.tfinger.touchID));
+
+	Win32Window * const main = Win32_Lookup(Win32_Main_Window());
+	if (main == NULL || main->Handle == NULL) return;
+	int width = 0;
+	int height = 0;
+	int drawable_width = 0;
+	int drawable_height = 0;
+	SDL_GetWindowSize(main->Handle, &width, &height);
+	SDL_GetWindowSizeInPixels(main->Handle, &drawable_width, &drawable_height);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LOGICAL_WINDOW_WIDTH, width);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LOGICAL_WINDOW_HEIGHT, height);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_DRAWABLE_WIDTH, drawable_width);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_DRAWABLE_HEIGHT, drawable_height);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PIXEL_DENSITY_MILLI,
+		(int)(SDL_GetWindowPixelDensity(main->Handle) * 1000.0f));
+}
+#endif
 
 
 void Win32_Post_Message(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
@@ -122,6 +158,10 @@ static void Activate_Main_Window_From_Input(HWND main)
 	Win32_Gamepad_Set_Focus(true);
 	Win32_Post_Message(main, WM_ACTIVATEAPP, 1, 0);
 	Win32_Post_Message(main, WM_SETFOCUS, 0, 0);
+	#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_ACTIVATE_APP_POSTED);
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_SET_FOCUS_POSTED);
+	#endif
 }
 
 
@@ -330,6 +370,9 @@ static void Translate_Event(SDL_Event const & event)
 		case SDL_EVENT_FINGER_MOTION:
 		case SDL_EVENT_FINGER_UP:
 		case SDL_EVENT_FINGER_CANCELED:
+#if defined(__EMSCRIPTEN__)
+			Record_Browser_Finger_Event(event);
+#endif
 			if (event.type == SDL_EVENT_FINGER_DOWN) {
 				Activate_Main_Window_From_Input(main);
 			}

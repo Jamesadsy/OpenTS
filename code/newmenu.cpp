@@ -11,6 +11,8 @@
 
 #include "newmenu.h"
 
+#include "browsertelemetry.h"
+
 #include "_pk.h"
 #include "addon.h"
 #include "ccfile.h"
@@ -156,6 +158,10 @@ bool NewMenuSession::Begin_Title_Media(char const * name)
 
 void NewMenuSession::Apply_Product_Choice(int item)
 {
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_PRODUCT_CHOICE_APPLIED);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LAST_PRODUCT_CHOICE_ITEM, item);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_CHOICE_SEQUENCE,
+		OpenTS_Browser_Telemetry_Next_Event());
 	if (item == GMENU_TIBSUN) {
 		Menu->GameMode = 0;
 		Disable_Addon(ADDON_ANY);

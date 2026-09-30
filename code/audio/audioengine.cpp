@@ -166,6 +166,24 @@ unsigned AudioEngineClass::Now_Ms(void) const
 }
 
 
+bool AudioEngineClass::Device_Is_Open(void) const
+{
+	return(Device != nullptr && Device->Is_Open());
+}
+
+
+bool AudioEngineClass::Device_Is_Available(void) const
+{
+	return(Device != nullptr);
+}
+
+
+bool AudioEngineClass::Device_Is_Running(void) const
+{
+	return(Device != nullptr && Device->Is_Running());
+}
+
+
 bool AudioEngineClass::Init(void)
 {
 	if (Available) {
@@ -205,21 +223,9 @@ bool AudioEngineClass::Init(void)
 
 	Feeder.Setup(&Mixer, Device.get());
 #if defined(__EMSCRIPTEN__)
-	// The bounded cooperative browser runtime is intentionally single-threaded.
-	// AudioFeederClass::Start creates a std::thread for streamed audio and aborts
-	// in a non-pthread Emscripten build. Audio is optional during startup, so
-	// report it unavailable here and unwind the device just as for a missing
-	// output device. Native startup retains the existing feeder behavior below.
-	DebugString("Audio: browser stream feeder unavailable; sound disabled\n");
-	Feeder.Stop();
-	Device->Stop();
-	Device->Close();
-	Device.reset();
-	Pool.Shutdown();
-	Mixer.Shutdown();
-	Provider.reset();
-	Reader.reset();
-	return(false);
+	// The browser runtime has no feeder thread. Sound_Callback drives the existing
+	// bounded feeder pass on the game thread, using the same stream and device path.
+	DebugString("Audio: using cooperative browser stream feeder\n");
 #else
 	Feeder.Start();
 #endif
@@ -586,6 +592,9 @@ void AudioEngineClass::Sound_Callback(void)
 	if (!Available) {
 		return;
 	}
+#if defined(__EMSCRIPTEN__)
+	Feeder.Service();
+#endif
 	unsigned now = Now_Ms();
 	Pool.Service(now);
 	Reap_Streams();

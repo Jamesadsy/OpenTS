@@ -41,6 +41,9 @@ class AudioEngineClass
 		bool Init(void);
 		void End(void);
 		bool Is_Available(void) const { return(Available); }
+		bool Device_Is_Open(void) const;
+		bool Device_Is_Available(void) const;
+		bool Device_Is_Running(void) const;
 
 		AudioHandle Play_Event(AudioEventTypeClass const & type, AudioGroupType group, float volume, float pan, bool noattack = false);
 

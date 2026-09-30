@@ -42,6 +42,8 @@
 
 #include "always.h"
 
+#include "browsertelemetry.h"
+
 #include "winstub.h"
 
 #include "_keyboar.h"
@@ -169,6 +171,40 @@ extern bool InMovie;
 /// <returns>Returns with the result Windows expects for the message handled.</returns>
 LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+	if (hwnd == MainWindow) {
+#if defined(__EMSCRIPTEN__)
+			switch (message) {
+				case WM_ACTIVATEAPP:
+					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_ACTIVATE_APP_CONSUMED);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_ACTIVATE_APP_SEQUENCE,
+						OpenTS_Browser_Telemetry_Next_Event());
+					break;
+				case WM_SETFOCUS:
+					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_SET_FOCUS_CONSUMED);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_SET_FOCUS_SEQUENCE,
+						OpenTS_Browser_Telemetry_Next_Event());
+					break;
+			case WM_MOUSEMOVE:
+				OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MOUSE_MOVE);
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_IN_FOCUS, GameInFocus ? 1 : 0);
+				break;
+				case WM_LBUTTONDOWN:
+					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MOUSE_DOWN);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_IN_FOCUS, GameInFocus ? 1 : 0);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MOUSE_DOWN_SEQUENCE,
+						OpenTS_Browser_Telemetry_Next_Event());
+					break;
+				case WM_LBUTTONUP:
+					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MOUSE_UP);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_IN_FOCUS, GameInFocus ? 1 : 0);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MOUSE_UP_SEQUENCE,
+						OpenTS_Browser_Telemetry_Next_Event());
+				break;
+			default:
+				break;
+		}
+#endif
+	}
 
 	/*
 	 * The frame may be drawn scaled, so a click has to be matched against where the
@@ -315,6 +351,9 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 		case WM_ACTIVATEAPP:
 			if (hwnd == MainWindow && GameInFocus != (wParam != 0)) {
 				GameInFocus = (wParam != 0);
+#if defined(__EMSCRIPTEN__)
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_IN_FOCUS, GameInFocus ? 1 : 0);
+#endif
 				if (!GameInFocus) {
 					Focus_Loss();
 					DebugString("Focus lost\n");

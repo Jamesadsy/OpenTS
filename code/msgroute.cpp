@@ -9,6 +9,8 @@
 
 #include "always.h"
 
+#include "browsertelemetry.h"
+
 #include "msgroute.h"
 
 #include "vidscale.h"
@@ -162,13 +164,19 @@ bool Route_Mouse_Message(HWND window, UINT message, WPARAM wparam, LPARAM lparam
 		return(false);
 	}
 
-	if (!Video_Scaling_Active()) {
-		return(false);
-	}
-
 	POINT point;
 	point.x = GET_X_LPARAM(lparam);
 	point.y = GET_Y_LPARAM(lparam);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LAST_MOUSE_MESSAGE, (int)message);
+	if (!Video_Scaling_Active()) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_FRAME_X, point.x);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_FRAME_Y, point.y);
+		if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP) {
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MOUSE_ROUTE_SEQUENCE,
+				OpenTS_Browser_Telemetry_Next_Event());
+		}
+		return(false);
+	}
 
 	if (Uses_Screen_Coordinates(message)) {
 		ScreenToClient(MainWindow, &point);
@@ -177,6 +185,12 @@ bool Route_Mouse_Message(HWND window, UINT message, WPARAM wparam, LPARAM lparam
 	}
 
 	Window_Point_To_Game(point);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_FRAME_X, point.x);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_FRAME_Y, point.y);
+	if (message == WM_LBUTTONDOWN || message == WM_LBUTTONUP) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MOUSE_ROUTE_SEQUENCE,
+			OpenTS_Browser_Telemetry_Next_Event());
+	}
 
 	HWND target = Window_From_Logical_Point(point);
 	LPARAM target_lparam = Logical_LParam_For_Target(target, message, point);

@@ -7,6 +7,15 @@
 
 #include "browsercoord.h"
 
+#include "browsertelemetry.h"
+#if defined(__EMSCRIPTEN__)
+#include "audio/audioengine.h"
+#endif
+
+#include <atomic>
+#include <chrono>
+#include <cstring>
+
 #if defined(__EMSCRIPTEN__)
 extern "C" int OpenTS_Browser_Startup_Bootstrap(void);
 extern "C" int OpenTS_Browser_Startup_WaitFocus(void);
@@ -41,6 +50,23 @@ int BeginCount = 0;
 int FinishCount = 0;
 int BeginResult = 0;
 int MainReturned = 0;
+std::atomic<int> TelemetryCounters[OPENTS_TELEMETRY_COUNTER_COUNT]{};
+std::atomic<int> TelemetryValues[OPENTS_TELEMETRY_VALUE_COUNT]{};
+std::atomic<int> TelemetryEventSequence{0};
+double StepEntryMs = 0.0;
+double StepExitMs = 0.0;
+int LastStepResult = 0;
+char RequestedTheme[64] = {};
+
+double Browser_Now_Ms(void) noexcept
+{
+#if defined(__EMSCRIPTEN__)
+	return(emscripten_get_now());
+#else
+	return(std::chrono::duration<double, std::milli>(
+		std::chrono::steady_clock::now().time_since_epoch()).count());
+#endif
+}
 
 constexpr int FaultInvalidPhase = 1;
 constexpr int FaultMissingOperation = 2;
@@ -329,6 +355,13 @@ extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Begin(void)
 	++BeginCount;
 #if defined(__EMSCRIPTEN__)
 	if (BeginCount != 1) return(0);
+	for (std::atomic<int> & counter : TelemetryCounters) counter.store(0, std::memory_order_relaxed);
+	for (std::atomic<int> & value : TelemetryValues) value.store(0, std::memory_order_relaxed);
+	TelemetryEventSequence.store(0, std::memory_order_relaxed);
+	StepEntryMs = 0.0;
+	StepExitMs = 0.0;
+	LastStepResult = 0;
+	RequestedTheme[0] = '\0';
 	BeginResult = OpenTS_Browser::Begin(Session, ProductionOperations()) ? 1 : 0;
 	return(BeginResult);
 #else
@@ -338,7 +371,10 @@ extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Begin(void)
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Step(void)
 {
-	return(static_cast<int>(OpenTS_Browser::Step(Session)));
+	StepEntryMs = Browser_Now_Ms();
+	LastStepResult = static_cast<int>(OpenTS_Browser::Step(Session));
+	StepExitMs = Browser_Now_Ms();
+	return(LastStepResult);
 }
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Status(void)
@@ -362,6 +398,124 @@ extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_WaitFocus_Yields(void) { ret
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_MainGame_Began(void) { return(Session.MainGameBeginOwned ? 1 : 0); }
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_MainGame_Steps(void) { return((int)Session.MainGameSteps); }
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Shutdown_Drain_Passes(void) { return((int)Session.ShutdownDrainPasses); }
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT void OpenTS_Browser_Telemetry_Increment(int counter)
+{
+	if (counter >= 0 && counter < OPENTS_TELEMETRY_COUNTER_COUNT) {
+		TelemetryCounters[counter].fetch_add(1, std::memory_order_relaxed);
+	}
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Telemetry_Counter(int counter)
+{
+	return(counter >= 0 && counter < OPENTS_TELEMETRY_COUNTER_COUNT
+		? TelemetryCounters[counter].load(std::memory_order_relaxed) : 0);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT void OpenTS_Browser_Telemetry_Set(int value, int data)
+{
+	if (value >= 0 && value < OPENTS_TELEMETRY_VALUE_COUNT) {
+		TelemetryValues[value].store(data, std::memory_order_relaxed);
+	}
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Telemetry_Value(int value)
+{
+	return(value >= 0 && value < OPENTS_TELEMETRY_VALUE_COUNT
+		? TelemetryValues[value].load(std::memory_order_relaxed) : 0);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Telemetry_Next_Event(void)
+{
+	return(TelemetryEventSequence.fetch_add(1, std::memory_order_relaxed) + 1);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Step_Active(void)
+{
+	return(Session.StepActive ? 1 : 0);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT double OpenTS_Browser_Step_Entry_Ms(void)
+{
+	return(StepEntryMs);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT double OpenTS_Browser_Step_Exit_Ms(void)
+{
+	return(StepExitMs);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Last_Step_Result(void)
+{
+	return(LastStepResult);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT void OpenTS_Browser_Theme_Requested(char const * name)
+{
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_THEME_REQUESTED);
+	if (name == nullptr) name = "";
+	std::strncpy(RequestedTheme, name, sizeof(RequestedTheme) - 1);
+	RequestedTheme[sizeof(RequestedTheme) - 1] = '\0';
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT char const * OpenTS_Browser_Theme_Name(void)
+{
+	return(RequestedTheme);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Audio_Available(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(AudioEngine.Is_Available() ? 1 : 0);
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Audio_Device_Available(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(AudioEngine.Device_Is_Available() ? 1 : 0);
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Audio_Device_Open(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(AudioEngine.Device_Is_Open() ? 1 : 0);
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Audio_Device_Running(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(AudioEngine.Device_Is_Running() ? 1 : 0);
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Audio_Feeder_Passes(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return((int)AudioEngine.Feeder_Ref().Passes());
+#else
+	return(0);
+#endif
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Audio_Feeder_Running(void)
+{
+#if defined(__EMSCRIPTEN__)
+	return(AudioEngine.Feeder_Ref().Is_Running() ? 1 : 0);
+#else
+	return(0);
+#endif
+}
 
 extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_OwnerData_Boundary(void)
 {

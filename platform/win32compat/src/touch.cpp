@@ -11,6 +11,10 @@
 #include "movieholdpolicy.h"
 #include "win32compat.h"
 
+#if defined(__EMSCRIPTEN__)
+#include "browsertelemetry.h"
+#endif
+
 #include <sys/stat.h>
 
 #include <algorithm>
@@ -377,6 +381,9 @@ void Set_Phase(PhaseType phase, char const * why)
 {
 	Log_Phase(_Phase, phase, why);
 	_Phase = phase;
+	#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_TOUCH_PHASE, (int)phase);
+	#endif
 }
 
 
@@ -871,11 +878,19 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 			break;
 
 		default:
+			#if defined(__EMSCRIPTEN__)
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_TOUCH_REJECTED);
+			#endif
 			return(false);
 	}
 
 	// A trackpad reports fingers as well, and a trackpad already has a pointer of its own.
 	if (!Touch_Device_Is_Direct(event.tfinger.touchID)) {
+		#if defined(__EMSCRIPTEN__)
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LAST_TOUCH_DEVICE_TYPE,
+			(int)SDL_GetTouchDeviceType(event.tfinger.touchID));
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_TOUCH_REJECTED);
+		#endif
 		Log("ignored: touch device %llu is not a screen",
 			(unsigned long long)event.tfinger.touchID);
 		return(false);
@@ -885,6 +900,9 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 
 	if (!Window_Size(width, height)) {
 		Log("ignored: no window to measure the finger against");
+		#if defined(__EMSCRIPTEN__)
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_TOUCH_ACCEPTED);
+		#endif
 		return(true);
 	}
 
@@ -896,6 +914,10 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 	// window's own logical points.
 	float const x = event.tfinger.x * width;
 	float const y = event.tfinger.y * height;
+	#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_TOUCH_X_MILLI, (int)(x * 1000.0f));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_TOUCH_Y_MILLI, (int)(y * 1000.0f));
+	#endif
 	Uint64 const now = event.tfinger.timestamp;
 
 	switch (event.type) {
@@ -927,6 +949,9 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 			break;
 	}
 
+	#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_TOUCH_ACCEPTED);
+	#endif
 	return(true);
 }
 
@@ -936,6 +961,9 @@ bool Win32_Touch_Handle_Event(SDL_Event const & event)
 // glide advances and where a state that can no longer be true is put right.
 void Win32_Touch_Service(void)
 {
+	#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_TOUCH_SERVICE);
+	#endif
 	Uint64 const now = Touch_Now();
 	if (_MovieMode && _MovieSkipHold.Ready(now)) {
 		Log("emit ESC after deliberate movie hold");

@@ -31,6 +31,15 @@
   var ownerPhaseKey = "";
   var ownerLastSnapshot = null;
   var ownerStableMenuFrames = 0;
+  var ownerFrameSamples = [];
+  var ownerBootstrapTransitions = [];
+  var ownerLastRafAt = 0;
+  var ownerLastBootstrapStage = null;
+  var ownerLastMenuState = null;
+  var ownerMenuHitBaseline = 0;
+  var ownerMenuMouseDownBaseline = 0;
+  var ownerAudioGestures = [];
+  var ownerAudioAtSelectorEntry = null;
   var ownerFinished = false;
   var nativeFinishCalled = false;
   var state = readState();
@@ -57,6 +66,23 @@
       routeStartedAt: new Date(performance.timeOrigin).toISOString(),
       timeline: ownerTimeline,
       latestNativeState: ownerLastSnapshot,
+      framePump: {
+        scheduledPolicy: "one native OpenTS_Browser_Step per requestAnimationFrame callback",
+        callbackCount: callbackCount,
+        returnedStepCount: returnedCalls,
+        latestSamples: ownerFrameSamples.slice(-120),
+        bootstrapTransitions: ownerBootstrapTransitions.slice(-64),
+        nativeStepEntryMs: nativeValue("OpenTS_Browser_Step_Entry_Ms"),
+        nativeStepExitMs: nativeValue("OpenTS_Browser_Step_Exit_Ms"),
+        nativeStepResult: nativeValue("OpenTS_Browser_Last_Step_Result"),
+        processPhase: nativeValue("OpenTS_Browser_Status"),
+        mainGameSteps: nativeValue("OpenTS_Browser_MainGame_Steps"),
+        hostSleepCallsInsideBrowserStep: nativeTelemetryCounter(16)
+      },
+      inputPath: ownerInputTelemetry(),
+      audio: ownerAudioTelemetry(),
+      audioAtSelectorEntry: ownerAudioAtSelectorEntry,
+      trustedAudioGestures: ownerAudioGestures.slice(-16),
       input: ownerInputEvents.slice(-24),
       lifecycle: ownerLifecycleEvents.slice(-16),
       canvas: window.OpenTSRuntimeInput && window.Module && window.Module.canvas
@@ -108,7 +134,11 @@
       ownerInputEvents.push({ elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)), event: entry });
       if (ownerInputEvents.length > 64) ownerInputEvents.shift();
       refreshOwnerDiagnostics();
-    }, { fitToStage: stagePresentation, stage: document.getElementById("runtime-stage") });
+    }, {
+      fitToStage: stagePresentation,
+      stage: document.getElementById("runtime-stage"),
+      onTrustedGesture: resumeExistingAudioFromGesture
+    });
     window.OpenTSRuntimeDiagnostics = function () {
       return ownerDiagnostics();
     };
@@ -214,6 +244,138 @@
   function nativeText(name) {
     var pointer = nativeValue(name);
     return pointer && Module.UTF8ToString ? Module.UTF8ToString(pointer) : "";
+  }
+
+  function nativeTelemetryCounter(id) {
+    var fn = Module["_OpenTS_Browser_Telemetry_Counter"];
+    return typeof fn === "function" ? fn(id) : null;
+  }
+
+  function nativeTelemetryValue(id) {
+    var fn = Module["_OpenTS_Browser_Telemetry_Value"];
+    return typeof fn === "function" ? fn(id) : null;
+  }
+
+  function audioContextSnapshot() {
+    var devices = window.miniaudio && Array.isArray(window.miniaudio.devices)
+      ? window.miniaudio.devices : [];
+    return devices.map(function (device, index) {
+      if (!device) return null;
+      return {
+        index: index,
+        deviceState: device.state,
+        contextState: device.webaudio ? device.webaudio.state : "unavailable",
+        sampleRate: device.webaudio ? device.webaudio.sampleRate : null
+      };
+    }).filter(Boolean);
+  }
+
+  function ownerAudioTelemetry() {
+    return {
+      themeRequested: nativeText("OpenTS_Browser_Theme_Name"),
+      themeRequestObserved: nativeTelemetryCounter(17) > 0,
+      audioEngineAvailable: nativeValue("OpenTS_Browser_Audio_Available"),
+      audioDeviceAvailable: nativeValue("OpenTS_Browser_Audio_Device_Available"),
+      audioDeviceOpen: nativeValue("OpenTS_Browser_Audio_Device_Open"),
+      audioDeviceRunning: nativeValue("OpenTS_Browser_Audio_Device_Running"),
+      feederThreadRunning: nativeValue("OpenTS_Browser_Audio_Feeder_Running"),
+      cooperativeFeederPasses: nativeValue("OpenTS_Browser_Audio_Feeder_Passes"),
+      childAudioContexts: audioContextSnapshot(),
+      sdlResume: "not applicable: this browser OpenTS build uses the existing miniaudio device path"
+    };
+  }
+
+  function ownerInputTelemetry() {
+    var counterNames = ["sdlFingerDown", "sdlFingerMotion", "sdlFingerUp", "sdlFingerCanceled",
+      "recognizerAccepted", "recognizerRejected", "touchServiceRuns", "activateAppPosted",
+      "setFocusPosted", "activateAppConsumed", "setFocusConsumed", "wmMouseMove",
+      "wmLButtonDown", "wmLButtonUp", "menuCandidateChecks", "menuActiveRectHits", "hostSleep",
+      "themeRequests", "productChoicesApplied"];
+    var values = [];
+    for (var i = 0; i < counterNames.length; i++) values.push(nativeTelemetryCounter(i));
+    return {
+      counters: counterNames.reduce(function (result, name, index) {
+        result[name] = values[index];
+        return result;
+      }, {}),
+      nativeInputOrdering: (function () {
+        var activate = nativeTelemetryValue(17) || 0;
+        var setFocus = nativeTelemetryValue(18) || 0;
+        var down = nativeTelemetryValue(19) || 0;
+        var route = nativeTelemetryValue(21) || 0;
+        var hit = nativeTelemetryValue(22) || 0;
+        var choice = nativeTelemetryValue(23) || 0;
+        return {
+          gameInFocusAtClickConsumption: nativeTelemetryValue(10),
+          activationAndSetFocusBeforeClick: activate > 0 && setFocus > 0 && down > 0
+            && activate < down && setFocus < down && nativeTelemetryValue(10) === 1,
+          clickReachedGameFrameRoute: down > 0 && route >= down,
+          gameFrameRouteReachedGraphicMenuActiveRect: route > 0 && hit > route,
+          graphicMenuSelectionReachedNewMenuResult: hit > 0 && choice > hit,
+          sequences: {
+            activateAppConsumed: activate,
+            setFocusConsumed: setFocus,
+            lButtonDownConsumed: down,
+            gameFrameRoute: route,
+            graphicMenuActiveRectHit: hit,
+            newMenuProductChoiceApplied: choice
+          }
+        };
+      })(),
+      last: {
+        sdlEventType: nativeTelemetryValue(0),
+        touchDeviceType: nativeTelemetryValue(1),
+        sdlLogicalWindow: { width: nativeTelemetryValue(2), height: nativeTelemetryValue(3) },
+        sdlDrawable: { width: nativeTelemetryValue(4), height: nativeTelemetryValue(5) },
+        pixelDensity: (nativeTelemetryValue(6) || 0) / 1000,
+        recognizerPhase: nativeTelemetryValue(7),
+        touchWindowPoint: { x: (nativeTelemetryValue(8) || 0) / 1000, y: (nativeTelemetryValue(9) || 0) / 1000 },
+        gameInFocusAtMouseMessage: nativeTelemetryValue(10),
+        lastMouseMessage: nativeTelemetryValue(11),
+        gameFramePoint: { x: nativeTelemetryValue(12), y: nativeTelemetryValue(13) },
+        graphicMenuCandidateId: nativeTelemetryValue(14),
+        graphicMenuActiveRectHit: nativeTelemetryValue(15),
+        newMenuProductChoiceItem: nativeTelemetryValue(16),
+        activationConsumedSequence: nativeTelemetryValue(17),
+        setFocusConsumedSequence: nativeTelemetryValue(18),
+        mouseDownConsumedSequence: nativeTelemetryValue(19),
+        mouseUpConsumedSequence: nativeTelemetryValue(20),
+        mouseRouteGameFrameSequence: nativeTelemetryValue(21),
+        graphicMenuHitSequence: nativeTelemetryValue(22),
+        newMenuProductChoiceSequence: nativeTelemetryValue(23)
+      }
+    };
+  }
+
+  function resumeExistingAudioFromGesture(event) {
+    var before = audioContextSnapshot();
+    var needsResume = before.some(function (device) { return device.contextState !== "running"; });
+    var record = {
+      eventType: event.type,
+      isTrusted: event.isTrusted === true,
+      elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)),
+      stateBefore: before,
+      action: needsResume && window.miniaudio && typeof window.miniaudio.unlock === "function"
+        ? "requested existing miniaudio device contexts to resume" : "no suspended existing context to resume",
+      unlockResult: "not-requested",
+      sdlResume: "not applicable: SDL audio is not the browser audio backend"
+    };
+    if (needsResume && window.miniaudio && typeof window.miniaudio.unlock === "function") {
+      try {
+        var result = window.miniaudio.unlock();
+        record.unlockResult = result === undefined ? "called; API returns no result" : textOf(result);
+      } catch (error) {
+        record.unlockResult = "threw: " + errorText(error);
+      }
+    }
+    ownerAudioGestures.push(record);
+    if (ownerAudioGestures.length > 16) ownerAudioGestures.shift();
+    setTimeout(function () {
+      record.stateAfter = audioContextSnapshot();
+      record.elapsedAfterMs = Number((performance.now() - routeStartedAt).toFixed(1));
+      refreshOwnerDiagnostics();
+    }, 250);
+    refreshOwnerDiagnostics();
   }
 
   function recordPhase(value) {
@@ -402,6 +564,33 @@
     if (snapshot.titleMediaNatural) recordOwnerMilestone("title-natural", "Native title media completed naturally.");
     if (snapshot.titleMediaSkipped) recordOwnerMilestone("title-skipped", "Native title-media skip completed.");
 
+    if (snapshot.menuState > 0 && ownerAudioAtSelectorEntry === null) {
+      ownerAudioAtSelectorEntry = ownerAudioTelemetry();
+      recordOwnerMilestone("selector-audio-state",
+        "Audio engine, output device, existing child audio contexts, and requested theme sampled at selector entry.",
+        ownerAudioAtSelectorEntry);
+    }
+
+    if (!previous || previous.menuState !== snapshot.menuState) {
+      ownerLastMenuState = snapshot.menuState;
+      ownerMenuHitBaseline = nativeTelemetryCounter(15) || 0;
+      ownerMenuMouseDownBaseline = nativeTelemetryCounter(12) || 0;
+    }
+
+    if (!previous || previous.selectedProduct !== snapshot.selectedProduct) {
+      ownerBootstrapTransitions.push({
+        type: "selectedProduct-transition",
+        elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)),
+        from: previous ? previous.selectedProduct : null,
+        to: snapshot.selectedProduct,
+        nativeProductChoiceItem: nativeTelemetryValue(16),
+        nativeProductChoiceCount: nativeTelemetryCounter(18),
+        menuState: snapshot.menuState,
+        processPhase: snapshot.status
+      });
+      if (ownerBootstrapTransitions.length > 64) ownerBootstrapTransitions.shift();
+    }
+
     if (snapshot.menuState > 0 && previous && snapshot.menuState === previous.menuState) ownerStableMenuFrames += 1;
     else ownerStableMenuFrames = snapshot.menuState > 0 ? 1 : 0;
 
@@ -421,20 +610,43 @@
     } else if (snapshot.status === 2) {
       setOwnerPhase("waiting-for-focus", "Waiting for the OpenTS display to become active…");
     } else if (snapshot.status === 3 && snapshot.menuState === 1) {
-      setOwnerPhase(ownerStableMenuFrames >= 8 ? "selector-interactive" : "selector-visible",
-        ownerStableMenuFrames >= 8
-          ? "TS / Firestorm selector is ready. Tap a product to continue."
-          : "TS / Firestorm selector is visible; native touch input is active.",
-        { menuState: snapshot.menuState, stableFrames: ownerStableMenuFrames });
-      if (ownerStableMenuFrames >= 8) recordOwnerMilestone("first-stable-menu", "TS / Firestorm selector is stable and interactive.");
+      var selectorFocused = nativeTelemetryValue(10) === 1;
+      var selectorHit = selectorFocused
+        && (nativeTelemetryCounter(12) || 0) > ownerMenuMouseDownBaseline
+        && (nativeTelemetryCounter(15) || 0) > ownerMenuHitBaseline;
+      var selectorArmed = selectorFocused
+        && (nativeTelemetryCounter(9) || 0) > 0
+        && (nativeTelemetryCounter(10) || 0) > 0;
+      var selectorPhase = selectorHit ? "selector-interactive"
+        : selectorArmed ? "input-path-armed" : "selector-visible";
+      var selectorStatus = selectorHit
+        ? "Native focus and a mouse activation reached a GraphicMenu ActiveRect."
+        : selectorArmed
+          ? "Selector visible; native focus and touch routing are armed. Tap a product."
+          : "Selector visible; waiting for native input-path evidence.";
+      setOwnerPhase(selectorPhase, selectorStatus, {
+        menuState: snapshot.menuState,
+        stableFrames: ownerStableMenuFrames,
+        nativeHitCount: nativeTelemetryCounter(15),
+        mouseDownCount: nativeTelemetryCounter(12),
+        gameInFocus: nativeTelemetryValue(10)
+      });
+      if (ownerStableMenuFrames >= 8) recordOwnerMilestone("first-stable-menu",
+        "TS / Firestorm selector rendered across eight native Step samples; hit-path interactivity remains unproven.");
     } else if (snapshot.status === 3 && (snapshot.menuState === 2 || snapshot.menuState === 3)) {
       var productName = snapshot.menuState === 2 ? "Tiberian Sun" : "Firestorm";
-      setOwnerPhase(ownerStableMenuFrames >= 8 ? "product-menu-interactive" : "product-menu-visible",
-        ownerStableMenuFrames >= 8
-          ? productName + " menu is ready. Tap a native menu option."
-          : productName + " menu is visible; native touch input is active.",
-        { menuState: snapshot.menuState, stableFrames: ownerStableMenuFrames });
-      if (ownerStableMenuFrames >= 8) recordOwnerMilestone("selected-product-menu", productName + " menu is stable and interactive.");
+      var productMenuHit = nativeTelemetryValue(10) === 1
+        && (nativeTelemetryCounter(12) || 0) > ownerMenuMouseDownBaseline
+        && (nativeTelemetryCounter(15) || 0) > ownerMenuHitBaseline;
+      setOwnerPhase(productMenuHit ? "product-menu-interactive" : "product-menu-visible",
+        productMenuHit
+          ? productName + " menu received a focused native ActiveRect hit."
+          : productName + " menu is visible; waiting for a focused native hit.",
+        { menuState: snapshot.menuState, stableFrames: ownerStableMenuFrames,
+          nativeHitCount: nativeTelemetryCounter(15), mouseDownCount: nativeTelemetryCounter(12),
+          gameInFocus: nativeTelemetryValue(10) });
+      if (productMenuHit) recordOwnerMilestone("selected-product-menu",
+        productName + " menu received a native ActiveRect hit.");
     } else if (snapshot.status === 3 && snapshot.selectedProduct >= 0) {
       var selectedName = snapshot.selectedProduct === 0 ? "Tiberian Sun" : "Firestorm";
       setOwnerPhase("title-and-menu-loading", selectedName + " selected; native title and menu startup is in progress…",
@@ -498,6 +710,10 @@
         browserCallbacks: callbackCount,
         returnedCallbacks: returnedCalls,
         nativeProcessSteps: nativeValue("OpenTS_Browser_Step_Count"),
+        framePump: ownerDiagnostics().framePump,
+        inputPath: ownerDiagnostics().inputPath,
+        audio: ownerDiagnostics().audio,
+        trustedAudioGestures: ownerAudioGestures.slice(-16),
         ownerDataRequests: ownerRequests(),
         runtimeErrors: runtimeErrors.slice(),
         consoleErrors: consoleErrors.slice(),
@@ -513,12 +729,59 @@
     if (ownerMode) {
       if (finished) return;
       callbackCount += 1;
+      var ownerCallbackEntry = performance.now();
+      var ownerInterRafDelta = ownerLastRafAt > 0 ? ownerCallbackEntry - ownerLastRafAt : null;
+      ownerLastRafAt = ownerCallbackEntry;
+      var ownerPhaseBefore = nativeValue("OpenTS_Browser_Status");
+      var ownerStageBefore = nativeValue("OpenTS_Browser_Bootstrap_Stage");
       var ownerStepStarted = performance.now();
+      var ownerStepResult = null;
       try {
-        var ownerStepResult = nativeValue("OpenTS_Browser_Step");
+        ownerStepResult = nativeValue("OpenTS_Browser_Step");
         returnedCalls += 1;
-        maxStepMs = Math.max(maxStepMs, performance.now() - ownerStepStarted);
+        var ownerCallbackExit = performance.now();
+        var ownerStepDuration = ownerCallbackExit - ownerStepStarted;
+        maxStepMs = Math.max(maxStepMs, ownerStepDuration);
         var ownerPhase = nativeValue("OpenTS_Browser_Status");
+        var ownerStageAfter = nativeValue("OpenTS_Browser_Bootstrap_Stage");
+        var nativeEntryMs = nativeValue("OpenTS_Browser_Step_Entry_Ms");
+        var nativeExitMs = nativeValue("OpenTS_Browser_Step_Exit_Ms");
+        var stepSample = {
+          callback: callbackCount,
+          callbackElapsedMs: Number((ownerCallbackEntry - routeStartedAt).toFixed(1)),
+          interRafDeltaMs: ownerInterRafDelta === null ? null : Number(ownerInterRafDelta.toFixed(1)),
+          jsStepEntryMs: Number(ownerStepStarted.toFixed(1)),
+          jsStepExitMs: Number(ownerCallbackExit.toFixed(1)),
+          jsStepDurationMs: Number(ownerStepDuration.toFixed(2)),
+          nativeStepEntryMs: Number(nativeEntryMs),
+          nativeStepExitMs: Number(nativeExitMs),
+          nativeStepDurationMs: Number((nativeExitMs - nativeEntryMs).toFixed(2)),
+          cooperativeResult: ownerStepResult,
+          nativeCooperativeResult: nativeValue("OpenTS_Browser_Last_Step_Result"),
+          processPhaseBefore: ownerPhaseBefore,
+          processPhaseAfter: ownerPhase,
+          bootstrapStageBefore: ownerStageBefore,
+          bootstrapStageAfter: ownerStageAfter,
+          stepCount: nativeValue("OpenTS_Browser_Step_Count"),
+          mainGameStepCount: nativeValue("OpenTS_Browser_MainGame_Steps"),
+          hostSleepCallsDuringBrowserSteps: nativeTelemetryCounter(16)
+        };
+        ownerFrameSamples.push(stepSample);
+        if (ownerFrameSamples.length > 120) ownerFrameSamples.shift();
+        if (ownerStageBefore !== ownerStageAfter || ownerLastBootstrapStage === null) {
+          ownerBootstrapTransitions.push({
+            type: "bootstrap-stage-transition",
+            elapsedMs: Number((performance.now() - routeStartedAt).toFixed(1)),
+            from: ownerLastBootstrapStage,
+            stageBefore: ownerStageBefore,
+            stageAfter: ownerStageAfter,
+            processPhase: ownerPhase,
+            stepCount: nativeValue("OpenTS_Browser_Step_Count"),
+            mainGameSteps: nativeValue("OpenTS_Browser_MainGame_Steps")
+          });
+          if (ownerBootstrapTransitions.length > 64) ownerBootstrapTransitions.shift();
+          ownerLastBootstrapStage = ownerStageAfter;
+        }
         recordPhase(ownerPhase);
         if (ownerStepResult === 3 || ownerPhase === 7) {
           throw new Error("OpenTS native runtime fault " + nativeValue("OpenTS_Browser_Fault_Code"));

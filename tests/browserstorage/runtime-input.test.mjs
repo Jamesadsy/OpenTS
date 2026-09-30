@@ -86,14 +86,14 @@ function setup(options) {
   };
 }
 
-test("maps pointer and touch positions through CSS scaling into the logical canvas", () => {
+test("maps pointer and touch positions through CSS scaling into canvas backing coordinates", () => {
   const { global, canvas } = setup();
-  const point = global.OpenTSRuntimeInput.mapClientToLogical(canvas, 180, 150);
+  const point = global.OpenTSRuntimeInput.mapClientToBacking(canvas, 180, 150);
   assert.deepEqual(JSON.parse(JSON.stringify(point)), { x: 320, y: 240, inside: true, width: 640, height: 480 });
   assert.equal(global.devicePixelRatio, 3);
 
   canvas.setRect({ left: 10, top: 20, width: 480, height: 360 });
-  const touchPoint = global.OpenTSRuntimeInput.mapClientToLogical(canvas, 130, 110);
+  const touchPoint = global.OpenTSRuntimeInput.mapClientToBacking(canvas, 130, 110);
   assert.deepEqual(JSON.parse(JSON.stringify(touchPoint)), { x: 160, y: 120, inside: true, width: 640, height: 480 });
 });
 
@@ -113,7 +113,7 @@ test("focuses the canvas without cancelling or translating one native pointer ev
   assert.equal(canvas.style.touchAction, "none");
   assert.equal(events.length, 1);
   assert.equal(events[0].type, "pointerdown");
-  assert.deepEqual(JSON.parse(JSON.stringify(events[0].logical)), { x: 320, y: 240, inside: true, width: 640, height: 480 });
+  assert.deepEqual(JSON.parse(JSON.stringify(events[0].backingPoint)), { x: 320, y: 240, inside: true, width: 640, height: 480 });
   assert.equal(prevented, false);
   assert.equal(stopped, false);
   assert.doesNotMatch(runtimeInputSource, /new global\.(?:Mouse|Touch)Event|setPointerCapture|stopPropagation/);
@@ -125,7 +125,7 @@ test("recalculates logical mappings after orientation and viewport resizing", ()
   canvas.setRect({ left: 20, top: 30, width: 240, height: 180 });
   resizeObserver.callback();
   global.dispatch("orientationchange", {});
-  const point = global.OpenTSRuntimeInput.mapClientToLogical(canvas, 140, 120);
+  const point = global.OpenTSRuntimeInput.mapClientToBacking(canvas, 140, 120);
   assert.deepEqual(JSON.parse(JSON.stringify(point)), { x: 320, y: 240, inside: true, width: 640, height: 480 });
   assert.equal(events[0].type, "stage-resize");
   assert.equal(events[1].type, "orientationchange");

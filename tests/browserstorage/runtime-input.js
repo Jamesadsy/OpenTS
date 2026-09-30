@@ -1,7 +1,7 @@
 (function (global) {
   "use strict";
 
-  function mapClientToLogical(canvas, clientX, clientY) {
+  function mapClientToBacking(canvas, clientX, clientY) {
     var rect = canvas.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
       return null;
@@ -30,7 +30,8 @@
       devicePixelRatio: global.devicePixelRatio || 1,
       cssRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
       stageRect: stageRect ? { left: stageRect.left, top: stageRect.top, width: stageRect.width, height: stageRect.height } : null,
-      backing: { width: canvas.width, height: canvas.height }
+      canvasBackingDrawable: { width: canvas.width, height: canvas.height,
+        coordinateSpace: "canvas backing/drawable coordinates; not OpenTS menu-logical coordinates" }
     };
   }
 
@@ -77,15 +78,20 @@
     }
 
     function observePointer(event) {
-      var logical = mapClientToLogical(canvas, event.clientX, event.clientY);
+    var backingPoint = mapClientToBacking(canvas, event.clientX, event.clientY);
       report({
         type: event.type,
         pointerType: event.pointerType || "unknown",
         pointerId: Number.isFinite(event.pointerId) ? event.pointerId : null,
         client: { x: event.clientX, y: event.clientY },
-        logical: logical,
+        backingPoint: backingPoint,
+        coordinateSpace: "canvas backing/drawable coordinates; not OpenTS menu-logical coordinates",
         metrics: measure(canvas)
       });
+      if (event.type === "pointerup" && event.isTrusted === true
+        && typeof settings.onTrustedGesture === "function") {
+        settings.onTrustedGesture(event);
+      }
     }
 
     function preventBrowserContextMenu(event) { event.preventDefault(); }
@@ -154,7 +160,7 @@
   global.OpenTSRuntimeInput = {
     install: install,
     fitCanvasToStage: fitCanvasToStage,
-    mapClientToLogical: mapClientToLogical,
+    mapClientToBacking: mapClientToBacking,
     measure: measure,
     dispatchKey: dispatchKey
   };

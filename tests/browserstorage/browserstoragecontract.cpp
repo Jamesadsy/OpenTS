@@ -141,6 +141,11 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 	std::string const touch = ReadSource("platform/win32compat/src/touch.cpp");
 	std::string const touch_test = ReadSource("tests/ioscontract/iostouchcontract.cpp");
 	std::string const menu = ReadSource("code/grphmenu.cpp");
+	std::string const coordinator = ReadSource("code/browsercoord.cpp");
+	std::string const audio = ReadSource("code/audio/audioengine.cpp");
+	std::string const newmenu = ReadSource("code/newmenu.cpp");
+	std::string const message_route = ReadSource("code/msgroute.cpp");
+	std::string const window_procedure = ReadSource("code/winstub.cpp");
 	std::string const menu_test = ReadSource("tests/newmenucontinuation/newmenucontinuationcontract.cpp");
 	Check(html.find("Tiberian Sun development runtime") != std::string::npos
 		&& html.find("local OPFS") != std::string::npos
@@ -159,6 +164,19 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 		&& runtime.find("selector-interactive") != std::string::npos
 		&& runtime.find("product-menu-interactive") != std::string::npos,
 		"imported TS owner runtime remains live after stable selector and selected-product menus");
+	Check(runtime.find("interRafDeltaMs") != std::string::npos
+		&& runtime.find("nativeStepEntryMs") != std::string::npos
+		&& runtime.find("nativeStepExitMs") != std::string::npos
+		&& runtime.find("cooperativeResult") != std::string::npos
+		&& runtime.find("mainGameStepCount") != std::string::npos
+		&& runtime.find("bootstrap-stage-transition") != std::string::npos
+		&& runtime.find("hostSleepCallsDuringBrowserSteps") != std::string::npos
+		&& runtime.find("latestSamples: ownerFrameSamples.slice(-120)") != std::string::npos,
+		"owner runtime keeps a bounded rAF, native Step, phase, bootstrap and browser Host_Sleep trace");
+	Check(runtime.find("ownerStableMenuFrames >= 8 ? \"selector-interactive\"") == std::string::npos
+		&& runtime.find("selectorPhase = selectorHit ? \"selector-interactive\"") != std::string::npos
+		&& runtime.find("input-path-armed") != std::string::npos,
+		"menu visibility and stable rendering do not claim native interactivity without a focused hit");
 	Check(runtime.find("opfs-mount") != std::string::npos
 		&& runtime.find("userdata-hydration") != std::string::npos
 		&& runtime.find("wasm-ready") != std::string::npos
@@ -183,6 +201,29 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 		&& input.find("canvas.style.width = fittedWidth") != std::string::npos
 		&& input.find("canvas.style.height = fittedHeight") != std::string::npos,
 		"runtime fits its canvas to the shared stage and maps CSS-scaled, DPR-backed pointers through viewport changes");
+	Check(input.find("mapClientToBacking") != std::string::npos
+		&& input.find("backingPoint: backingPoint") != std::string::npos
+		&& input.find("not OpenTS menu-logical coordinates") != std::string::npos,
+		"browser pointer coordinates are explicitly labelled canvas backing/drawable coordinates");
+	Check(runtime.find("activationAndSetFocusBeforeClick") != std::string::npos
+		&& runtime.find("gameFrameRouteReachedGraphicMenuActiveRect") != std::string::npos
+		&& runtime.find("graphicMenuSelectionReachedNewMenuResult") != std::string::npos
+		&& coordinator.find("OpenTS_Browser_Step_Entry_Ms") != std::string::npos
+		&& coordinator.find("OpenTS_Browser_Telemetry_Counter") != std::string::npos
+		&& message.find("Record_Browser_Finger_Event(event)") != std::string::npos
+		&& touch.find("OPENTS_TELEMETRY_TOUCH_ACCEPTED") != std::string::npos
+		&& window_procedure.find("OPENTS_TELEMETRY_ACTIVATE_APP_SEQUENCE") != std::string::npos
+		&& message_route.find("OPENTS_TELEMETRY_GAME_FRAME_X") != std::string::npos
+		&& menu.find("OPENTS_TELEMETRY_MENU_HIT_SEQUENCE") != std::string::npos
+		&& newmenu.find("OPENTS_TELEMETRY_PRODUCT_CHOICE_APPLIED") != std::string::npos,
+		"native touch, consumed focus ordering, frame routing, ActiveRect hit and NewMenu result expose ordered evidence");
+	Check(menu.find("OpenTS_Browser_Theme_Requested(ThemeName.Peek())") != std::string::npos
+		&& audio.find("Feeder.Service();") != std::string::npos
+		&& audio.find("using cooperative browser stream feeder") != std::string::npos
+		&& runtime.find("window.miniaudio.unlock()") != std::string::npos
+		&& runtime.find("contextState") != std::string::npos
+		&& runtime.find("sdlResume: \"not applicable") != std::string::npos,
+		"browser selector audio uses existing miniaudio contexts and cooperative stream feeder service");
 	Check(input.find("pointerdown") != std::string::npos
 		&& input.find("canvas.focus({ preventScroll: true })") != std::string::npos
 		&& input.find("passive: true") != std::string::npos

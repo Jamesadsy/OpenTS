@@ -1,6 +1,6 @@
 ---
 title: Audio engine
-summary: A fixed voice pool rendered on the device thread and fed by the game and feeder threads.
+summary: A fixed voice pool rendered by its device callback and fed by native threads or cooperative browser passes.
 category: architecture
 source_files:
   - code/audio/audiodefs.hh
@@ -16,13 +16,19 @@ source_files:
   - code/audio/audioevent.cpp
   - code/audio/audioengine.cpp
   - code/audio/audiomovie.cpp
+  - code/browsercoord.cpp
+  - code/browsertelemetry.h
+  - code/grphmenu.cpp
+  - code/hostclock.h
+  - tests/browserstorage/harness.js
+  - thirdparty/miniaudio/miniaudio.h
   - code/vocini.cpp
   - code/voc.cpp
   - code/vox.cpp
   - code/theme.cpp
 ---
 
-The engine lives under `code/audio/` and is owned by one global, `AudioEngine`. Three threads touch it. The game thread calls every public member; the device thread runs the mixer's render callback; the feeder thread fills stream rings and recovers a lost device. The render path never allocates, locks, logs, or opens a file.
+The engine lives under `code/audio/` and is owned by one global, `AudioEngine`. On Windows and iOS, three threads touch it: the game thread calls every public member, the device thread runs the mixer's render callback, and the feeder thread fills stream rings and recovers a lost device. The single-thread Emscripten build keeps the same device and stream path but calls the feeder's existing `Service` pass from each game `Sound_Callback` instead of starting a feeder thread. Its miniaudio Web Audio context is the child runtime's existing context; a trusted canvas tap asks miniaudio to resume it if the browser suspended or interrupted it. The render path never allocates, locks, logs, or opens a file.
 
 ## Layers
 
@@ -32,7 +38,7 @@ The mixer holds sixty-four voices. Each voice plays either a sequence of decoded
 
 The sample cache keeps decoded PCM keyed by name or by the address and hash of an in-memory AUD. A pinned entry stays while any event uses it; an unpinned one is evicted least-recently-used until the cache is back under sixty-four megabytes. Pinned entries alone can hold it above that. A single sample is capped at eight megabytes.
 
-Streams are rings the mixer reads and a producer writes. File streams decode an AUD chunk at a time, or any other format through miniaudio, on the feeder thread, five seconds ahead of the mixer; the first block is decoded at open on the game thread. The movie player pushes its PCM blocks into a stream ring of its own and reads the frames the mixer has consumed back as its clock. The feeder runs a plain loop every 16 ms and fills every attached stream. While the device reports itself stopped, it renders the mixer into a scratch buffer at wall-clock rate, so voices finish and the movie clock keeps moving. It retries the device every two seconds, and reopens it ten seconds after the loss.
+Streams are rings the mixer reads and a producer writes. File streams decode an AUD chunk at a time, or any other format through miniaudio, five seconds ahead of the mixer; on Windows and iOS the feeder thread fills them, while Emscripten runs the same pass from the game thread. The first block is decoded at open on the game thread. The movie player pushes its PCM blocks into a stream ring of its own and reads the frames the mixer has consumed back as its clock. On Windows and iOS the feeder runs a plain loop every 16 ms and fills every attached stream. While the device reports itself stopped, it renders the mixer into a scratch buffer at wall-clock rate, so voices finish and the movie clock keeps moving. It retries the device every two seconds, and reopens it ten seconds after the loss.
 
 The event pool turns a sound type into a sequence and hands it to a voice. It enforces each type's `Limit=`, keeps the effects budget of `Channels=` voices with priority stealing, drives delayed loops one cycle at a time, and answers the four-byte generational handles the game holds. Streams and raw in-memory samples are events too, so one handle type covers everything the game controls.
 
