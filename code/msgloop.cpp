@@ -40,6 +40,9 @@
 #include "cctooltip.h"
 #include "vector.h"
 #include "video.h"
+#if defined(__EMSCRIPTEN__)
+#include "browsertelemetry.h"
+#endif
 
 
 /*
@@ -96,14 +99,31 @@ void Windows_Message_Handler(void)
 	if (MainWindow == 0) return;
 
 	MSG msg;
+#if defined(__EMSCRIPTEN__)
+	int processedMessages = 0;
+	bool yieldedBrowserStep = false;
+#endif
 
 	/*
 	**	Process windows messages until the message queue is exhuasted.
 	*/
 	while (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE)) {
+#if defined(__EMSCRIPTEN__)
+		// A browser Step cannot be interrupted by a JavaScript timer. Yield this
+		// queue drain to the next animation frame after 64 messages or 50 ms.
+		if (OpenTS_Browser_Step_Active() != 0
+			&& (processedMessages >= 64
+				|| emscripten_get_now() - OpenTS_Browser_Step_Entry_Ms() >= 50.0)) {
+			yieldedBrowserStep = true;
+			break;
+		}
+#endif
 		if (!GetMessage( &msg, NULL, 0, 0 )) {
 			return;
 		}
+#if defined(__EMSCRIPTEN__)
+		++processedMessages;
+#endif
 
 		if (ToolTips != NULL) {
 			ToolTips->Message_Handler(&msg);
@@ -143,6 +163,11 @@ void Windows_Message_Handler(void)
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
+	#if defined(__EMSCRIPTEN__)
+	if (yieldedBrowserStep) {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MESSAGE_PUMP_YIELDS);
+	}
+	#endif
 
 	/*
 	 * The menus, the loading screens and the score screens all draw and then come back

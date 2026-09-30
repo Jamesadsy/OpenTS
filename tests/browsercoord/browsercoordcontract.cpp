@@ -208,6 +208,15 @@ void Test_Entry_And_Boundary_Contracts(void)
 		&& startup.find("Windows_Message_Handler();\n\treturn(GameInFocus ? 1 : 0);") != std::string::npos
 		&& startup.find("OpenTS_Browser_Startup_Shutdown_Drain") != std::string::npos,
 		"browser focus and shutdown each use one native message-handler pass per action");
+	Check(startup.find("OpenTS_Browser_Request_Focus") != std::string::npos
+		&& startup.find("PostMessage(MainWindow, WM_ACTIVATEAPP, TRUE, 0)") != std::string::npos
+		&& startup.find("PostMessage(MainWindow, WM_SETFOCUS, 0, 0)") != std::string::npos,
+		"browser startup can post native activation and focus messages before a touch arrives");
+	std::string const message_loop = ReadSource("code/msgloop.cpp");
+	Check(message_loop.find("processedMessages >= 64") != std::string::npos
+		&& message_loop.find("emscripten_get_now() - OpenTS_Browser_Step_Entry_Ms() >= 50.0") != std::string::npos
+		&& message_loop.find("OPENTS_TELEMETRY_MESSAGE_PUMP_YIELDS") != std::string::npos,
+		"browser Step bounds native message draining by 64 messages and a 50 ms cooperative deadline");
 
 	std::string const host_clock = ReadSource("code/hostclock.h");
 	std::size_t const browser_step = host_clock.find("if (OpenTS_Browser_Step_Active())");
@@ -229,6 +238,7 @@ void Test_Harness_And_Build_Contracts(void)
 	Check(cmake.find("-sNO_EXIT_RUNTIME=1") != std::string::npos
 		&& cmake.find("OUTPUT_NAME OpenTS") != std::string::npos
 		&& cmake.find("_OpenTS_Browser_Begin") != std::string::npos
+		&& cmake.find("_OpenTS_Browser_Request_Focus") != std::string::npos
 		&& cmake.find("_OpenTS_Browser_Renderer_Name") != std::string::npos
 		&& cmake.find("OpenTS-browser-proof.html") != std::string::npos,
 		"Emscripten emits OpenTS.js/Wasm and stages the browser process harness");

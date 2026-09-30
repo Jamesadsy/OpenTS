@@ -115,4 +115,5 @@ OPENTS_BROWSER_EXPORT int OpenTS_Browser_Finish_Count(void);
 OPENTS_BROWSER_EXPORT int OpenTS_Browser_Renderer_Initialized(void);
 OPENTS_BROWSER_EXPORT int OpenTS_Browser_Bootstrap_Stage(void);
 OPENTS_BROWSER_EXPORT char const * OpenTS_Browser_Renderer_Name(void);
+OPENTS_BROWSER_EXPORT int OpenTS_Browser_Request_Focus(void);
 }

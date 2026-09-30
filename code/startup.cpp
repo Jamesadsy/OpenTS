@@ -48,6 +48,7 @@
 #include "_zbuffer.h"
 #include "bgfxbackend.h"
 #include "browsercoord.h"
+#include "browsertelemetry.h"
 #include "aircraft.h"
 #include "airctype.h"
 #include "aitrig.h"
@@ -540,6 +541,27 @@ extern "C" int OpenTS_Browser_Startup_WaitFocus(void)
 	if (!BrowserStartup.BootstrapComplete) return(-1);
 	Windows_Message_Handler();
 	return(GameInFocus ? 1 : 0);
+}
+
+
+extern "C" OPENTS_BROWSER_EXPORT int OpenTS_Browser_Request_Focus(void)
+{
+#if defined(__EMSCRIPTEN__)
+	if (MainWindow == NULL) return(0);
+	if (PostMessage(MainWindow, WM_ACTIVATEAPP, TRUE, 0)) {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_ACTIVATE_APP_POSTED);
+	} else {
+		return(-1);
+	}
+	if (PostMessage(MainWindow, WM_SETFOCUS, 0, 0)) {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_SET_FOCUS_POSTED);
+	} else {
+		return(-1);
+	}
+	return(1);
+#else
+	return(0);
+#endif
 }
 
 
