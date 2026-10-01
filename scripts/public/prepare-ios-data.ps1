@@ -61,11 +61,11 @@ function Test-ExcludedSourcePath {
     }
 
     $extension = [System.IO.Path]::GetExtension($LeafName)
-    if ($extension -match "^(?i)\.(exe|dll|dylib|pdb|map)$") {
+    if ($extension -match "(?i)^\.(exe|dll|dylib|pdb|map)$") {
         return $true
     }
 
-    if ($LeafName -match "^(?i)(Game|GameD|SUN\.INI)$") {
+    if ($LeafName -match "(?i)^(Game|GameD|SUN\.INI)$") {
         return $true
     }
 
