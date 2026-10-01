@@ -23,9 +23,18 @@ rebuilds the engine as a standalone program.
 > packaged as **CnC TS**. It is a community test build, not an official OpenTS
 > release and not affiliated with or endorsed by Electronic Arts.
 >
-> **Start here:** [Public Test 055 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055)
-> · [iPhone/iPad install guide](IOS_INSTALL.md)
+> **Start here:** [Public Test 055 release and Quickstart](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055)
+> · [short install steps](IOS_INSTALL.md#quick-start)
 > · [testing and known issues](IOS_TESTING.md)
+>
+> Get free Tiberian Sun / Firestorm data from the
+> [CnCNet how-to](https://cncnet.org/tiberian-sun/how-to-play) and its
+> [C&C Communications Centre installer](https://cnc-comm.com/tiberian-sun/downloads/the-game/installer).
+> Include the campaign, music and movie components. The
+> [Steam](https://store.steampowered.com/bundle/39394/) and
+> [EA App](https://www.ea.com/games/command-and-conquer/command-and-conquer-the-ultimate-collection)
+> Ultimate Collection are lawful alternatives. See the install guide for the
+> source-folder step and the documented freeware status.
 >
 > The iOS package contains the engine only. **No Tiberian Sun or Firestorm game
 > data is included.** You must provide your own lawfully obtained compatible

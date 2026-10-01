@@ -6,6 +6,33 @@ It is an unofficial community test build. It is not affiliated with or endorsed 
 
 The app contains the OpenTS engine only. **It does not include Tiberian Sun or Firestorm game data.** You must provide your own lawfully obtained compatible game data from a Tiberian Sun / Firestorm installation you own.
 
+## Quick start
+
+1. Get data from the [CnCNet Tiberian Sun how-to](https://cncnet.org/tiberian-sun/how-to-play), which links to the
+   [C&C Communications Centre installer](https://cnc-comm.com/tiberian-sun/downloads/the-game/installer).
+   Both pages describe Tiberian Sun / Firestorm as freeware released by
+   Electronic Arts in 2010. If you use the community installer, include the
+   campaign, music and movie components for the complete iOS experience.
+   Lawful retail alternatives are the [Steam](https://store.steampowered.com/bundle/39394/)
+   or [EA App](https://www.ea.com/games/command-and-conquer/command-and-conquer-the-ultimate-collection)
+   Command & Conquer The Ultimate Collection.
+2. From the [Public Test 055 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055), download `OpenTS-unsigned.ipa` and `CnC-TS-iOS-Quickstart.zip`.
+3. Extract the Quickstart ZIP and run `Prepare-CnC-TS-iOS.cmd`. Paste or drag
+   the installed Tiberian Sun / Firestorm folder and the downloaded IPA into
+   its prompts. Press Enter to create
+   `Documents\CnC-TS-iOS-Ready\OpenTS`.
+4. Sign and sideload the unchanged IPA with [Sideloadly](https://sideloadly.io/)
+   or [SideStore](https://docs.sidestore.io/docs/installation/install). Follow
+   the sideloading tool's current setup instructions.
+5. Launch CnC TS once and close it. In Files, copy the generated `OpenTS` folder into the CnC TS app's Documents area, then launch the game.
+
+The C&C community installer's output was not directly tested for this release.
+The launcher accepts the installed Tiberian Sun / Firestorm folder and the helper
+copies its files recursively, including subfolders. Select the folder containing
+the installed game files, not the installer download. The Quickstart validates
+the accepted Public Test 055 IPA and creates `OpenTS\Data` and `OpenTS\User`
+without modifying the source folder.
+
 ## Supported public-test target
 
 - iPhone or iPad
@@ -53,9 +80,10 @@ Documents/
 
 The engine uses **Documents/OpenTS/Data** as its game-data root and **Documents/OpenTS/User** as writable player state.
 
-### Recommended: preparation script
+### Direct PowerShell use
 
-On Windows, clone or download this repository and run:
+If you prefer to invoke the authoritative helper directly, download this
+repository and run it on Windows:
 
 ~~~powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\public\prepare-ios-data.ps1 -SourceDir "C:\Path\To\Your\Tiberian Sun" -Ipa "C:\Path\To\OpenTS-unsigned.ipa" -OutputDir "C:\Temp\CnC-TS-iOS"
