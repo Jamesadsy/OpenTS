@@ -15,6 +15,32 @@ OpenTS is a community-led, open-source reconstruction of *Command & Conquer:
 Tiberian Sun*. Instead of patching or extending the retail executable, it
 rebuilds the engine as a standalone program.
 
+
+> [!IMPORTANT]
+> ## CnC TS for iPhone/iPad — Public Test 053
+>
+> This fork also carries an **experimental iOS/iPadOS arm64 port** of OpenTS,
+> packaged as **CnC TS**. It is a community test build, not an official OpenTS
+> release and not affiliated with or endorsed by Electronic Arts.
+>
+> **Start here:** [Public Test 053 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-053)
+> · [iPhone/iPad install guide](IOS_INSTALL.md)
+> · [testing and known issues](IOS_TESTING.md)
+>
+> The iOS package contains the engine only. **No Tiberian Sun or Firestorm game
+> data is included.** You must provide your own lawfully obtained compatible
+> game data from your own installation.
+>
+> Public Test 053 is an **unsigned IPA** for iPhone and iPad running iOS/iPadOS
+> 16.0 or later. The accepted test binary is built from commit
+> **9ad5cd0edd0072e08cc1ba45bcb79c6c2dff0a2c**. Expected
+> OpenTS-unsigned.ipa SHA-256:
+> **ef264ba977dc70586aa622b89a40528096b600a17732685e75a032d7aab6ff2e**.
+>
+> The iOS port is still experimental. Single-player is the public test focus;
+> LAN remains experimental. Read [IOS_TESTING.md](IOS_TESTING.md) before
+> reporting a bug.
+
 OpenTS gives equal weight to two goals: maintaining a playable engine and
 providing a capable platform for modding and engine development. Work on one
 goal should not come at the expense of the other.
