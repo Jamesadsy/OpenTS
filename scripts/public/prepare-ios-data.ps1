@@ -22,8 +22,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ExpectedIpaSize = 8512047
-$ExpectedIpaSha256 = "EF264BA977DC70586AA622B89A40528096B600A17732685E75A032D7AAB6FF2E"
+$ExpectedIpaSize = 8522557
+$ExpectedIpaSha256 = "536A41CC0B8797D7C00CE61E097B7398FC24CE9AC888D77F5C3FFFF6308DD921"
 
 function Get-NormalizedFullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -106,6 +106,9 @@ function Invoke-Prepare {
         [switch]$SkipReleaseHashValidation
     )
 
+    $whatIfRequested = $WhatIfPreference
+    $WhatIfPreference = $false
+
     if (-not (Test-Path -LiteralPath $SourceDirValue -PathType Container)) {
         throw "SourceDir does not exist or is not a directory: $SourceDirValue"
     }
@@ -154,6 +157,11 @@ function Invoke-Prepare {
         }
         if (-not (Test-Path -LiteralPath $appLanguage -PathType Leaf)) {
             throw "IPA does not contain Payload/OpenTS.app/Language.dat."
+        }
+
+        if ($whatIfRequested) {
+            Write-Host "Validated inputs. No output written because -WhatIf was used."
+            return
         }
 
         if (-not $PSCmdlet.ShouldProcess($outputFull, "Create transfer-ready CnC TS OpenTS data folder")) {

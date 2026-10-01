@@ -1,14 +1,14 @@
 # CnC TS iOS Public Test — testing and known issues
 
-This page is for the **CnC TS for iPhone/iPad — Public Test 053** build.
+This page is for the **CnC TS for iPhone/iPad — Public Test 055** build.
 
 Install and data setup are covered in [IOS_INSTALL.md](IOS_INSTALL.md).
 
 ## What this build is for
 
-Public Test 053 is primarily a **single-player iPhone/iPad test build** of Tiberian Sun and Firestorm.
+Public Test 055 carries the accepted single-player line and adds a physically accepted local LAN scenario for two iPhones over trusted private Wi-Fi.
 
-The accepted build has already been exercised on a physical iPhone. Public testing is intended to broaden the device/iOS coverage and find edge cases rather than to claim that every mobile interaction is finished.
+The two-iPhone LAN test completed discovery, host/join/lobby, two-way chat, synchronized map/options, entry into the same match and gameplay commands. The session continued for about five minutes without a stall, desync or peer drop; controls and normal audio/input behavior remained intact. Public testing may broaden device, iOS and network coverage beyond that tested setup.
 
 Expected working areas include:
 
@@ -26,7 +26,7 @@ Expected working areas include:
 - Repair/Sell mode feedback;
 - CnC TS Home Screen identity.
 
-LAN exists as an experimental development lane but is **not part of the Public Test 053 single-player acceptance target**.
+Use a trusted private Wi-Fi network for LAN testing.
 
 ## Current known limitations
 
@@ -52,9 +52,9 @@ Triangle intentionally does not collapse the sidebar in this build. An earlier i
 
 The old mission recap / RestateMission screen does not yet have complete controller navigation parity.
 
-### LAN is experimental
+### LAN acceptance scope
 
-Do not treat inability to complete an iPhone-to-iPhone LAN match as a Public Test 053 single-player regression. Network work is tracked separately.
+Physical acceptance covers a two-iPhone session over trusted private Wi-Fi. Public testing may broaden device and network coverage beyond that setup.
 
 ## Useful touch behavior
 
@@ -99,7 +99,7 @@ A good first test is:
 9. connect headphones and confirm iOS routes audio normally;
 10. if using a controller, repeat a short menu/tactical input pass.
 
-Also try the Ring/Silent switch. Public Test 053 intentionally becomes silent when the device is in silent mode and resumes normal game audio when silent mode is off.
+Also try the Ring/Silent switch. Public Test 055 intentionally becomes silent when the device is in silent mode and resumes normal game audio when silent mode is off.
 
 ## Diagnostics
 
@@ -132,7 +132,7 @@ Please include:
 ~~~text
 Device:
 iOS/iPadOS version:
-CnC TS build: Public Test 053
+CnC TS build: Public Test 055
 IPA SHA-256:
 Sideload method: Sideloadly / SideStore / other
 Game data source: Steam / EA App / other lawful retail source
@@ -166,14 +166,14 @@ Never attach your original game archives or other proprietary owner data.
 
 ## Build identity
 
-Public Test 053 is pinned to:
+Public Test 055 is pinned to:
 
 ~~~text
-Commit: 9ad5cd0edd0072e08cc1ba45bcb79c6c2dff0a2c
-Tree:   96a490760e411a74c02e7ae21ff8091fccc28f75
+Commit: 559d91546c54d1ff4e999b7a47d0a7298f69b0c9
+Tree:   f0302eb04a94e4fe0f12392f9a97085a5cbf27d6
 IPA:    OpenTS-unsigned.ipa
-Size:   8,512,047 bytes
-SHA256: ef264ba977dc70586aa622b89a40528096b600a17732685e75a032d7aab6ff2e
+Size:   8,522,557 bytes
+SHA256: 536A41CC0B8797D7C00CE61E097B7398FC24CE9AC888D77F5C3FFFF6308DD921
 ~~~
 
-If your IPA does not have that SHA-256, say so in the report and do not assume it is the accepted Public Test 053 binary.
+If your IPA does not have that SHA-256, say so in the report and do not assume it is the accepted Public Test 055 binary.

@@ -1,4 +1,4 @@
-# CnC TS for iPhone/iPad — Public Test 053
+# CnC TS for iPhone/iPad — Public Test 055
 
 CnC TS is the experimental iPhone/iPad build carried by this OpenTS fork.
 
@@ -14,15 +14,15 @@ The app contains the OpenTS engine only. **It does not include Tiberian Sun or F
 - landscape orientation
 - unsigned IPA, signed by the tester during sideloading
 
-Public Test 053 is built from:
+Public Test 055 is built from:
 
-- source commit: **9ad5cd0edd0072e08cc1ba45bcb79c6c2dff0a2c**
-- source tree: **96a490760e411a74c02e7ae21ff8091fccc28f75**
+- source commit: **559d91546c54d1ff4e999b7a47d0a7298f69b0c9**
+- source tree: **f0302eb04a94e4fe0f12392f9a97085a5cbf27d6**
 - IPA filename: **OpenTS-unsigned.ipa**
-- expected size: **8,512,047 bytes**
-- SHA-256: **ef264ba977dc70586aa622b89a40528096b600a17732685e75a032d7aab6ff2e**
+- expected size: **8,522,557 bytes**
+- SHA-256: **536A41CC0B8797D7C00CE61E097B7398FC24CE9AC888D77F5C3FFFF6308DD921**
 
-Download it from the [Public Test 053 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-053).
+Download it from the [Public Test 055 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055).
 
 ## 1. Verify the IPA
 
@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\public\prepare-ios-data.ps1 -
 The script:
 
 - reads only your local Tiberian Sun installation;
-- verifies the Public Test 053 IPA size and SHA-256;
+- verifies the Public Test 055 IPA size and SHA-256;
 - excludes Windows executables, libraries, editor/manual/debug material and local saves/settings that the iOS build does not need;
 - preserves the legally owned runtime archives, including required movie data;
 - extracts the engine-owned **ui** directory and **Language.dat** from the IPA;
@@ -180,9 +180,13 @@ A useful first smoke test is:
 5. save and reload once;
 6. return to the selector and confirm Firestorm is available.
 
-If the game is silent, first check the iPhone/iPad Ring/Silent setting. Public Test 053 intentionally follows the iOS silent switch. Connected headphones should be selected by normal iOS audio routing.
+If the game is silent, first check the iPhone/iPad Ring/Silent setting. Public Test 055 intentionally follows the iOS silent switch. Connected headphones should be selected by normal iOS audio routing.
 
 See [IOS_TESTING.md](IOS_TESTING.md) for controls, known issues and what to include in a bug report.
+
+## Two-iPhone LAN testing
+
+Public Test 055 passed physical acceptance for LAN play between two iPhones over trusted private Wi-Fi. Public testing may broaden device and network coverage beyond that tested setup.
 
 ## Saves and reinstalls
 

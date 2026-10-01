@@ -17,13 +17,13 @@ rebuilds the engine as a standalone program.
 
 
 > [!IMPORTANT]
-> ## CnC TS for iPhone/iPad — Public Test 053
+> ## CnC TS for iPhone/iPad — Public Test 055
 >
 > This fork also carries an **experimental iOS/iPadOS arm64 port** of OpenTS,
 > packaged as **CnC TS**. It is a community test build, not an official OpenTS
 > release and not affiliated with or endorsed by Electronic Arts.
 >
-> **Start here:** [Public Test 053 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-053)
+> **Start here:** [Public Test 055 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055)
 > · [iPhone/iPad install guide](IOS_INSTALL.md)
 > · [testing and known issues](IOS_TESTING.md)
 >
@@ -31,15 +31,19 @@ rebuilds the engine as a standalone program.
 > data is included.** You must provide your own lawfully obtained compatible
 > game data from your own installation.
 >
-> Public Test 053 is an **unsigned IPA** for iPhone and iPad running iOS/iPadOS
+> Public Test 055 is an **unsigned IPA** for iPhone and iPad running iOS/iPadOS
 > 16.0 or later. The accepted test binary is built from commit
-> **9ad5cd0edd0072e08cc1ba45bcb79c6c2dff0a2c**. Expected
+> **559d91546c54d1ff4e999b7a47d0a7298f69b0c9** (tree
+> **f0302eb04a94e4fe0f12392f9a97085a5cbf27d6**). Expected size:
+> **8,522,557 bytes**.
+> Expected
 > OpenTS-unsigned.ipa SHA-256:
-> **ef264ba977dc70586aa622b89a40528096b600a17732685e75a032d7aab6ff2e**.
+> **536A41CC0B8797D7C00CE61E097B7398FC24CE9AC888D77F5C3FFFF6308DD921**.
 >
-> The iOS port is still experimental. Single-player is the public test focus;
-> LAN remains experimental. Read [IOS_TESTING.md](IOS_TESTING.md) before
-> reporting a bug.
+> The iOS port is still experimental. Public Test 055 covers single-player and
+> local LAN play. A two-iPhone LAN session over trusted private Wi-Fi passed
+> physical acceptance; public testing may broaden device and network coverage.
+> Read [IOS_TESTING.md](IOS_TESTING.md) before reporting a bug.
 
 OpenTS gives equal weight to two goals: maintaining a playable engine and
 providing a capable platform for modding and engine development. Work on one
@@ -115,9 +119,10 @@ internals.
 
 Release 0.1.0 runs the full Tiberian Sun 2.03 Firestorm game. The GDI, Nod,
 and Firestorm campaigns, skirmish, and save/load have received full
-play-through testing. LAN multiplayer has had more limited testing. No
-user-visible regression from the original game is currently known. The
-renderer uses
+play-through testing. LAN has narrower overall coverage; the CnC TS iOS
+Public Test 055 passed a two-iPhone physical acceptance session over trusted
+private Wi-Fi. No user-visible regression from the original game is currently
+known. The renderer uses
 [bgfx](https://github.com/bkaradzic/bgfx) and supports modern resolutions
 through 4K, including ultrawide.
 
