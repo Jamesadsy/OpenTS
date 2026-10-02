@@ -4,6 +4,10 @@ This page is for the **CnC TS for iPhone/iPad — Public Test 055** build.
 
 Install and data setup are covered in [IOS_INSTALL.md](IOS_INSTALL.md).
 
+File iOS-port reports in the fork's
+[CnC TS iOS Public Test issue form](https://github.com/Jamesadsy/OpenTS/issues/new?template=public-test-055-ios.yml).
+Do not attach original or proprietary game data.
+
 ## What this build is for
 
 Public Test 055 carries the accepted single-player line and adds a physically accepted local LAN scenario for two iPhones over trusted private Wi-Fi.
@@ -26,7 +30,19 @@ Expected working areas include:
 - Repair/Sell mode feedback;
 - CnC TS Home Screen identity.
 
-Use a trusted private Wi-Fi network for LAN testing.
+## First two-iPhone LAN test
+
+1. Install the same accepted Public Test 055 build on both iPhones and provide
+   compatible game data on each.
+2. Connect both to the same trusted private Wi-Fi and allow Local Network
+   permission when prompted. For the initial test, avoid VPNs, guest Wi-Fi, or
+   networks with client isolation.
+3. On Device A, choose **Multiplayer Game > Network > Host**.
+4. On Device B, choose **Multiplayer Game > Network**, discover or select
+   Device A, join its lobby, and start.
+
+Two-iPhone LAN is the physically accepted public scenario. PC-to-iOS
+interoperability is not claimed.
 
 ## Current known limitations
 
@@ -127,6 +143,11 @@ Before sharing logs publicly, inspect them and redact anything personal such as 
 
 ## What to include in an issue
 
+Use the fork-local
+[CnC TS iOS Public Test issue form](https://github.com/Jamesadsy/OpenTS/issues/new?template=public-test-055-ios.yml).
+It collects the device, iOS version, build, IPA hash, source commit, data
+source, mode, reproduction steps, and logs for this test build.
+
 Please include:
 
 ~~~text
@@ -135,7 +156,8 @@ iOS/iPadOS version:
 CnC TS build: Public Test 055
 IPA SHA-256:
 Sideload method: Sideloadly / SideStore / other
-Game data source: Steam / EA App / other lawful retail source
+Game data source: CnCNet/community installer / Steam / EA App / other lawful source
+OpenTS source commit: 559d91546c54d1ff4e999b7a47d0a7298f69b0c9
 Mode: Tiberian Sun / Firestorm
 Campaign/mission or screen:
 Controller model (if used):
@@ -163,6 +185,8 @@ Attachments:
 ~~~
 
 Never attach your original game archives or other proprietary owner data.
+Use the fork's issue form for iOS-port reports; upstream OpenTS is not the
+primary support destination for this fork's iOS build.
 
 ## Build identity
 

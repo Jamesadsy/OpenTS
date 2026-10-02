@@ -3,54 +3,70 @@ CnC TS for iPhone/iPad — Public Test 055 Quickstart
 This package contains the public preparation helper and a Windows launcher.
 It contains no Tiberian Sun or Firestorm game data.
 
-1. Get Tiberian Sun and Firestorm game data from a lawful source.
+PLATFORM SCOPE
 
-   Free community source:
+Quickstart data preparation requires a Windows PC. Sideloadly can run on
+Windows or macOS, but a tested Mac-only route for acquiring and preparing
+Tiberian Sun / Firestorm data is not provided. Mac users who already have a
+prepared OpenTS folder can use a Mac to sideload and transfer it.
+
+1. Obtain compatible Tiberian Sun / Firestorm data from a lawful source.
+
+   Free community route:
    CnCNet how-to: https://cncnet.org/tiberian-sun/how-to-play
    C&C Communications Centre installer:
    https://cnc-comm.com/tiberian-sun/downloads/the-game/installer
 
-   These pages describe Tiberian Sun / Firestorm as freeware released by
-   Electronic Arts in 2010. In the community installer, include the campaign,
-   music and movie components for the complete iOS experience.
-
-   Lawful retail alternatives:
-   Steam: https://store.steampowered.com/bundle/39394/
-   EA App: https://www.ea.com/games/command-and-conquer/command-and-conquer-the-ultimate-collection
-
-   The C&C community installer's output was not directly tested for this
-   release. When prompted, select the installed Tiberian Sun / Firestorm folder
-   that contains the game files. The helper copies files recursively from that
-   folder and its subfolders.
+   Include the campaign, music and movie components for the complete iOS
+   experience. The installer output has not been directly qualified against
+   the 055 helper, so do not treat it as proven plug-and-play. Steam and the
+   EA App Ultimate Collection are lawful retail alternatives. An already
+   working compatible Tiberian Sun / Firestorm installation may also be used.
 
 2. Download OpenTS-unsigned.ipa and CnC-TS-iOS-Quickstart.zip from the Public
    Test 055 release:
    https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055
 
-3. Extract this ZIP. Double-click Prepare-CnC-TS-iOS.cmd. Paste or drag the
-   installed game folder path and downloaded IPA path into the prompts. Press
-   Enter at the output prompt to use your Documents folder.
+3. On Windows, extract this ZIP and double-click
+   Prepare-CnC-TS-iOS.cmd. Paste or drag the installed game folder and IPA
+   paths into the prompts. The launcher uses the Windows Documents known
+   folder, including a redirected or OneDrive-backed Documents folder. Press
+   Enter to use:
+   Windows Documents\CnC-TS-iOS-Ready\OpenTS\Data
+   Windows Documents\CnC-TS-iOS-Ready\OpenTS\User
 
-   The default output is:
-   Documents\CnC-TS-iOS-Ready\OpenTS\Data
-   Documents\CnC-TS-iOS-Ready\OpenTS\User
+   The helper checks the exact Public Test 055 IPA. A non-empty output is
+   protected from overwrite.
 
-   The helper verifies the exact Public Test 055 IPA before it writes output.
-   It does not change the IPA or your game installation. A non-empty output
-   folder is protected from overwrite.
-
-4. Sign and sideload the unchanged IPA with Sideloadly or SideStore. Use their
-   current setup instructions:
-   Sideloadly: https://sideloadly.io/
+4. Sign and sideload the unchanged IPA with Sideloadly on Windows or macOS, or
+   use SideStore. On iOS/iPadOS 16 or later, Developer Mode may be required
+   when prompted. Free Apple developer signing commonly needs refresh or
+   re-signing every seven days. Follow the current provider instructions:
+   Sideloadly: https://sideloadly.io/faq
    SideStore: https://docs.sidestore.io/docs/installation/install
 
-5. Launch CnC TS once, then close it. In Files, copy the generated OpenTS
-   folder into the CnC TS app's Documents area. The final paths are:
-   CnC TS\OpenTS\Data
-   CnC TS\OpenTS\User
+5. Launch CnC TS once, then close it. This initializes and exposes the app's
+   file area; do not expect gameplay until OpenTS/Data is present.
 
-6. Launch CnC TS and play. See IOS_INSTALL.md in the repository for detailed
-   setup, transfer, save and troubleshooting instructions.
+6. Transfer the complete OpenTS folder. With iCloud for Windows set up, copy
+   it from Windows Documents\CnC-TS-iOS-Ready into iCloud Drive and wait for
+   sync. On the iPhone/iPad, open Files > Browse > iCloud Drive, long-press
+   OpenTS, choose Move, then select On My iPhone/iPad > CnC TS.
 
-Keep original game data private. Do not upload it to GitHub or send it in bug
-reports. The release distributes the engine and preparation helper only.
+   Verify the final locations:
+   On My iPhone/iPad > CnC TS > OpenTS > Data
+   On My iPhone/iPad > CnC TS > OpenTS > User
+
+   Apple Devices File Sharing and Sideloadly App File Sharing are alternatives;
+   nested-folder behavior through those routes has not been physically verified
+   here. Apple guides:
+   Windows iCloud Drive: https://support.apple.com/en-gb/guide/icloud-windows/icwddbc813bd/icloud
+   iPhone Files: https://support.apple.com/guide/iphone/set-up-icloud-drive-iphbbcf8827d/27/ios/27
+
+7. On an existing install, preserve OpenTS/User and its saves. Update or replace
+   OpenTS/Data separately; do not leave a duplicate OpenTS 2 folder. Launch
+   CnC TS again after the data is in place.
+
+For iOS bug reports, use the fork's CnC TS Public Test issue form:
+https://github.com/Jamesadsy/OpenTS/issues/new?template=public-test-055-ios.yml
+Do not attach original or proprietary game data.

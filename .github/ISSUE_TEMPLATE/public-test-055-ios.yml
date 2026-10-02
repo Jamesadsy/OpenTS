@@ -1,0 +1,127 @@
+name: CnC TS iOS Public Test 055
+description: Report an iOS/iPadOS issue with the fork's Public Test 055 build.
+title: "[iOS 055] "
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Use this form for the CnC TS iOS fork. Do not attach original Tiberian
+        Sun or Firestorm archives, movies, audio, maps, or other proprietary
+        game data.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Include iPhone/iPad model.
+    validations:
+      required: true
+  - type: input
+    id: ios-version
+    attributes:
+      label: iOS/iPadOS version
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: CnC TS build
+      placeholder: Public Test 055
+    validations:
+      required: true
+  - type: input
+    id: ipa-sha256
+    attributes:
+      label: IPA SHA-256
+      placeholder: 536A41CC0B8797D7C00CE61E097B7398FC24CE9AC888D77F5C3FFFF6308DD921
+    validations:
+      required: true
+  - type: input
+    id: source-commit
+    attributes:
+      label: OpenTS source commit
+      placeholder: 559d91546c54d1ff4e999b7a47d0a7298f69b0c9
+    validations:
+      required: true
+  - type: input
+    id: data-source
+    attributes:
+      label: Game-data source
+      description: Name the lawful installation source; do not attach its files.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Tiberian Sun
+        - Firestorm
+        - LAN
+        - Front end / menus
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: mission-screen
+    attributes:
+      label: Campaign, mission, or screen
+  - type: input
+    id: controller
+    attributes:
+      label: Controller model, if used
+  - type: input
+    id: sideload-method
+    attributes:
+      label: Sideload method
+      placeholder: Sideloadly / SideStore / other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: dropdown
+    id: cold-launch
+    attributes:
+      label: Does it reproduce after a cold launch?
+      options:
+        - Yes
+        - No
+        - Not checked
+    validations:
+      required: true
+  - type: textarea
+    id: input-audio-simulation
+    attributes:
+      label: Do touch, controller input, audio, or game simulation still work?
+      description: Describe anything that continues or stops after the issue occurs.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or diagnostics
+      description: Redact personal paths, usernames, hostnames, and network addresses.
+  - type: checkboxes
+    id: proprietary-data
+    attributes:
+      label: Data attachment check
+      options:
+        - label: I have not attached original or proprietary Tiberian Sun / Firestorm game data.
+          required: true

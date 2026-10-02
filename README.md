@@ -27,6 +27,12 @@ rebuilds the engine as a standalone program.
 > · [short install steps](IOS_INSTALL.md#quick-start)
 > · [testing and known issues](IOS_TESTING.md)
 >
+> **Platform scope:** The easy Quickstart data-preparation path requires a
+> Windows PC. Sideloadly can run on Windows or macOS. A tested Mac-only route
+> for acquiring and preparing Tiberian Sun / Firestorm data is not provided.
+> Mac users with an already-prepared OpenTS folder can use a Mac to sideload
+> and transfer it; see [IOS_INSTALL.md](IOS_INSTALL.md).
+>
 > Get free Tiberian Sun / Firestorm data from the
 > [CnCNet how-to](https://cncnet.org/tiberian-sun/how-to-play) and its
 > [C&C Communications Centre installer](https://cnc-comm.com/tiberian-sun/downloads/the-game/installer).
@@ -39,6 +45,8 @@ rebuilds the engine as a standalone program.
 > The iOS package contains the engine only. **No Tiberian Sun or Firestorm game
 > data is included.** You must provide your own lawfully obtained compatible
 > game data from your own installation.
+> The community installer is an acquisition source; its output has not been
+> directly qualified against the 055 helper.
 >
 > Public Test 055 is an **unsigned IPA** for iPhone and iPad running iOS/iPadOS
 > 16.0 or later. The accepted test binary is built from commit
@@ -52,6 +60,8 @@ rebuilds the engine as a standalone program.
 > The iOS port is still experimental. Public Test 055 covers single-player and
 > local LAN play. A two-iPhone LAN session over trusted private Wi-Fi passed
 > physical acceptance; public testing may broaden device and network coverage.
+> Accepted iOS proof from that source: [G3 iPhoneOS managed run 36314481160](https://github.com/Jamesadsy/OpenTS/actions/runs/36314481160) (PASS) and [G2 donor run 36314486608](https://github.com/Jamesadsy/OpenTS/actions/runs/36314486608) (PASS).
+> File iOS-port reports in the [fork's CnC TS iOS Public Test issue form](https://github.com/Jamesadsy/OpenTS/issues/new?template=public-test-055-ios.yml); do not attach original game data.
 > Read [IOS_TESTING.md](IOS_TESTING.md) before reporting a bug.
 
 OpenTS gives equal weight to two goals: maintaining a playable engine and

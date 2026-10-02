@@ -8,23 +8,50 @@ The app contains the OpenTS engine only. **It does not include Tiberian Sun or F
 
 ## Quick start
 
-1. Get data from the [CnCNet Tiberian Sun how-to](https://cncnet.org/tiberian-sun/how-to-play), which links to the
-   [C&C Communications Centre installer](https://cnc-comm.com/tiberian-sun/downloads/the-game/installer).
-   Both pages describe Tiberian Sun / Firestorm as freeware released by
-   Electronic Arts in 2010. If you use the community installer, include the
-   campaign, music and movie components for the complete iOS experience.
-   Lawful retail alternatives are the [Steam](https://store.steampowered.com/bundle/39394/)
-   or [EA App](https://www.ea.com/games/command-and-conquer/command-and-conquer-the-ultimate-collection)
-   Command & Conquer The Ultimate Collection.
+**Platform scope:** The easy Quickstart data-preparation path requires a
+Windows PC. Sideloadly can run on Windows or macOS, but there is no tested
+Mac-only workflow for acquiring and preparing Tiberian Sun / Firestorm data.
+Mac users who already have a prepared `OpenTS` folder can use a Mac to sideload
+and transfer it.
+
+1. Obtain compatible Tiberian Sun / Firestorm data from a lawful source. The
+   [CnCNet how-to](https://cncnet.org/tiberian-sun/how-to-play) links to the
+   [C&C Communications Centre installer](https://cnc-comm.com/tiberian-sun/downloads/the-game/installer),
+   a community/freeware acquisition route. Its installer output has not been
+   directly qualified against the 055 helper; do not treat it as proven
+   plug-and-play. Include its campaign, music, and movie components for the
+   complete iOS experience. The [Steam](https://store.steampowered.com/bundle/39394/)
+   and [EA App](https://www.ea.com/games/command-and-conquer/command-and-conquer-the-ultimate-collection)
+   Ultimate Collection are lawful retail alternatives.
 2. From the [Public Test 055 release](https://github.com/Jamesadsy/OpenTS/releases/tag/cnc-ts-ios-preview-055), download `OpenTS-unsigned.ipa` and `CnC-TS-iOS-Quickstart.zip`.
-3. Extract the Quickstart ZIP and run `Prepare-CnC-TS-iOS.cmd`. Paste or drag
-   the installed Tiberian Sun / Firestorm folder and the downloaded IPA into
-   its prompts. Press Enter to create
-   `Documents\CnC-TS-iOS-Ready\OpenTS`.
+3. On Windows, extract the Quickstart ZIP and run `Prepare-CnC-TS-iOS.cmd`.
+   Paste or drag the installed game folder and IPA into the prompts. The
+   launcher uses the Windows Documents known folder, including a redirected
+   or OneDrive-backed Documents folder. Press Enter to use
+   `Windows Documents\CnC-TS-iOS-Ready\OpenTS`.
 4. Sign and sideload the unchanged IPA with [Sideloadly](https://sideloadly.io/)
-   or [SideStore](https://docs.sidestore.io/docs/installation/install). Follow
-   the sideloading tool's current setup instructions.
-5. Launch CnC TS once and close it. In Files, copy the generated `OpenTS` folder into the CnC TS app's Documents area, then launch the game.
+   on Windows or macOS, or use [SideStore](https://docs.sidestore.io/docs/installation/install).
+   On iOS/iPadOS 16 or later, Developer Mode may be required when prompted.
+   Free Apple developer signing commonly needs refresh or re-signing every
+   seven days; follow the sideloading tool's current instructions:
+   [Sideloadly FAQ](https://sideloadly.io/faq) or [SideStore guide](https://docs.sidestore.io/docs/installation/install).
+5. Launch CnC TS once, then close it. This initializes and exposes the app's
+   file area; do not expect gameplay until `OpenTS/Data` is present.
+6. For a full-folder transfer, use iCloud Drive. On Windows with iCloud for
+   Windows set up, copy the complete `OpenTS` folder from
+   `Windows Documents\CnC-TS-iOS-Ready` into iCloud Drive and wait for sync.
+   On the iPhone or iPad, open Files > Browse > iCloud Drive, long-press
+   `OpenTS`, choose Move, then select On My iPhone/iPad > CnC TS. Confirm the
+   final paths are `On My iPhone/iPad > CnC TS > OpenTS > Data` and
+   `On My iPhone/iPad > CnC TS > OpenTS > User`. See Apple's
+   [iCloud for Windows file guide](https://support.apple.com/en-gb/guide/icloud-windows/icwddbc813bd/icloud)
+   and [iPhone Files guide](https://support.apple.com/guide/iphone/set-up-icloud-drive-iphbbcf8827d/27/ios/27).
+   Apple Devices File Sharing and Sideloadly App File Sharing are alternatives;
+   nested-folder behavior through those routes has not been physically verified
+   here.
+7. On an existing install, preserve `OpenTS/User` and its saves. Update or
+   replace `OpenTS/Data` separately; do not leave a duplicate `OpenTS 2` folder.
+   Launch CnC TS again after the data is in place.
 
 The C&C community installer's output was not directly tested for this release.
 The launcher accepts the installed Tiberian Sun / Firestorm folder and the helper
@@ -115,6 +142,10 @@ SELF-TEST PASS
 
 ### Manual preparation
 
+These folder-layout instructions do not establish a tested Mac-only
+game-data acquisition or preparation workflow. The supplied preparation helper
+requires Windows.
+
 If you do not use the script, create an **OpenTS** folder with **Data** and **User** beneath it.
 
 Copy the runtime files from your own Tiberian Sun / Firestorm installation into **OpenTS/Data**. Do not copy the Windows executable, DLLs, editor, manuals, existing saves or SUN.INI.
@@ -174,7 +205,10 @@ Apple's development signing rules can require periodic app refreshes, especially
 
 ## 4. Launch CnC TS once
 
-After installation, launch **CnC TS** once and then exit.
+After installation, launch **CnC TS** once and then exit. This first launch
+only initializes and exposes the app's file area. Do not expect gameplay until
+`OpenTS/Data` is present; no particular error or blank-screen behavior is
+promised.
 
 The app creates its writable Files-visible structure beneath its Documents container.
 
@@ -182,16 +216,27 @@ Because the app enables iOS File Sharing, you should be able to reach it through
 
 ## 5. Copy the prepared game data
 
-Using the Files app, Finder/Apple Devices file sharing, iCloud Drive, or another normal local file-transfer method, place the prepared **OpenTS** folder into the CnC TS app's Documents area.
+For a full-folder transfer from Windows, copy the complete **OpenTS** folder
+from Windows Documents into iCloud Drive with iCloud for Windows. Wait for
+sync. In Files on the iPhone or iPad, long-press **OpenTS**, choose **Move**,
+then choose **On My iPhone/iPad > CnC TS**. The [Windows iCloud guide](https://support.apple.com/en-gb/guide/icloud-windows/icwddbc813bd/icloud)
+and [iPhone Files guide](https://support.apple.com/guide/iphone/set-up-icloud-drive-iphbbcf8827d/27/ios/27)
+explain access on each device.
 
 The final paths must be:
 
 ~~~text
-CnC TS / OpenTS / Data
-CnC TS / OpenTS / User
+On My iPhone/iPad / CnC TS / OpenTS / Data
+On My iPhone/iPad / CnC TS / OpenTS / User
 ~~~
 
-If **OpenTS/User** already contains saves or settings you want to keep, do not overwrite that folder. Copy/update **Data** separately.
+Apple Devices File Sharing and Sideloadly App File Sharing are alternatives;
+nested-folder behavior through those routes has not been physically verified
+here.
+
+If **OpenTS/User** already contains saves or settings you want to keep, leave
+that folder in place and update **Data** separately. Do not accept a duplicate
+**OpenTS 2** folder as the final result.
 
 The complete runtime data is large because the movie archives are included. Allow enough free storage and enough time for the transfer to finish.
 
@@ -215,6 +260,20 @@ See [IOS_TESTING.md](IOS_TESTING.md) for controls, known issues and what to incl
 ## Two-iPhone LAN testing
 
 Public Test 055 passed physical acceptance for LAN play between two iPhones over trusted private Wi-Fi. Public testing may broaden device and network coverage beyond that tested setup.
+
+For a first test:
+
+1. Install the same accepted Public Test 055 build on both iPhones and provide
+   compatible game data on each.
+2. Connect both to the same trusted private Wi-Fi and allow Local Network
+   permission when prompted. For the initial test, avoid VPNs, guest Wi-Fi, or
+   networks with client isolation.
+3. On Device A, choose **Multiplayer Game > Network > Host**.
+4. On Device B, choose **Multiplayer Game > Network**, discover or select
+   Device A, join its lobby, and start.
+
+Two-iPhone LAN is the physically accepted public scenario. PC-to-iOS
+interoperability is not claimed.
 
 ## Saves and reinstalls
 

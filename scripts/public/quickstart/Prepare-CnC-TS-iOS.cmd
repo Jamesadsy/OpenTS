@@ -24,7 +24,13 @@ echo CnC TS Public Test 055 data preparation
 echo Paste or drag the installed Tiberian Sun folder and downloaded IPA below.
 echo.
 
+set "SOURCE_DIR="
 set /p "SOURCE_DIR=Tiberian Sun / Firestorm installation folder: "
+if not defined SOURCE_DIR (
+    echo No game installation folder was provided.
+    pause
+    exit /b 1
+)
 set "SOURCE_DIR=%SOURCE_DIR:"=%"
 if not defined SOURCE_DIR (
     echo No game installation folder was provided.
@@ -32,7 +38,13 @@ if not defined SOURCE_DIR (
     exit /b 1
 )
 
+set "IPA_PATH="
 set /p "IPA_PATH=OpenTS-unsigned.ipa file: "
+if not defined IPA_PATH (
+    echo No IPA file was provided.
+    pause
+    exit /b 1
+)
 set "IPA_PATH=%IPA_PATH:"=%"
 if not defined IPA_PATH (
     echo No IPA file was provided.
@@ -40,10 +52,18 @@ if not defined IPA_PATH (
     exit /b 1
 )
 
-set "OUTPUT_PARENT=%USERPROFILE%\Documents"
-set /p "OUTPUT_PARENT=Output parent folder [Enter for %OUTPUT_PARENT%]: "
+set "DOCUMENTS_PATH="
+for /f "delims=" %%I in ('"%POWERSHELL%" -NoLogo -NoProfile -Command [Environment]::GetFolderPath^(5^)') do set "DOCUMENTS_PATH=%%I"
+if not defined DOCUMENTS_PATH (
+    echo Could not resolve the Windows Documents folder.
+    pause
+    exit /b 1
+)
+
+set "OUTPUT_PARENT=%DOCUMENTS_PATH%"
+set /p "OUTPUT_PARENT=Output parent folder [Enter for %DOCUMENTS_PATH%]: "
 set "OUTPUT_PARENT=%OUTPUT_PARENT:"=%"
-if not defined OUTPUT_PARENT set "OUTPUT_PARENT=%USERPROFILE%\Documents"
+if not defined OUTPUT_PARENT set "OUTPUT_PARENT=%DOCUMENTS_PATH%"
 set "OUTPUT_DIR=%OUTPUT_PARENT%\CnC-TS-iOS-Ready"
 
 echo.
