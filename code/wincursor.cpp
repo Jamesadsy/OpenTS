@@ -312,10 +312,17 @@ void Win_Cursor_Set(ShapeSet const * shape, int frame, int hotx, int hoty, bool 
 	_CurrentFrame = frame;
 	_CurrentHotX = hotx;
 	_CurrentHotY = hoty;
+
+#if defined(OPENTS_IOS)
+	int const display_frame = frame;
+	int const display_hot_x = hotx;
+	int const display_hot_y = hoty;
+#else
 	bool const static_pointer = MouseCursor != NULL && MouseCursor->Is_Captured();
 	int const display_frame = static_pointer ? STATIC_POINTER_FRAME : frame;
 	int const display_hot_x = static_pointer ? STATIC_POINTER_HOT_X : hotx;
 	int const display_hot_y = static_pointer ? STATIC_POINTER_HOT_Y : hoty;
+#endif
 
 	HCURSOR cursor = NULL;
 	bool selected = false;
@@ -488,17 +495,19 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 		return(false);
 	}
 	bool const front_end = !MouseCursor->Is_Captured();
+	CursorPresentationArtwork const artwork = Cursor_Presentation_Artwork(
+		front_end, _CurrentFrame, _CurrentHotX, _CurrentHotY);
 	if (_CurrentShape == NULL) {
 		return(false);
 	}
-	if (_StaticPointerShape != _CurrentShape || _StaticPointerScale != _CacheScale
-		|| _StaticPointerImage.Pixels.empty()) {
+	if (front_end && (_StaticPointerShape != _CurrentShape || _StaticPointerScale != _CacheScale
+		|| _StaticPointerImage.Pixels.empty())) {
 		Build_Cursor_Image(_CurrentShape, STATIC_POINTER_FRAME, _CacheScale, _StaticPointerImage);
 		_StaticPointerShape = _CurrentShape;
 		_StaticPointerScale = _CacheScale;
 	}
-	CursorImage const * image = &_StaticPointerImage;
-	if (image->Pixels.empty()) {
+	CursorImage const * image = front_end ? &_StaticPointerImage : _CurrentImage;
+	if (image == NULL || image->Pixels.empty()) {
 		return(false);
 	}
 
@@ -514,7 +523,7 @@ bool Win_Cursor_Get_Overlay(WinCursorOverlay * overlay)
 	overlay->Pixels = image->Pixels.data();
 	overlay->Presentation = Make_Cursor_Presentation_Snapshot(
 		front_end ? (int)MOUSE_NORMAL : (int)_SemanticMouseType, _CurrentShape,
-		STATIC_POINTER_FRAME, STATIC_POINTER_HOT_X, STATIC_POINTER_HOT_Y, _CacheScale,
+		artwork.Frame, artwork.HotX, artwork.HotY, _CacheScale,
 		image->Width, image->Height, image->ContentHash,
 		_ContentGeneration.Current(), x, y);
 	Trace_Cursor_Presentation(overlay->Presentation);

@@ -42,7 +42,8 @@ jobs:
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g6-052-save-description-order" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-g7-053-ios-name-silent-audio" \
             -o "${GITHUB_REF_NAME}" = "secondsun/ss-lan-054-l0-apple-unicast" \
-            -o "${GITHUB_REF_NAME}" = "secondsun/ss-lan-055-l1-two-instance"
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-lan-055-l1-two-instance" \
+            -o "${GITHUB_REF_NAME}" = "secondsun/ss-g8-056-contextual-cursor-presentation"
           git rev-parse HEAD | tee proof/head.log
           git rev-parse 'HEAD^{tree}' | tee proof/tree.log
           git submodule status --recursive | tee proof/submodules.log

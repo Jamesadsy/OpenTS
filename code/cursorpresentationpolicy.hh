@@ -18,6 +18,25 @@ inline bool Cursor_Overlay_Should_Draw(bool cursor_visible, bool pointer_drawn)
 }
 
 
+struct CursorPresentationArtwork
+{
+	int Frame = 0;
+	int HotX = 0;
+	int HotY = 0;
+};
+
+
+inline CursorPresentationArtwork Cursor_Presentation_Artwork(bool front_end,
+	int requested_frame, int requested_hot_x, int requested_hot_y)
+{
+	if (front_end) {
+		return(CursorPresentationArtwork{});
+	}
+
+	return(CursorPresentationArtwork{ requested_frame, requested_hot_x, requested_hot_y });
+}
+
+
 struct CursorContentSelection
 {
 	int Width = 0;

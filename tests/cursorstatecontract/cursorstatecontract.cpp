@@ -328,6 +328,15 @@ void Test_Native_Cursor_And_Action_Continuity(void)
 	std::string const semantic_set_body = semantic_set_start == std::string::npos || semantic_set_end == std::string::npos
 		? std::string()
 		: cursor_source.substr(semantic_set_start, semantic_set_end - semantic_set_start + 2);
+	Check(!overlay_body.empty()
+		&& overlay_body.find("Cursor_Presentation_Artwork(") != std::string::npos
+		&& overlay_body.find("_CurrentFrame, _CurrentHotX, _CurrentHotY") != std::string::npos
+		&& overlay_body.find("front_end ? &_StaticPointerImage : _CurrentImage") != std::string::npos
+		&& overlay_body.find("artwork.Frame, artwork.HotX, artwork.HotY") != std::string::npos
+		&& cursor_set_body.find("#if defined(OPENTS_IOS)") != std::string::npos
+		&& cursor_set_body.find("int const display_frame = frame;") != std::string::npos
+		&& cursor_set_body.find("#else") != std::string::npos,
+		"iOS gameplay consumes the requested MOUSE.SHP frame and hotspot while frontend presentation keeps static artwork");
 	Check(cursor_source.find("MFCD::Retrieve(\"MOUSE.SHP\")") == std::string::npos
 		&& mouse_source.find("Get_Current_Mouse_Shape") == std::string::npos
 		&& cursor_source.find("Map.Get_Current_Mouse_Shape()") == std::string::npos
@@ -335,17 +344,9 @@ void Test_Native_Cursor_And_Action_Continuity(void)
 		&& cursor_source.find("static MouseType _SemanticMouseType = MOUSE_NORMAL;") != std::string::npos
 		&& !overlay_body.empty()
 		&& overlay_body.find("Cursor_Overlay_Should_Draw(_CursorVisible, Win_Pointer_Is_Drawn())") != std::string::npos
-		&& overlay_body.find("Build_Cursor_Image(_CurrentShape, STATIC_POINTER_FRAME, _CacheScale, _StaticPointerImage)") != std::string::npos
-		&& overlay_body.find("STATIC_POINTER_FRAME, STATIC_POINTER_HOT_X, STATIC_POINTER_HOT_Y") != std::string::npos
 		&& overlay_body.find("front_end ? (int)MOUSE_NORMAL : (int)_SemanticMouseType") != std::string::npos
-		&& overlay_body.find("front_end ? 0 : _CurrentFrame") == std::string::npos
-		&& overlay_body.find("front_end ? 0 : _CurrentHotX") == std::string::npos
-		&& overlay_body.find("front_end ? 0 : _CurrentHotY") == std::string::npos
 		&& !cursor_set_body.empty()
 		&& cursor_set_body.find("MouseCursor != NULL && MouseCursor->Is_Captured()") != std::string::npos
-		&& cursor_set_body.find("static_pointer ? STATIC_POINTER_FRAME : frame") != std::string::npos
-		&& cursor_set_body.find("static_pointer ? STATIC_POINTER_HOT_X : hotx") != std::string::npos
-		&& cursor_set_body.find("static_pointer ? STATIC_POINTER_HOT_Y : hoty") != std::string::npos
 		&& overlay_body.find("Map.") == std::string::npos
 		&& !semantic_set_body.empty()
 		&& semantic_set_body.find("_SemanticMouseType = semantic_mouse_type;") != std::string::npos
@@ -483,6 +484,15 @@ void Test_Cursor_Content_Presentation(void)
 	Check(select.SemanticMouseType == MOUSE_CAN_SELECT && deploy.SemanticMouseType == MOUSE_DEPLOY
 		&& select.Shape == deploy.Shape && select.Frame != deploy.Frame && select.ContentHash != deploy.ContentHash,
 		"cursor presentation snapshots retain native semantic type, frame and pixel identity");
+
+	CursorPresentationArtwork const gameplay_artwork = Cursor_Presentation_Artwork(false, 17, 4, 6);
+	CursorPresentationArtwork const frontend_first = Cursor_Presentation_Artwork(true, 17, 4, 6);
+	CursorPresentationArtwork const frontend_second = Cursor_Presentation_Artwork(true, 22, 9, 3);
+	Check(gameplay_artwork.Frame == 17 && gameplay_artwork.HotX == 4 && gameplay_artwork.HotY == 6
+		&& frontend_first.Frame == 0 && frontend_first.HotX == 0 && frontend_first.HotY == 0
+		&& frontend_second.Frame == frontend_first.Frame && frontend_second.HotX == frontend_first.HotX
+		&& frontend_second.HotY == frontend_first.HotY,
+		"gameplay retains requested artwork while frontend fallback is deterministic frame zero");
 }
 
 
@@ -541,8 +551,11 @@ void Test_Cursor_Sequences_Reach_Presentation(void)
 		int const hot_x = 1 + ((int)requested % 5);
 		int const hot_y = 1 + ((int)requested % 4);
 		Point2D const requested_hotspot(hot_x, hot_y);
+		CursorPresentationArtwork const artwork = Cursor_Presentation_Artwork(false,
+			selected_frame, hot_x, hot_y);
+		uint64_t const content_hash = 0xA110U + (uint64_t)selected_frame * 0x101U;
 		char const * const shape_data = &loaded_shapes;
-		bool const changed = Mouse_Override_Shape_If_Changed(startup, shape_data, requested,
+		Mouse_Override_Shape_If_Changed(startup, shape_data, requested,
 			current, false, current_small, requested_hotspot,
 			[]() {}, [&]() { return(selected_frame); },
 			[&](Point2D const & hotspot, char const * shapes, int selected_frame_for_cursor) {
@@ -551,21 +564,22 @@ void Test_Cursor_Sequences_Reach_Presentation(void)
 				Check(hotspot.X == requested_hotspot.X && hotspot.Y == requested_hotspot.Y,
 					"native action cursor selection retains its own hotspot for gameplay semantics");
 			});
-		bool const content_changed = generation.Select(CursorContentSelection{ 64, 64, 2, static_arrow_hash });
+		bool const content_changed = generation.Select(CursorContentSelection{ 64, 64, 2, content_hash });
 		if (content_changed && Cursor_Texture_Needs_Upload(texture, 64, 64, generation.Current())) {
 			texture = CursorTextureUploadState{ 64, 64, generation.Current(), true };
 			uploads++;
 		}
 		CursorPresentationSnapshot const result = Make_Cursor_Presentation_Snapshot(current, shape_data,
-			0, 0, 0, 2, 64, 64, static_arrow_hash,
+			artwork.Frame, artwork.HotX, artwork.HotY, 2, 64, 64, content_hash,
 			generation.Current(), pointer_coordinate.X, pointer_coordinate.Y);
 		presented.push_back(result);
-		Check(changed && current == requested && !presented.empty()
-			&& result.SemanticMouseType == requested && result.Frame == 0
-			&& result.NativeHotX == 0 && result.NativeHotY == 0
-			&& result.DestinationX == pointer_coordinate.X
-			&& result.DestinationY == pointer_coordinate.Y,
-			"semantic action updates leave the rendered arrow and fixed hotspot at the authoritative pointer coordinate");
+		Check(current == requested && !presented.empty()
+			&& result.SemanticMouseType == requested && result.Frame == selected_frame
+			&& result.NativeHotX == hot_x && result.NativeHotY == hot_y
+			&& result.ContentHash == content_hash
+			&& result.DestinationX + result.NativeHotX * result.DisplayScale == pointer_coordinate.X
+			&& result.DestinationY + result.NativeHotY * result.DisplayScale == pointer_coordinate.Y,
+			"contextual artwork and native hotspots preserve the fixed logical and rendered pointer anchor");
 		return(result);
 	};
 
@@ -591,60 +605,85 @@ void Test_Cursor_Sequences_Reach_Presentation(void)
 		semantic_resolution_matches = semantic_resolution_matches && resolved_states[index] == expected_states[index];
 		apply(resolved_states[index], pointer);
 	}
-	Check(semantic_resolution_matches && presented.size() == 11 && uploads == 1
+	Check(semantic_resolution_matches && presented.size() == 11 && uploads == 11
 		&& std::all_of(presented.begin(), presented.end(), [&](CursorPresentationSnapshot const & snapshot) {
 			return(snapshot.DrawableAnchorX == pointer.X && snapshot.DrawableAnchorY == pointer.Y
-				&& snapshot.DestinationX == pointer.X && snapshot.DestinationY == pointer.Y
-				&& snapshot.Frame == 0 && snapshot.NativeHotX == 0 && snapshot.NativeHotY == 0
-				&& snapshot.ContentHash == static_arrow_hash);
+				&& snapshot.DestinationX + snapshot.NativeHotX * snapshot.DisplayScale == pointer.X
+				&& snapshot.DestinationY + snapshot.NativeHotY * snapshot.DisplayScale == pointer.Y);
 		})
 		&& presented[0].SemanticMouseType != presented[5].SemanticMouseType
-		&& presented[0].ContentHash == presented[5].ContentHash,
-		"Idle, select, move, attack, enter, deploy, Repair and Sell keep one image and hotspot at P");
+		&& presented[0].Frame != presented[5].Frame
+		&& presented[0].ContentHash != presented[5].ContentHash,
+		"Idle, select, move, attack, enter, deploy, Repair and Sell show distinct contextual pixels at fixed P");
+
+	uint64_t const stable_generation = generation.Current();
+	int const stable_uploads = uploads;
+	CursorPresentationSnapshot const unchanged = apply(expected_states[10], pointer);
+	Check(generation.Current() == stable_generation && uploads == stable_uploads
+		&& unchanged.ContentHash == presented[10].ContentHash
+		&& unchanged.Frame == presented[10].Frame,
+		"reselecting identical contextual pixels keeps generation stable and does not re-upload");
+
+	CursorPresentationArtwork const frontend_artwork = Cursor_Presentation_Artwork(
+		true, presented[10].Frame, presented[10].NativeHotX, presented[10].NativeHotY);
+	CursorPresentationSnapshot const frontend = Make_Cursor_Presentation_Snapshot(
+		MOUSE_NORMAL, &loaded_shapes, frontend_artwork.Frame, frontend_artwork.HotX, frontend_artwork.HotY,
+		2, 64, 64, static_arrow_hash,
+		generation.Current(), pointer.X, pointer.Y);
+	Check(frontend.Frame == 0 && frontend.NativeHotX == 0 && frontend.NativeHotY == 0
+		&& frontend.DestinationX == pointer.X && frontend.DestinationY == pointer.Y,
+		"frontend fallback deterministically uses static frame zero and keeps the pointer anchor");
 
 	CursorPresentationSnapshot const circle_cancel = Make_Cursor_Presentation_Snapshot(
-		MOUSE_CAN_MOVE, &loaded_shapes, 0, 0, 0, 2, 64, 64, static_arrow_hash,
-		generation.Current(), pointer.X, pointer.Y);
+		MOUSE_CAN_MOVE, &loaded_shapes, presented[2].Frame, presented[2].NativeHotX, presented[2].NativeHotY,
+		2, 64, 64, presented[2].ContentHash, presented[2].ContentGeneration, pointer.X, pointer.Y);
 	Check(circle_cancel.SemanticMouseType == MOUSE_CAN_MOVE
-		&& circle_cancel.DestinationX == pointer.X && circle_cancel.DestinationY == pointer.Y,
-		"Circle cancellation keeps native hover resolution while the visible pointer remains fixed");
+		&& circle_cancel.DestinationX + circle_cancel.NativeHotX * circle_cancel.DisplayScale == pointer.X
+		&& circle_cancel.DestinationY + circle_cancel.NativeHotY * circle_cancel.DisplayScale == pointer.Y,
+		"Circle cancellation keeps native hover resolution and contextual artwork at the fixed pointer");
 
 	// Square continues to cycle native Repair/Sell semantics without changing the rendered arrow.
 	RepairSellModeCursor square = RepairSellModeCursor::Normal;
 	square = Next_RepairSell_Mode_Cursor(square);
 	MouseType const repair_semantic = RepairSell_Mode_Cursor_Seed(square);
 	CursorPresentationSnapshot const repair = Make_Cursor_Presentation_Snapshot(repair_semantic,
-		&loaded_shapes, 0, 0, 0, 2, 64, 64, static_arrow_hash,
+		&loaded_shapes, presented[7].Frame, presented[7].NativeHotX, presented[7].NativeHotY,
+		2, 64, 64, presented[7].ContentHash,
 		generation.Current(), pointer.X, pointer.Y);
 	square = Next_RepairSell_Mode_Cursor(square);
 	MouseType const sell_semantic = RepairSell_Mode_Cursor_Seed(square);
 	CursorPresentationSnapshot const sell = Make_Cursor_Presentation_Snapshot(sell_semantic,
-		&loaded_shapes, 0, 0, 0, 2, 64, 64, static_arrow_hash,
+		&loaded_shapes, presented[9].Frame, presented[9].NativeHotX, presented[9].NativeHotY,
+		2, 64, 64, presented[9].ContentHash,
 		generation.Current(), pointer.X, pointer.Y);
 	square = Next_RepairSell_Mode_Cursor(square);
 	MouseType const square_cancel_semantic = Action_Cursor_Shape(ACTION_ATTACK, false, false, true);
 	CursorPresentationSnapshot const square_cancel = Make_Cursor_Presentation_Snapshot(square_cancel_semantic,
-		&loaded_shapes, 0, 0, 0, 2, 64, 64, static_arrow_hash,
+		&loaded_shapes, presented[3].Frame, presented[3].NativeHotX, presented[3].NativeHotY,
+		2, 64, 64, presented[3].ContentHash,
 		generation.Current(), pointer.X, pointer.Y);
 	Check(square == RepairSellModeCursor::Normal && repair.SemanticMouseType == MOUSE_REPAIR
 		&& sell.SemanticMouseType == MOUSE_SELL_BACK
 		&& square_cancel.SemanticMouseType == MOUSE_STAY_ATTACK
-		&& square_cancel.DestinationX == pointer.X && square_cancel.DestinationY == pointer.Y,
+		&& square_cancel.DestinationX + square_cancel.NativeHotX * square_cancel.DisplayScale == pointer.X
+		&& square_cancel.DestinationY + square_cancel.NativeHotY * square_cancel.DisplayScale == pointer.Y,
 		"Square cycles native Normal to Repair to Sell and re-hovers at the unchanged pointer coordinate");
 
 	Point2D const drag_start = pointer;
 	Point2D const drag_end = drag_current;
 	CursorPresentationSnapshot const drag_origin = Make_Cursor_Presentation_Snapshot(
-		MOUSE_CAN_SELECT, &loaded_shapes, 0, 0, 0, 2, 64, 64, static_arrow_hash,
+		MOUSE_CAN_SELECT, &loaded_shapes, presented[1].Frame, presented[1].NativeHotX, presented[1].NativeHotY,
+		2, 64, 64, presented[1].ContentHash,
 		generation.Current(), drag_start.X, drag_start.Y);
 	CursorPresentationSnapshot const drag_terminal = Make_Cursor_Presentation_Snapshot(
-		MOUSE_CAN_SELECT, &loaded_shapes, 0, 0, 0, 2, 64, 64, static_arrow_hash,
+		MOUSE_CAN_SELECT, &loaded_shapes, presented[1].Frame, presented[1].NativeHotX, presented[1].NativeHotY,
+		2, 64, 64, presented[1].ContentHash,
 		generation.Current(), drag_end.X, drag_end.Y);
-	Check(drag_origin.DestinationX == drag_start.X && drag_origin.DestinationY == drag_start.Y
-		&& drag_terminal.DestinationX == drag_end.X && drag_terminal.DestinationY == drag_end.Y
-		&& drag_origin.DestinationX + drag_origin.NativeHotX == drag_start.X
-		&& drag_terminal.DestinationY + drag_terminal.NativeHotY == drag_end.Y,
-		"drag-selection start and end remain at the visible pointer coordinate");
+	Check(drag_terminal.DestinationX + drag_terminal.NativeHotX * drag_terminal.DisplayScale == drag_end.X
+		&& drag_origin.DestinationX + drag_origin.NativeHotX * drag_origin.DisplayScale == drag_start.X
+		&& drag_terminal.DestinationY + drag_terminal.NativeHotY * drag_terminal.DisplayScale == drag_end.Y
+		&& drag_origin.DestinationY + drag_origin.NativeHotY * drag_origin.DisplayScale == drag_start.Y,
+		"drag-selection origin and terminal preserve each logical coordinate under contextual artwork");
 
 	std::ifstream pointer_file(OPENTS_POINTER_SOURCE);
 	std::string pointer_source((std::istreambuf_iterator<char>(pointer_file)), std::istreambuf_iterator<char>());
