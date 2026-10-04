@@ -9,6 +9,7 @@
 
 #include "iospaths.h"
 #include "win32compat.h"
+#include "userdatageneration.h"
 
 #ifndef __EMSCRIPTEN__
 #include <mach-o/dyld.h>
@@ -815,7 +816,9 @@ extern "C" BOOL CloseHandle(HANDLE handle)
 
 extern "C" BOOL DeleteFileA(LPCSTR name)
 {
-	return(name != NULL && std::remove(name) == 0 ? TRUE : FALSE);
+	if (name == NULL || std::remove(name) != 0) return(FALSE);
+	if (Is_User_Data_Path(name)) OpenTS_User_Data_Mark_Dirty();
+	return(TRUE);
 }
 
 

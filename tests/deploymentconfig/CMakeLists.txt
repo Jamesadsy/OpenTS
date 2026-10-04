@@ -8,6 +8,7 @@ opents_add_test(DeploymentConfig
     ENGINE
         deploymentconfig.cpp
         _deploymentconfig.cpp
+        userdatageneration.cpp
         bfiofile.cpp
         rawfile.cpp
         file.cpp

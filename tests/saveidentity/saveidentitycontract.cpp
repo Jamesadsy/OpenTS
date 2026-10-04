@@ -148,12 +148,48 @@ void Test_Save_Browser_Navigation(void)
 	Check(scrolled == 2, "scrolling ignores a selection outside the list");
 }
 
+
+std::string Read_Source(char const * relative)
+{
+	std::ifstream source(std::string(OPENTS_SOURCE_DIR) + "/" + relative);
+	return(std::string(std::istreambuf_iterator<char>(source), std::istreambuf_iterator<char>()));
+}
+
+
+void Test_Native_Load_Discovery_And_Restore_Route(void)
+{
+	std::string const menu = Read_Source("code/newmenu.cpp");
+	std::string const discovery = Read_Source("code/loaddlg.cpp");
+	std::string const names = Read_Source("code/gamedirs.cpp");
+	std::string const load = Read_Source("code/saveload.cpp");
+	Check(!menu.empty() && !discovery.empty() && !names.empty() && !load.empty(),
+		"native menu, save discovery, namespace and restore sources are readable");
+	std::string const loadMissionGate = "if (!LoadOptionsClass().Files_Present()) options.Add(NSEL_LOAD_MISSION)";
+	size_t const firstGate = menu.find(loadMissionGate);
+	Check(firstGate != std::string::npos,
+		"native TS product menu hides Load Mission only when the active product has no valid saves");
+	Check(firstGate != std::string::npos && menu.find(loadMissionGate, firstGate + loadMissionGate.size()) != std::string::npos,
+		"native Firestorm product menu uses the same save-discovery authority");
+	Check(discovery.find("FindFirstFile(Saved_Game_Name(pattern).c_str(), &find_data)") != std::string::npos
+		&& discovery.find("if (Read_File(&entry, &find_data) == true)") != std::string::npos,
+		"Load Mission availability is based on a readable native save file, not JavaScript state");
+	Check(names.find("Addon_Enabled(ADDON_FIRESTORM) ? \"Firestorm\" : \"Tiberian Sun\"") != std::string::npos,
+		"native save lookup keeps the Base TS and Firestorm directories distinct");
+	Check(load.find("file.Read(Saved_Game_Name(file_name).c_str())") != std::string::npos
+		&& load.find("res = Get_All(stream, false)") != std::string::npos
+		&& load.find("Post_Load_Game()") != std::string::npos
+		&& load.find("ScenarioActive = true;") != std::string::npos
+		&& load.find("TacticalActive = true;") != std::string::npos,
+		"Load_Game reads the selected product save, restores native state and resumes the scenario");
+}
+
 }
 
 int main(void)
 {
 	Test_Manual_Save_Recall();
 	Test_Save_Browser_Navigation();
+	Test_Native_Load_Discovery_And_Restore_Route();
 
 	Scratch = std::filesystem::temp_directory_path() / "opents-save-identity-contract";
 	std::error_code error;

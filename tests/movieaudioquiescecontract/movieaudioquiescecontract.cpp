@@ -71,6 +71,12 @@ void Test_Movie_Stop_Ordering(void)
 		"timeout branch retains ring storage instead of destroying a live renderer source");
 	Check(stop_body.find("_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed()") != std::string::npos,
 		"movie stop snapshots its final consumed playback frame");
+	Check(stop_body.find("MovieStopGeneration.fetch_add") != std::string::npos
+		&& stop_body.find("OPENTS_TELEMETRY_MOVIE_STOP_GENERATION") != std::string::npos,
+		"the bounded movie stop generation is available to Advanced audio diagnostics");
+	Check(movie.find("MovieCloseGeneration.fetch_add") != std::string::npos
+		&& movie.find("OPENTS_TELEMETRY_MOVIE_CLOSE_GENERATION") != std::string::npos,
+		"movie close generation is available to Advanced audio diagnostics");
 	Check(close != std::string::npos
 		&& movie.find("Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle())", close)
 			!= std::string::npos,
@@ -115,6 +121,12 @@ void Test_Movie_Stop_Ordering(void)
 	size_t const playing = mixer.find("voice.State.store(AudioVoiceState::PLAYING, std::memory_order_release)", resamplerReset);
 	Check(resamplerReset != std::string::npos && playing != std::string::npos && resamplerReset < playing,
 		"every newly started source resets retained voice resampler history");
+	Check(mixer.find("OPENTS_TELEMETRY_AUDIO_LAST_SOURCE_GENERATION") != std::string::npos
+		&& mixer.find("OPENTS_TELEMETRY_AUDIO_ACTIVE_SLOTS_LOW") != std::string::npos
+		&& mixer.find("OPENTS_TELEMETRY_AUDIO_RESAMPLER_RESET_GENERATION") != std::string::npos,
+		"voice ownership, source identity and resampler reset generations are bounded diagnostics");
+	Check(mixer.find("((AudioMixerClass *)context)->Render(output, frames))") != std::string::npos,
+		"device progress is emitted only when the mixer reports a complete renderer boundary");
 }
 
 } // namespace

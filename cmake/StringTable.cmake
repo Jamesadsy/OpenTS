@@ -13,8 +13,9 @@
 # its identifier. UI documents reference a string by name, and this keeps the resource script
 # the only place a name and a number are paired.
 #
-# Encoding: the resource script carries "#pragma code_page(65001)", so its bytes are already
-# UTF-8 and are copied through unchanged. The data file is UTF-8 for the same reason.
+# Encoding: the resource script carries "#pragma code_page(65001)". Its UTF-8 string bytes are
+# stored as hexadecimal payloads, then decoded by the native/browser reader. Hex keeps embedded
+# newlines and host file line-ending conversion unambiguous.
 
 if(NOT DEFINED RC_FILE OR NOT DEFINED HEADER_FILE)
     message(FATAL_ERROR "StringTable.cmake needs RC_FILE and HEADER_FILE")
@@ -132,10 +133,19 @@ foreach(line IN LISTS RC_LINES)
     string(REPLACE "${BACKSLASH_MARK}" "\\" raw "${raw}")
     string(REPLACE "${SEMICOLON_MARK}" ";" raw "${raw}")
 
-    string(LENGTH "${raw}" length)
+    # The runtime table declares a byte length, not a character count. CMake's
+    # string(LENGTH) counts UTF-8 code points on some hosts, which truncates a
+    # record as soon as language.rc contains a non-ASCII character. Count the
+    # UTF-8 bytes via the hexadecimal representation so Windows and Emscripten
+    # consume the same record boundary.
+    string(HEX "${raw}" raw_hex)
+    string(LENGTH "${raw_hex}" raw_hex_length)
+    math(EXPR length "${raw_hex_length} / 2")
 
-    # Length-prefixed, so a string that contains a newline needs no escaping of its own.
-    string(APPEND RECORDS "${ID_${name}} ${length}\n${raw}\n")
+    # Store the payload as UTF-8 hex. It remains one physical record even when
+    # the localized text contains a newline, and the declared length is the
+    # exact number of bytes the runtime decodes.
+    string(APPEND RECORDS "${ID_${name}} ${length}\n${raw_hex}\n")
     string(APPEND NAMES "OPENTS_STRING_NAME(\"${name}\", ${ID_${name}})\n")
     math(EXPR RECORD_COUNT "${RECORD_COUNT} + 1")
 endforeach()

@@ -385,6 +385,7 @@ void TestResultRoutingAndBoundaries(void)
 		&& ui_package.find("CMAKE_SOURCE_DIR}/ui/*\"") != std::string::npos
 		&& ui_package.find("\"--preload-file\"") != std::string::npos
 		&& ui_package.find("CMAKE_SOURCE_DIR}/ui@/ui\"") != std::string::npos
+		&& ui_package.find("\"--preload-file=${OPENTS_GENERATED_DIR}/Language.dat@/Language.dat\"") != std::string::npos
 		&& ui_package.find("OPENTS_BROWSER_UI_FILES}") != std::string::npos
 		&& ui_file_loader.find("new CCFileClass(name.c_str())") != std::string::npos
 		&& ui_shell.find("_Context->LoadDocument(Document)") != std::string::npos

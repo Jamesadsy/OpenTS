@@ -13,6 +13,7 @@
 #include "audio/audioring.h"
 #include "audio/audiosample.h"
 #include "audio/audiostream.h"
+#include "browsertelemetry.h"
 
 #include "miniaudio.h"
 
@@ -22,6 +23,19 @@
 namespace {
 
 unsigned const BLOCK = AUDIO_RENDER_BLOCK_FRAMES;
+std::atomic<unsigned int> BrowserAudioRenderedFrames{0};
+std::atomic<unsigned int> BrowserAudioSourceGeneration{0};
+std::atomic<unsigned int> BrowserAudioResamplerResetGeneration{0};
+
+void Set_Browser_Audio_Value(int value, int data)
+{
+#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Set(value, data);
+#else
+	(void)value;
+	(void)data;
+#endif
+}
 
 // Enough source frames for one output block at the highest rate ratio, plus the
 // resampler's own lead.
@@ -34,6 +48,7 @@ unsigned const DRAIN_BLOCKS = 2;
 struct VoiceClass {
 	std::atomic<AudioVoiceState> State{AudioVoiceState::FREE};
 	uint32_t Generation = 0;
+	uint32_t SourceGeneration = 0;
 	AudioGroupType Group = AUDIO_GROUP_SFX;
 	bool IsStream = false;
 	AudioStreamClass * Stream = nullptr;
@@ -99,6 +114,7 @@ struct AudioMixerClass::StateClass {
 	void Set_Pitch(VoiceClass & voice, float pitch);
 	unsigned Fetch(VoiceClass & voice, unsigned need);
 	void Finish(VoiceClass & voice);
+	void Publish_Browser_Telemetry(void) const;
 	void Render_Voice(VoiceClass & voice, float * output, unsigned frames, float grouplevel, float master);
 };
 
@@ -134,6 +150,9 @@ bool AudioMixerClass::Init(unsigned rate, unsigned channels)
 		return(false);
 	}
 	State->Rate = rate;
+	BrowserAudioRenderedFrames.store(0, std::memory_order_relaxed);
+	BrowserAudioSourceGeneration.store(0, std::memory_order_relaxed);
+	BrowserAudioResamplerResetGeneration.store(0, std::memory_order_relaxed);
 	State->Scratch.reset(new (std::nothrow) float[(size_t)SCRATCH_FRAMES * 2]);
 	State->Staging.reset(new (std::nothrow) int16_t[(size_t)SCRATCH_FRAMES * 2]);
 	State->Resampled.reset(new (std::nothrow) float[(size_t)BLOCK * 2]);
@@ -234,15 +253,26 @@ void AudioMixerClass::Release_Render_Token(void)
 
 void AudioMixerClass::Render_Callback(void * context, float * output, unsigned frames)
 {
-	((AudioMixerClass *)context)->Render(output, frames);
+	if (((AudioMixerClass *)context)->Render(output, frames)) {
+		BrowserAudioRenderedFrames.fetch_add(frames, std::memory_order_relaxed);
+#if defined(__EMSCRIPTEN__)
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_AUDIO_RENDER_CALLBACK_GENERATION);
+#endif
+	}
 }
 
 
-void AudioMixerClass::Render(float * output, unsigned frames)
+extern "C" unsigned int OpenTS_Browser_Audio_Rendered_Frames(void)
+{
+	return(BrowserAudioRenderedFrames.load(std::memory_order_relaxed));
+}
+
+
+bool AudioMixerClass::Render(float * output, unsigned frames)
 {
 	if (!Ready || !Acquire_Render_Token()) {
 		std::memset(output, 0, (size_t)frames * AUDIO_MIX_CHANNELS * sizeof(float));
-		return;
+		return(false);
 	}
 
 	StateClass & s = *State;
@@ -295,7 +325,27 @@ void AudioMixerClass::Render(float * output, unsigned frames)
 		done += count;
 	}
 
+	s.Publish_Browser_Telemetry();
 	Release_Render_Token();
+	return(true);
+}
+
+
+void AudioMixerClass::StateClass::Publish_Browser_Telemetry(void) const
+{
+#if defined(__EMSCRIPTEN__)
+	uint64_t active = 0;
+	for (unsigned slot = 0; slot < AUDIO_MAX_VOICES; ++slot) {
+		AudioVoiceState const state = Voices[slot].State.load(std::memory_order_relaxed);
+		if (state == AudioVoiceState::PLAYING || state == AudioVoiceState::STOPPING) {
+			active |= (uint64_t)1 << slot;
+		}
+	}
+	Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_ACTIVE_SLOTS_LOW,
+		static_cast<int>(static_cast<uint32_t>(active)));
+	Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_ACTIVE_SLOTS_HIGH,
+		static_cast<int>(static_cast<uint32_t>(active >> 32)));
+#endif
 }
 
 
@@ -387,6 +437,15 @@ void AudioMixerClass::StateClass::Apply(AudioCommand const & command, std::atomi
 			return;
 		}
 		voice.State.store(AudioVoiceState::PLAYING, std::memory_order_release);
+		voice.SourceGeneration = BrowserAudioSourceGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+		Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_LAST_SOURCE_GENERATION,
+			static_cast<int>(voice.SourceGeneration));
+		Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_LAST_SOURCE_SLOT, static_cast<int>(command.Slot));
+		Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_LAST_SOURCE_TYPE, voice.IsStream ? 1 : 2);
+		Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_LAST_SOURCE_GROUP, static_cast<int>(voice.Group));
+		unsigned const resetGeneration = BrowserAudioResamplerResetGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+		Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_RESAMPLER_RESET_GENERATION,
+			static_cast<int>(resetGeneration));
 		return;
 	}
 
@@ -558,6 +617,8 @@ unsigned AudioMixerClass::StateClass::Fetch(VoiceClass & voice, unsigned need)
 
 	if (voice.IsStream) {
 		unsigned got = voice.Stream->Ring.Read(Staging.get(), need);
+		Set_Browser_Audio_Value(OPENTS_TELEMETRY_AUDIO_ACTIVE_SOURCE_CONSUMED_FRAMES,
+			static_cast<int>(voice.Stream->Frames_Consumed()));
 		for (unsigned i = 0; i < got * channels; i++) {
 			scratch[i] = (float)Staging[i] * (1.0f / 32768.0f);
 		}

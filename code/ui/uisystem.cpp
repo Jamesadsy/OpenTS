@@ -15,6 +15,7 @@
 #include "always.h"
 
 #include "uiinternal.h"
+#include "ui/stringtranslation.h"
 
 #include "data.h"
 #include "dbgprint.h"
@@ -105,38 +106,7 @@ static UISystemInterface _SystemInterface;
 /// <returns>int; How many replacements were made.</returns>
 int UISystemInterface::TranslateString(Rml::String & translated, const Rml::String & input)
 {
-	translated.clear();
-	int replaced = 0;
-
-	std::size_t position = 0;
-	while (position < input.size()) {
-		std::size_t open = input.find("[[", position);
-		if (open == Rml::String::npos) {
-			break;
-		}
-
-		std::size_t close = input.find("]]", open + 2);
-		if (close == Rml::String::npos) {
-			break;
-		}
-
-		std::string text;
-		std::string const name = input.substr(open + 2, close - open - 2);
-
-		translated.append(input, position, open - position);
-
-		if (Lookup_String(name, text)) {
-			translated.append(text);
-			replaced++;
-		} else {
-			translated.append(input, open, close + 2 - open);
-		}
-
-		position = close + 2;
-	}
-
-	translated.append(input, position, Rml::String::npos);
-	return(replaced);
+	return(Translate_Rml_String(translated, input, Lookup_String));
 }
 
 

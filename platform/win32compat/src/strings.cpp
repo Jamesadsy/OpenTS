@@ -8,36 +8,33 @@
  ******************************************************************************/
 
 #include "win32compat.h"
+#include "portabletable.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // Every string a player reads comes through Fetch_String, which asks LoadString for a
 // resource compiled from language.rc. Only the resource compiler builds that resource, so
 // on a host without one the same strings arrive as a flat data file generated from the same
-// script at build time by cmake/StringTable.cmake. The file is UTF-8, because the resource
-// script declares code page 65001 and the generator copies its bytes through unchanged.
+// script at build time by cmake/StringTable.cmake. The resource script declares
+// code page 65001; its UTF-8 payload is hex-encoded in the portable table.
 //
-// The format is length-prefixed so that a string containing a newline needs no escaping:
+// The format is byte-length-prefixed and hex encoded so embedded newlines and
+// Windows text-file line ending conversion cannot change record boundaries:
 //
 //   OPENTS-STRINGS 1\n
 //   <count>\n
-//   <id> <byte length>\n<bytes>\n      (repeated <count> times)
+//   <id> <byte length>\n<2*length hex bytes>\n (repeated <count> times)
 
 namespace
 {
 
 char const * const STRING_TABLE_FILE = "Language.dat";
-char const * const STRING_TABLE_MAGIC = "OPENTS-STRINGS 1";
-
-typedef std::unordered_map<unsigned int, std::string> StringMap;
-
-
+using OpenTSPortableStrings::StringMap;
 // The table sits beside the executable, which is where the language library it replaces is
 // looked for as well. A run from elsewhere still finds it through the working directory.
 std::vector<std::filesystem::path> Table_Candidates(void)
@@ -79,23 +76,6 @@ bool Read_Whole_File(std::filesystem::path const & path, std::string & content)
 
 // Reads one line and leaves the cursor past its terminator. A record's text is never read
 // this way, since only its declared length says where it ends.
-bool Next_Line(std::string const & content, std::size_t & cursor, std::string & line)
-{
-	if (cursor >= content.size()) {
-		return(false);
-	}
-
-	std::size_t const end = content.find('\n', cursor);
-	if (end == std::string::npos) {
-		return(false);
-	}
-
-	line.assign(content, cursor, end - cursor);
-	cursor = end + 1;
-	return(true);
-}
-
-
 void Load_String_Table(StringMap & strings)
 {
 	std::string content;
@@ -111,49 +91,18 @@ void Load_String_Table(StringMap & strings)
 		return;
 	}
 
-	std::size_t cursor = 0;
-	std::string line;
-
-	if (!Next_Line(content, cursor, line) || line != STRING_TABLE_MAGIC) {
-		return;
-	}
-
-	if (!Next_Line(content, cursor, line)) {
-		return;
-	}
-
-	long const count = std::strtol(line.c_str(), NULL, 10);
-
-	for (long record = 0; record < count; record++) {
-		if (!Next_Line(content, cursor, line)) {
-			break;
-		}
-
-		char * after = NULL;
-		unsigned long const id = std::strtoul(line.c_str(), &after, 10);
-		if (after == line.c_str()) {
-			break;
-		}
-
-		long const length = std::strtol(after, NULL, 10);
-		if (length < 0 || cursor + (std::size_t)length > content.size()) {
-			break;
-		}
-
-		strings[(unsigned int)id] = content.substr(cursor, (std::size_t)length);
-		cursor += (std::size_t)length + 1;
-	}
+	if (!OpenTSPortableStrings::Parse_Portable_String_Table(content, strings)) strings.clear();
 }
 
 
 // A global constructor in the engine asks for a string before this translation unit's own
 // statics would have been built, so the table is built on the first request. It is never torn
 // down either, because a string can just as easily be asked for from a static destructor.
-StringMap const & Table(void)
+OpenTSPortableStrings::StringMap const & Table(void)
 {
-	static StringMap * strings = NULL;
+	static OpenTSPortableStrings::StringMap * strings = NULL;
 	if (strings == NULL) {
-		strings = new StringMap();
+		strings = new OpenTSPortableStrings::StringMap();
 		Load_String_Table(*strings);
 	}
 
@@ -186,9 +135,9 @@ extern "C" int LoadString(HINSTANCE instance, UINT id, LPSTR buffer, int max)
 
 	buffer[0] = '\0';
 
-	StringMap const & strings = Table();
+	OpenTSPortableStrings::StringMap const & strings = Table();
 
-	StringMap::const_iterator const entry = strings.find(id);
+	OpenTSPortableStrings::StringMap::const_iterator const entry = strings.find(id);
 	if (entry == strings.end()) {
 		return(0);
 	}

@@ -54,7 +54,8 @@ class AudioMixerClass
 
 		// Render thread. Whoever holds the render token renders; a second caller
 		// writes silence for its block instead, so two threads can never mix at once.
-		void Render(float * output, unsigned frames);
+		// True only when this caller owned and completed the renderer boundary.
+		bool Render(float * output, unsigned frames);
 		static void Render_Callback(void * context, float * output, unsigned frames);
 
 		// Only for a test that wants to stand in for a second renderer.

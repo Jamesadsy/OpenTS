@@ -51,6 +51,7 @@
 
 #include "rawfile.h"
 #include "file.h"
+#include "userdatageneration.h"
 
 #include <cstddef>
 #include <cstdio>
@@ -604,6 +605,9 @@ int RawFileClass::Write(void const * buffer, int size)
 	if (opened) {
 		Close();
 	}
+	if (byteswritten > 0 && Is_User_Data_Path(Filename)) {
+		OpenTS_User_Data_Mark_Dirty();
+	}
 
 	/*
 	**	Return with the number of bytes written. This will always be the number of bytes
@@ -856,6 +860,9 @@ int RawFileClass::Delete(void)
 			return(false);
 		}
 		break;
+	}
+	if (Is_User_Data_Path(Filename)) {
+		OpenTS_User_Data_Mark_Dirty();
 	}
 
 	/*

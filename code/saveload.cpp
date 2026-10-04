@@ -98,6 +98,7 @@
 #include "revent.h"
 #include "rules.h"
 #include "savefile.h"
+#include "userdatageneration.h"
 #include "savemgr.h"
 #include "savestream.h"
 #include "savever.h"
@@ -1064,6 +1065,10 @@ bool Save_Game(const char *file_name, char const * descr)
 		if (result != SaveFileClass::RESULT_OK) {
 			DebugString("\t***** FAILED! (%s)\n", SaveFileClass::Result_Text(result));
 			res = false;
+		} else {
+			// SaveFileClass only commits after the temporary file has been flushed,
+			// closed and atomically moved to its final Saved_Game_Name.
+			OpenTS_User_Data_Mark_Dirty();
 		}
 	}
 

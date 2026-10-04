@@ -416,7 +416,6 @@ SaveFileClass::ResultType SaveFileClass::Write(char const * path) const
 		DeleteFileA(temporary.c_str());
 		return(RESULT_WRITE_FAILED);
 	}
-
 	return(RESULT_OK);
 }
 

@@ -19,12 +19,20 @@
 #include "audio/audiosample.h"
 #include "audio/audiostream.h"
 #include "audio/audiovoice.h"
+#include "browsertelemetry.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <vector>
+
+extern "C" unsigned int OpenTS_Browser_Audio_Rendered_Frames(void);
+
+static_assert(OPENTS_TELEMETRY_AUDIO_RENDER_CALLBACK_GENERATION == 44);
+static_assert(OPENTS_TELEMETRY_AUDIO_ACTIVE_SLOTS_LOW == 85);
+static_assert(OPENTS_TELEMETRY_MOVIE_FINAL_PLAYBACK_FRAME == 94);
+static_assert(OPENTS_TELEMETRY_AUDIO_ACTIVE_SOURCE_CONSUMED_FRAMES == 95);
 
 namespace {
 
@@ -505,6 +513,26 @@ void Test_Ring_And_Token(void)
 }
 
 
+void Test_Device_Progress_Requires_Renderer_Ownership(void)
+{
+	RigClass rig;
+	float output[AUDIO_RENDER_BLOCK_FRAMES * AUDIO_MIX_CHANNELS] = {};
+	unsigned before = OpenTS_Browser_Audio_Rendered_Frames();
+	AudioMixerClass::Render_Callback(&rig.Mixer, output, AUDIO_RENDER_BLOCK_FRAMES);
+	unsigned after = OpenTS_Browser_Audio_Rendered_Frames();
+	Check(after - before == AUDIO_RENDER_BLOCK_FRAMES,
+		"device progress advances only after a complete renderer-owned callback");
+
+	Check(rig.Mixer.Acquire_Render_Token(), "the test can hold the mixer token during a device callback");
+	AudioMixerClass::Render_Callback(&rig.Mixer, output, AUDIO_RENDER_BLOCK_FRAMES);
+	Check(OpenTS_Browser_Audio_Rendered_Frames() == after,
+		"a callback that emitted fallback silence after losing renderer ownership is not recovery progress");
+	Check(!rig.Mixer.Render(output, AUDIO_RENDER_BLOCK_FRAMES),
+		"a competing renderer reports that it did not own a completed playback boundary");
+	rig.Mixer.Release_Render_Token();
+}
+
+
 void Test_Stream(void)
 {
 	RigClass rig;
@@ -635,6 +663,7 @@ int main(void)
 	Test_Stop_Pause_Generation();
 	Test_Movie_Quiesce_Ramp();
 	Test_Ring_And_Token();
+	Test_Device_Progress_Requires_Renderer_Ownership();
 	Test_Stream();
 	Test_Stream_Voice_Reuse_Resets_Resampler();
 	Test_Determinism();

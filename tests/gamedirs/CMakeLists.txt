@@ -18,6 +18,7 @@ opents_add_test(GameDirs
     SOURCES gamedirscontract.cpp dbgprintstub.cpp
     ENGINE
         gamedirs.cpp
+        userdatageneration.cpp
         cdfile.cpp
         bfiofile.cpp
         rawfile.cpp

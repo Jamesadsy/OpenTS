@@ -12,11 +12,13 @@
 #include "audio/audioengine.h"
 #include "audio/audiomovieclock.h"
 #include "audio/audiostream.h"
+#include "browsertelemetry.h"
 #include "dbgprint.h"
 #include "gametime.h"
 #include "vqaplayp.h"
 
 #include <cstring>
+#include <atomic>
 
 namespace {
 
@@ -28,6 +30,18 @@ unsigned const MAX_PENDING_BLOCKS = AUDIO_MOVIE_RING_BLOCKS + 2;
 // coherent blocks to reach zero before the sink releases its stream storage.
 int const QUIESCE_RAMP_MS = 32;
 int const QUIESCE_WAIT_MS = 250;
+std::atomic<unsigned int> MovieStopGeneration{0};
+std::atomic<unsigned int> MovieCloseGeneration{0};
+
+void Set_Movie_Telemetry(int value, unsigned int data)
+{
+#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Set(value, static_cast<int>(data));
+#else
+	(void)value;
+	(void)data;
+#endif
+}
 
 
 // The one movie the player can have open, as a producer the feeder services.
@@ -265,11 +279,14 @@ long Stop_Audio_Handler(VQAHandleP * vqap)
 {
 	(void)vqap;
 	if (_sink.Used && _sink.Started) {
+		unsigned const stopGeneration = MovieStopGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+		Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_STOP_GENERATION, stopGeneration);
 		// First stop production, then ask the mixer voice to ramp to a silent
 		// render boundary. Pool.Is_Finished only becomes true after Render marks
 		// the voice DONE and the game-thread service reaps it.
 		AudioEngine.Feeder_Ref().Detach((unsigned)_sink.Slot);
 		_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed();
+		Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_FINAL_PLAYBACK_FRAME, _sink.FinalPlaybackFrame);
 		AudioEngine.Events().Fade(_sink.Handle, QUIESCE_RAMP_MS);
 		bool const quiesced = AudioEngine.Wait_Finished(_sink.Handle, QUIESCE_WAIT_MS);
 		_sink.Started = false;
@@ -282,6 +299,7 @@ long Stop_Audio_Handler(VQAHandleP * vqap)
 				_sink.FinalPlaybackFrame);
 		} else {
 			_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed();
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_FINAL_PLAYBACK_FRAME, _sink.FinalPlaybackFrame);
 			_sink.Stream->Reset();
 			_sink.Handle.Clear();
 		}
@@ -295,6 +313,8 @@ long Close_Audio_Handler(VQAHandleP * vqap)
 {
 	if (_sink.Used) {
 		Stop_Audio_Handler(vqap);
+		unsigned const closeGeneration = MovieCloseGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
+		Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_CLOSE_GENERATION, closeGeneration);
 		_sink.Pusher.Close();
 		AudioEngine.Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle());
 		_sink.Slot = -1;

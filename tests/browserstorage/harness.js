@@ -241,6 +241,16 @@
     return typeof fn === "function" ? fn() : null;
   }
 
+  function verifyPortableLanguagePackage(Module) {
+    try {
+      var bytes = Module.FS.readFile("/Language.dat");
+      var header = new TextDecoder("utf-8").decode(bytes.subarray(0, 18));
+      return header.indexOf("OPENTS-STRINGS 1\n") === 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function nativeText(name) {
     var pointer = nativeValue(name);
     return pointer && Module.UTF8ToString ? Module.UTF8ToString(pointer) : "";
@@ -1021,6 +1031,8 @@
     var hydrationStartedAt = performance.now();
     setOwnerPhase("userdata-hydration", "Restoring local OpenTS settings and saves…");
     await storage.hydrateUser(Module, false);
+    check(verifyPortableLanguagePackage(Module),
+      "packaged portable RmlUi Language.dat is missing from the browser filesystem");
     recordOwnerMilestone("userdata-hydrated", "Local /userdata hydration completed.", {
       durationMs: Number((performance.now() - hydrationStartedAt).toFixed(1))
     });
@@ -1064,6 +1076,8 @@
       : await storage.prepareData(Module);
     storage.mountUserRoot(Module);
     await storage.hydrateUser(Module, false);
+    check(verifyPortableLanguagePackage(Module),
+      "packaged portable RmlUi Language.dat is missing from the browser filesystem");
     if (ownerMode) {
       check(Module._OpenTS_126_Storage_Mark_Ready() === 1, "native imported TS storage readiness check failed");
       check(Module._OpenTS_126_Storage_Is_Ready() === 1, "imported TS storage is not ready before startup main");

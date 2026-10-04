@@ -10,6 +10,7 @@
 #include "always.h"
 
 #include "gamedirs.h"
+#include "userdatageneration.h"
 
 #include "addon.h"
 #include "cdfile.h"
@@ -148,6 +149,7 @@ void Set_Data_Directory(char const * path)
 void Set_User_Directory(char const * path)
 {
 	UserDirectory = Terminate_Path(Trim_Path(path != NULL ? path : ""));
+	OpenTS_User_Data_Set_Root(UserDirectory.c_str());
 
 	// The file layer places and finds the player's own files; this is the only thing that
 	// tells it where they go.

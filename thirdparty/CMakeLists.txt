@@ -20,6 +20,18 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_subdirectory(bgfx.cmake)
 
+# The bundled bx platform header reads the pre-4.x uppercase Emscripten version
+# macros when it classifies WebAssembly. Emscripten 4.x now defines lowercase
+# version macros, so bridge those names for bx instead of letting it classify
+# the target as BX_PLATFORM_NONE (and compile unavailable POSIX calls).
+if(EMSCRIPTEN AND TARGET bx)
+    target_compile_definitions(bx PUBLIC
+        "__EMSCRIPTEN_MAJOR__=__EMSCRIPTEN_major__"
+        "__EMSCRIPTEN_MINOR__=__EMSCRIPTEN_minor__"
+        "__EMSCRIPTEN_TINY__=__EMSCRIPTEN_tiny__"
+    )
+endif()
+
 # bgfx compiles its Apple sources as Objective-C++ by putting -ObjC++ into CMAKE_CXX_FLAGS,
 # which it skips under the Xcode generator in favour of a per-source language it names on
 # two files. Its Metal sources are not among the two, so they are named here; without this

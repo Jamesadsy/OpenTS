@@ -296,8 +296,9 @@ today.
 Shipped UI files (documents, styles, images, the font) live in `ui/` at the
 repository root. The build copies the tree beside the executable as it copies
 `Language.dll`, and the client package ships it. The Emscripten target preloads
-the same source-owned tree into `/ui` in its browser filesystem; its generated
-`OpenTS.data` package is staged with the development TS runtime. Browser startup
+the same source-owned tree into `/ui` and the generated portable `Language.dat`
+at `/Language.dat` in its browser filesystem; its generated `OpenTS.data`
+package is staged with the development TS runtime. Browser startup
 registers that directory in the existing `CCFileClass` search order, after the
 owner-data and installed search paths. Both routes therefore feed the same native
 lookup without a browser-owned screen.
@@ -712,8 +713,12 @@ node through `SystemInterface::TranslateString`, where the shell maps the
 name to its identifier. `cmake/StringTable.cmake` writes that table into the
 build's generated directory from the same `language.rc` it reads for the
 portable string table, so the resource script stays the only place a name and a
-number are paired and no list is hand-maintained. A name the table does not
-carry is left in the text rather than replaced with nothing. Dynamic text, including player and map names and error
+number are paired and no list is hand-maintained. Non-Windows and Emscripten
+builds use that portable table; the Emscripten package places it where the
+compatibility `LoadString` reads it. The token contract audits every packaged
+RmlUi document against the generated names, portable text, and production
+translation routine. A name the table does not carry is left in the text rather
+than replaced with nothing. Dynamic text, including player and map names and error
 strings, is inserted as text, never as markup.
 
 ## Configuration
