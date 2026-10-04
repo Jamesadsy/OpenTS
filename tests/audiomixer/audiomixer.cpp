@@ -547,6 +547,59 @@ void Test_Stream(void)
 }
 
 
+void Test_Stream_Voice_Reuse_Resets_Resampler(void)
+{
+	RigClass rig;
+	AudioStreamClass movie;
+	Check(movie.Init(8192, 1, 22050), "movie stream for voice-reuse test initialises");
+	std::vector<int16_t> moviePcm(2048, (int16_t)(0.8f * 32767.0f));
+	Check(movie.Ring.Write(moviePcm.data(), (unsigned)moviePcm.size()) == moviePcm.size(), "movie stream supplies non-zero PCM");
+
+	auto playStream = [](unsigned slot, uint32_t generation, AudioStreamClass & stream) {
+		AudioCommand play;
+		std::memset(&play, 0, sizeof(play));
+		play.Type = AudioCommandType::PLAY_STREAM;
+		play.Group = AUDIO_GROUP_MUSIC;
+		play.Slot = (uint8_t)slot;
+		play.Generation = generation;
+		play.A = 1.0f;
+		play.C = 1.0f;
+		play.Ptr = &stream;
+		return(play);
+	};
+
+	Check(rig.Start(3, playStream(3, 1, movie)), "movie stream starts on a mixer voice");
+	rig.Run(1200);
+	Check(rig.Rms(64, 1200, 0) > 0.3f, "movie voice renders its source PCM");
+	rig.Mixer.Push(Simple(AudioCommandType::STOP, 3, 1, 0.032f));
+	rig.Run(4800);
+	Check(rig.Mixer.Voice_State(3) == AudioVoiceState::DONE, "bounded movie fade finishes the renderer voice");
+	rig.Mixer.Free_Voice(3);
+
+	AudioStreamClass silent;
+	Check(silent.Init(8192, 1, 22050), "silent next-source stream initialises with the same format");
+	std::vector<int16_t> silence(1024, 0);
+	Check(silent.Ring.Write(silence.data(), (unsigned)silence.size()) == silence.size(), "next source supplies zero PCM");
+	Check(rig.Start(3, playStream(3, 2, silent)), "the completed mixer slot is reused for a new stream");
+	size_t mark = rig.Output.size() / 2;
+	rig.Run(64);
+	Check(rig.Silent(mark, mark + 64), "cached movie PCM does not leak into a same-format silent source");
+	rig.Mixer.Push(Simple(AudioCommandType::STOP, 3, 2, 0.001f));
+	rig.Run(2400);
+	Check(rig.Mixer.Voice_State(3) == AudioVoiceState::DONE, "silent stream renderer finishes before its slot is freed");
+	rig.Mixer.Free_Voice(3);
+
+	AudioStreamClass game;
+	Check(game.Init(8192, 1, 22050), "normal game-audio stream initialises after movie teardown");
+	std::vector<int16_t> gamePcm(1024, (int16_t)(0.25f * 32767.0f));
+	Check(game.Ring.Write(gamePcm.data(), (unsigned)gamePcm.size()) == gamePcm.size(), "normal game-audio stream supplies PCM");
+	Check(rig.Start(3, playStream(3, 3, game)), "normal game audio reuses the retired movie voice");
+	mark = rig.Output.size() / 2;
+	rig.Run(480);
+	Check(Near(rig.Rms(mark + 32, mark + 480, 0), 0.25f, 0.02f), "normal game audio resumes at its clean requested level");
+}
+
+
 void Test_Determinism(void)
 {
 	std::unique_ptr<AudioSampleClass> sine = Make_Sine(22050, 22050, 330.0f, 0.4f);
@@ -583,6 +636,7 @@ int main(void)
 	Test_Movie_Quiesce_Ramp();
 	Test_Ring_And_Token();
 	Test_Stream();
+	Test_Stream_Voice_Reuse_Resets_Resampler();
 	Test_Determinism();
 
 	std::printf("audiomixer: %d checks, %d failures\n", Checked, Failures);

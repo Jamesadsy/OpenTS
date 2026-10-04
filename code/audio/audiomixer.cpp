@@ -379,6 +379,13 @@ void AudioMixerClass::StateClass::Apply(AudioCommand const & command, std::atomi
 			voice.State.store(AudioVoiceState::DONE, std::memory_order_release);
 			return;
 		}
+		// The voice slot survives its source. Do not carry cached PCM or filter
+		// history from the prior source into this one.
+		if (!voice.ResamplerReady || ma_linear_resampler_reset(&voice.Resampler) != MA_SUCCESS) {
+			dropped.fetch_add(1, std::memory_order_relaxed);
+			voice.State.store(AudioVoiceState::DONE, std::memory_order_release);
+			return;
+		}
 		voice.State.store(AudioVoiceState::PLAYING, std::memory_order_release);
 		return;
 	}

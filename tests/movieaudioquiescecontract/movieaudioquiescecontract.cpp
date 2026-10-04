@@ -44,7 +44,14 @@ void Test_Movie_Stop_Ordering(void)
 {
 	std::string const movie = Read("code/audio/audiomovie.cpp");
 	std::string const engine = Read("code/audio/audioengine.cpp");
+	std::string const mixer = Read("code/audio/audiomixer.cpp");
+	std::string const task = Read("code/vqalib/task.cpp");
+	std::string const vqa = Read("code/vqa.cpp");
+	std::string const radar = Read("code/radar.cpp");
+	std::string const movies = Read("code/movies.cpp");
+	std::string const vqaAudio = Read("code/vqalib/audio.cpp");
 	Check(!movie.empty() && !engine.empty(), "movie and engine lifecycle sources are readable");
+	Check(!task.empty() && !vqa.empty() && !radar.empty() && !movies.empty(), "full-screen and radar-pane movie routes are readable");
 	Check(movie.find("int const QUIESCE_RAMP_MS = 32;") != std::string::npos,
 		"movie skip requests a block-sized, localized renderer ramp");
 	Check(movie.find("int const QUIESCE_WAIT_MS = 250;") != std::string::npos,
@@ -79,6 +86,35 @@ void Test_Movie_Stop_Ordering(void)
 		"the engine reclaims a retained movie slot only after the render owner is finished");
 	Check(movie.find("return(VQAERR_NONE);", stop) != std::string::npos,
 		"a quiesce timeout does not change native skip's nonblocking success semantics");
+
+	size_t const playback = task.find("long VQA_Play(VQAHandle *vqa, long mode, int flags)");
+	size_t const playbackEnd = task.find("/* Movie is finished. */", playback);
+	std::string const playbackStop = playback == std::string::npos || playbackEnd == std::string::npos
+		? std::string() : task.substr(playback, playbackEnd - playback);
+	Check(playbackStop.find("VQADATF_DDONE|VQADATF_LDONE") != std::string::npos
+		&& playbackStop.find("mode = VQAMODE_STOP") != std::string::npos
+		&& playbackStop.find("mode == VQAMODE_STOP") != std::string::npos
+		&& playbackStop.find("VQA_StopAudio((VQAHandleP *)vqabuf)") != std::string::npos,
+		"natural full-screen completion and explicit skip converge on the same VQA audio stop");
+	Check(vqa.find("VQA_Play(Handle, VQAMODE_WALK, 0)") != std::string::npos
+		&& vqa.find("bool VQAClass::Advance_Frame(bool & finished)") != std::string::npos,
+		"the radar-pane cameo advances through the same VQA playback stop path");
+	Check(radar.find("Movie_Advance_Frame(handle, needs_volume_adjustment)") != std::string::npos
+		&& radar.find("Movie_Destroy(handle)") != std::string::npos,
+		"the radar-pane cameo closes its VQA handle after natural completion");
+	Check(movies.find("handle->VQA->Close_And_Free_VQA()") != std::string::npos,
+		"an early cameo close uses VQA close semantics rather than a separate skip path");
+	size_t const closeAudio = vqaAudio.find("void VQA_CloseAudio(VQAHandleP *vqap)");
+	size_t const closeAudioEnd = vqaAudio.find("/************************************************", closeAudio);
+	std::string const closeAudioBody = closeAudio == std::string::npos || closeAudioEnd == std::string::npos
+		? std::string() : vqaAudio.substr(closeAudio, closeAudioEnd - closeAudio);
+	Check(task.find("VQA_CloseAudio((VQAHandleP *)vqap)") != std::string::npos
+		&& closeAudioBody.find("VQA_StopAudio(vqap)") != std::string::npos,
+		"closing a still-playing cameo invokes the common bounded movie stop handler");
+	size_t const resamplerReset = mixer.find("ma_linear_resampler_reset(&voice.Resampler)");
+	size_t const playing = mixer.find("voice.State.store(AudioVoiceState::PLAYING, std::memory_order_release)", resamplerReset);
+	Check(resamplerReset != std::string::npos && playing != std::string::npos && resamplerReset < playing,
+		"every newly started source resets retained voice resampler history");
 }
 
 } // namespace

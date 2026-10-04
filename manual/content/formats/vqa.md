@@ -105,3 +105,5 @@ The picture follows the sound. The player hands the sound track to the audio eng
 When the player falls behind and feeds a block twice, that block is taken off the count as well, so the picture waits for the sound rather than running ahead of it. A movie with no audio device is timed from the wall clock throughout.
 
 A `SND1` chunk uses the Westwood delta compression and goes through the same checked decoder as an [AUD](/formats/aud/) file. A chunk that does not decode to its stated size plays as silence instead of being read past its end.
+
+Natural full-screen completion and Escape stop movie audio through the same VQA path. A radar-pane cameo advances that same path one frame at a time, then closes the VQA handle when it ends. The movie PCM producer detaches before the mixer fades and acknowledges its voice; a later source resets that voice's resampler history before rendering.
