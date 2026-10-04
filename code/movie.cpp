@@ -42,6 +42,13 @@
 #include <memory>
 #include <string>
 
+#ifdef __EMSCRIPTEN__
+extern "C" void OpenTS_Browser_Startup_Record_Operation(int operation);
+#define OPENTS_BROWSER_MOVIE_OPERATION(operation) OpenTS_Browser_Startup_Record_Operation(operation)
+#else
+#define OPENTS_BROWSER_MOVIE_OPERATION(operation) ((void)0)
+#endif
+
 
 /// <summary>
 /// Completes a half filled interpolated palette table.
@@ -100,6 +107,7 @@ bool TitleMovieSession::Begin(
 	bool clrscrn_before)
 {
 	if (m_Impl->State != Impl::Phase::Idle || name == NULL) return(false);
+	OPENTS_BROWSER_MOVIE_OPERATION(180);
 	if (Session.Type != GAME_NORMAL && !Session.PlayMovies) {
 		m_Impl->State = Impl::Phase::Complete;
 		return(true);
@@ -163,6 +171,7 @@ TitleMovieStepResult TitleMovieSession::Step(void)
 	using Result = TitleMovieStepResult;
 	if (m_Impl->State == Impl::Phase::Complete) return(Result::Complete);
 	if (m_Impl->State != Impl::Phase::Playing) return(Result::Fault);
+	OPENTS_BROWSER_MOVIE_OPERATION(181);
 
 	Call_Back();
 	MSEngine_Service_Legacy_Input(
@@ -170,6 +179,7 @@ TitleMovieStepResult TitleMovieSession::Step(void)
 		[]() { Win_Gamepad_Discard_Actions(); },
 		[]() { VQA_Message_Handler(); });
 	if (MovieSkip::Idle()) {
+		OPENTS_BROWSER_MOVIE_OPERATION(185);
 		m_Impl->Skipped = true;
 		Finish();
 		m_Impl->State = Impl::Phase::Complete;
@@ -177,8 +187,10 @@ TitleMovieStepResult TitleMovieSession::Step(void)
 	}
 
 	bool finished = false;
-	Movie_Advance_Cooperative_Frame(m_Impl->Handle.get(), finished);
+	bool const advanced = Movie_Advance_Cooperative_Frame(m_Impl->Handle.get(), finished);
+	OPENTS_BROWSER_MOVIE_OPERATION(advanced ? 183 : 182);
 	if (finished) {
+		OPENTS_BROWSER_MOVIE_OPERATION(184);
 		m_Impl->NaturalCompletion = true;
 		Finish();
 		m_Impl->State = Impl::Phase::Complete;
@@ -191,6 +203,7 @@ TitleMovieStepResult TitleMovieSession::Step(void)
 bool TitleMovieSession::Finish(void)
 {
 	if (m_Impl->CleanupDone) return(true);
+	OPENTS_BROWSER_MOVIE_OPERATION(186);
 	if (m_Impl->PlaybackBegun) {
 		Movie_End_Cooperative_Playback(m_Impl->Handle.get());
 		m_Impl->PlaybackBegun = false;
@@ -242,6 +255,7 @@ bool TitleMovieSession::Was_Skipped(void) const { return(m_Impl->Skipped); }
  *=============================================================================================*/
 void Play_Movie(char const * name, ThemeType theme, bool clrscrn_after, bool stretch, bool clrscrn_before)
 {
+	OPENTS_BROWSER_MOVIE_OPERATION(130);
 	// Outside a campaign, movies play only when the launch file asked for them.
 	if (Session.Type != GAME_NORMAL && !Session.PlayMovies) {
 		return;
@@ -254,6 +268,7 @@ void Play_Movie(char const * name, ThemeType theme, bool clrscrn_after, bool str
 		return;
 	}
 
+	OPENTS_BROWSER_MOVIE_OPERATION(131);
 	Keyboard->Clear();
 
 	VQHandle * vqa = Movie_Create(name, HiddenSurface, Rect(0,0,0,0), Rect(0,0,0,0), 255, 1);
@@ -297,7 +312,9 @@ void Play_Movie(char const * name, ThemeType theme, bool clrscrn_after, bool str
 			vqa->VQA->Set_Pause_On_Focus_Loss(false);
 		}
 
+		OPENTS_BROWSER_MOVIE_OPERATION(132);
 		Movie_Play(vqa, true, theme, false);
+		OPENTS_BROWSER_MOVIE_OPERATION(133);
 		Movie_Destroy(vqa);
 		delete vqa;
 

@@ -262,8 +262,10 @@ void AudioEngineClass::End(void)
 	for (int i = 0; i < AUDIO_MAX_STREAMS; i++) {
 		Streams[i].Producer.reset();
 		Streams[i].Handle.Clear();
+		Streams[i].RetiringHandle.Clear();
 		Streams[i].InUse = false;
 		Streams[i].External = false;
+		Streams[i].ReleasePending = false;
 	}
 	if (Device != nullptr) {
 		Device->Close();
@@ -390,6 +392,14 @@ void AudioEngineClass::Close_Stream(int slot)
 void AudioEngineClass::Reap_Streams(void)
 {
 	for (int i = 0; i < AUDIO_MAX_STREAMS; i++) {
+		if (Streams[i].InUse && Streams[i].External && Streams[i].ReleasePending
+			&& Pool.Is_Finished(Streams[i].RetiringHandle)) {
+			Streams[i].RetiringHandle.Clear();
+			Streams[i].ReleasePending = false;
+			Streams[i].External = false;
+			Streams[i].InUse = false;
+			continue;
+		}
 		if (Streams[i].InUse && !Streams[i].External && Pool.Is_Finished(Streams[i].Handle)) {
 			Close_Stream(i);
 		}
@@ -408,18 +418,30 @@ int AudioEngineClass::Acquire_Stream_Slot(AudioStreamClass ** stream)
 	}
 	Streams[slot].InUse = true;
 	Streams[slot].External = true;
+	Streams[slot].ReleasePending = false;
+	Streams[slot].RetiringHandle.Clear();
 	*stream = &Streams[slot].Stream;
 	return(slot);
 }
 
 
-void AudioEngineClass::Release_Stream_Slot(int slot)
+void AudioEngineClass::Release_Stream_Slot(int slot, AudioHandle retiringRenderer)
 {
 	if (slot < 0 || slot >= AUDIO_MAX_STREAMS || !Streams[slot].External) {
 		return;
 	}
+	if (!retiringRenderer.Is_Null() && !Pool.Is_Finished(retiringRenderer)) {
+		// A timed-out caller may release ownership while the render thread still
+		// holds the stream pointer. Keep this slot reserved until the voice reports
+		// its render-boundary completion through Pool.Is_Finished().
+		Streams[slot].RetiringHandle = retiringRenderer;
+		Streams[slot].ReleasePending = true;
+		return;
+	}
 	Streams[slot].External = false;
 	Streams[slot].InUse = false;
+	Streams[slot].ReleasePending = false;
+	Streams[slot].RetiringHandle.Clear();
 	Streams[slot].Handle.Clear();
 }
 

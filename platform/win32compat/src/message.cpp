@@ -27,6 +27,12 @@ static std::deque<MSG> _Queue;
 static bool _Quitting;
 static int _QuitCode;
 
+#ifdef OPENTS_TOUCH_TEST
+static HWND _Test_Main_Window;
+static bool _Test_Main_Window_Enabled;
+static WNDPROC _Test_Main_Window_Procedure;
+#endif
+
 struct Win32Timer
 {
 	HWND Window;
@@ -37,6 +43,17 @@ struct Win32Timer
 };
 
 static std::vector<Win32Timer> _Timers;
+
+
+static HWND Message_Main_Window(void)
+{
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Main_Window_Enabled) {
+		return(_Test_Main_Window);
+	}
+#endif
+	return(Win32_Main_Window());
+}
 
 #if defined(__EMSCRIPTEN__)
 static void Record_Browser_Finger_Event(SDL_Event const & event)
@@ -53,7 +70,7 @@ static void Record_Browser_Finger_Event(SDL_Event const & event)
 	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_LAST_TOUCH_DEVICE_TYPE,
 		(int)SDL_GetTouchDeviceType(event.tfinger.touchID));
 
-	Win32Window * const main = Win32_Lookup(Win32_Main_Window());
+	Win32Window * const main = Win32_Lookup(Message_Main_Window());
 	if (main == NULL || main->Handle == NULL) return;
 	int width = 0;
 	int height = 0;
@@ -135,7 +152,7 @@ static LPARAM Key_LParam(SDL_Scancode scancode, bool down)
 
 void Win32_Post_Pointer_Message(UINT message)
 {
-	HWND const main = Win32_Main_Window();
+	HWND const main = Message_Main_Window();
 
 	if (main == NULL) {
 		return;
@@ -149,9 +166,9 @@ void Win32_Post_Pointer_Message(UINT message)
 // a user taps or uses a runtime control. Re-enter the ordinary Win32 focus path
 // before delivering that first native input so GameInFocus and the game menu
 // transition together.
-static void Activate_Main_Window_From_Input(HWND main)
+static void Activate_Main_Window_From_Input(HWND main, bool force)
 {
-	if (main == NULL || GameInFocus) {
+	if (main == NULL || (!force && GameInFocus)) {
 		return;
 	}
 
@@ -165,12 +182,50 @@ static void Activate_Main_Window_From_Input(HWND main)
 }
 
 
+void Win32_Ensure_Input_Focus(void)
+{
+	Activate_Main_Window_From_Input(Message_Main_Window(), true);
+}
+
+
+bool Win32_Restore_Focus_For_Touch_Click(void)
+{
+	if (!Win32_Touch_Click_Pending()) {
+		return(false);
+	}
+
+	HWND const main = Message_Main_Window();
+	if (main == NULL) {
+		return(false);
+	}
+
+	Win32_Gamepad_Set_Focus(true);
+	if (!GameInFocus) {
+		// A later browser focus-loss event can be queued behind the synthesized click.
+		// Send the ordinary window messages now so the native selector observes focus
+		// before it evaluates the still-pending touch-derived mouse key.
+#if defined(__EMSCRIPTEN__)
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_TOUCH_FOCUS_RESTORES);
+#endif
+		SendMessage(main, WM_ACTIVATEAPP, TRUE, 0);
+#if defined(__EMSCRIPTEN__)
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_FOCUS_AFTER_TOUCH_ACTIVATION, GameInFocus ? 1 : 0);
+#endif
+		SendMessage(main, WM_SETFOCUS, 0, 0);
+#if defined(__EMSCRIPTEN__)
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_FOCUS_AFTER_TOUCH_SET_FOCUS, GameInFocus ? 1 : 0);
+#endif
+	}
+	return(GameInFocus);
+}
+
+
 extern SDL_Scancode Scancode_For_Virtual_Key(int key);
 
 
 void Win32_Post_Key_Message(int virtualkey, bool down)
 {
-	HWND const main = Win32_Main_Window();
+	HWND const main = Message_Main_Window();
 
 	if (main == NULL) {
 		return;
@@ -213,7 +268,7 @@ static void Translate_Event(SDL_Event const & event)
 			break;
 	}
 
-	HWND const main = Win32_Main_Window();
+	HWND const main = Message_Main_Window();
 
 	if (main == NULL) {
 		return;
@@ -298,7 +353,7 @@ static void Translate_Event(SDL_Event const & event)
 
 			bool const down = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
 			if (down) {
-				Activate_Main_Window_From_Input(main);
+				Activate_Main_Window_From_Input(main, false);
 			}
 			bool const doubled = down && event.button.clicks >= 2;
 			UINT message = 0;
@@ -352,7 +407,7 @@ static void Translate_Event(SDL_Event const & event)
 
 			bool const down = event.type == SDL_EVENT_KEY_DOWN;
 			if (down) {
-				Activate_Main_Window_From_Input(main);
+				Activate_Main_Window_From_Input(main, false);
 			}
 			bool const system = (event.key.mod & SDL_KMOD_ALT) != 0;
 			UINT const message = down
@@ -374,7 +429,7 @@ static void Translate_Event(SDL_Event const & event)
 			Record_Browser_Finger_Event(event);
 #endif
 			if (event.type == SDL_EVENT_FINGER_DOWN) {
-				Activate_Main_Window_From_Input(main);
+				Activate_Main_Window_From_Input(main, false);
 			}
 			Win32_Touch_Handle_Event(event);
 			break;
@@ -391,6 +446,42 @@ static void Translate_Event(SDL_Event const & event)
 			break;
 	}
 }
+
+
+#ifdef OPENTS_TOUCH_TEST
+void Win32_Message_Test_Reset(HWND main_window)
+{
+	_Queue.clear();
+	_Test_Main_Window = main_window;
+	_Test_Main_Window_Enabled = main_window != NULL;
+	_Test_Main_Window_Procedure = NULL;
+}
+
+
+void Win32_Message_Test_Set_Procedure(WNDPROC procedure)
+{
+	_Test_Main_Window_Procedure = procedure;
+}
+
+
+void Win32_Message_Test_Translate(SDL_Event const & event)
+{
+	Translate_Event(event);
+}
+
+
+bool Win32_Message_Test_Pop(MSG * msg)
+{
+	if (_Queue.empty()) {
+		return(false);
+	}
+	if (msg != NULL) {
+		*msg = _Queue.front();
+	}
+	_Queue.pop_front();
+	return(true);
+}
+#endif
 
 
 static void Service_Timers(void)
@@ -489,13 +580,36 @@ extern "C" LRESULT DispatchMessage(MSG const * msg)
 		return(0);
 	}
 
+	// Touch can cause a host focus-loss event to be consumed after the recognizer has
+	// queued this settled click. Use the recognizer's preserved origin rather than its
+	// current gesture flag, which is already cleared at finger-up.
+#if defined(__EMSCRIPTEN__)
+	if (msg->message == WM_LBUTTONDOWN) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_TOUCH_PENDING_AT_DISPATCH,
+			Win32_Touch_Click_Pending() ? 1 : 0);
+	}
+#endif
+	if (msg->message == WM_LBUTTONDOWN && Win32_Touch_Click_Pending()) {
+		Win32_Restore_Focus_For_Touch_Click();
+	}
+
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Main_Window_Enabled && msg->hwnd == _Test_Main_Window
+		&& _Test_Main_Window_Procedure != NULL) {
+		LRESULT const result = _Test_Main_Window_Procedure(
+			msg->hwnd, msg->message, msg->wParam, msg->lParam);
+		return(result);
+	}
+#endif
+
 	Win32Window * window = Win32_Lookup(msg->hwnd);
 
 	if (window == NULL || window->Procedure == NULL) {
 		return(0);
 	}
 
-	return(window->Procedure(msg->hwnd, msg->message, msg->wParam, msg->lParam));
+	LRESULT const result = window->Procedure(msg->hwnd, msg->message, msg->wParam, msg->lParam);
+	return(result);
 }
 
 
@@ -508,6 +622,13 @@ extern "C" BOOL PostMessage(HWND window, UINT message, WPARAM wparam, LPARAM lpa
 
 extern "C" LRESULT SendMessage(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Main_Window_Enabled && window == _Test_Main_Window
+		&& _Test_Main_Window_Procedure != NULL) {
+		return(_Test_Main_Window_Procedure(window, message, wparam, lparam));
+	}
+#endif
+
 	Win32Window * record = Win32_Lookup(window);
 
 	if (record == NULL || record->Procedure == NULL) {
@@ -522,7 +643,7 @@ extern "C" void PostQuitMessage(int code)
 {
 	_Quitting = true;
 	_QuitCode = code;
-	Win32_Post_Message(Win32_Main_Window(), WM_QUIT, (WPARAM)code, 0);
+	Win32_Post_Message(Message_Main_Window(), WM_QUIT, (WPARAM)code, 0);
 }
 
 

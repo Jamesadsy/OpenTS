@@ -57,6 +57,7 @@ double StepEntryMs = 0.0;
 double StepExitMs = 0.0;
 int LastStepResult = 0;
 char RequestedTheme[64] = {};
+char MainLoopScenarioName[64] = {};
 
 double Browser_Now_Ms(void) noexcept
 {
@@ -423,6 +424,17 @@ extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Telemetry_Value(in
 {
 	return(value >= 0 && value < OPENTS_TELEMETRY_VALUE_COUNT
 		? TelemetryValues[value].load(std::memory_order_relaxed) : 0);
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT void OpenTS_Browser_Telemetry_Set_MainLoop_Scenario_Name(char const * name)
+{
+	std::strncpy(MainLoopScenarioName, name != nullptr ? name : "", sizeof(MainLoopScenarioName) - 1);
+	MainLoopScenarioName[sizeof(MainLoopScenarioName) - 1] = '\0';
+}
+
+extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT char const * OpenTS_Browser_Telemetry_MainLoop_Scenario_Name(void)
+{
+	return(MainLoopScenarioName);
 }
 
 extern "C" OPENTS_BROWSER_TELEMETRY_EXPORT int OpenTS_Browser_Telemetry_Next_Event(void)

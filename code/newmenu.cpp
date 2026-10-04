@@ -266,6 +266,12 @@ NewMenuStepResult NewMenuSession::Step(void)
 				return(Result::Waiting);
 			}
 			PendingResult = Page->Presentation_Result();
+			if (CurrentPage == PageKind::TiberianSun || CurrentPage == PageKind::Firestorm) {
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_ITEM_ID, PendingResult);
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_RESULT_ID, PendingResult);
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT,
+					Menu != nullptr ? Menu->GameMode : -1);
+			}
 			if (!Page->Presentation_Finish()) return(Fault());
 			OwnedPage.reset();
 			Page = NULL;

@@ -95,7 +95,7 @@ class AudioEngineClass
 		// movie sink. The caller attaches to the feeder, starts the stream
 		// event, and gives the slot back once the event is finished.
 		int Acquire_Stream_Slot(AudioStreamClass ** stream);
-		void Release_Stream_Slot(int slot);
+		void Release_Stream_Slot(int slot, AudioHandle retiringRenderer = AudioHandle());
 
 		// Frames of output the device holds beyond what the mixer has rendered.
 		unsigned Device_Latency_Frames(void) const;
@@ -108,8 +108,10 @@ class AudioEngineClass
 			AudioStreamClass Stream;
 			std::unique_ptr<AudioFileStreamProducerClass> Producer;
 			AudioHandle Handle;
+			AudioHandle RetiringHandle;
 			bool InUse = false;
 			bool External = false;
+			bool ReleasePending = false;
 		};
 
 		static int Random_Proc(int low, int high, void * context);

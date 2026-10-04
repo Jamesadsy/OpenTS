@@ -170,11 +170,13 @@ void TestSelectGameStateAndTransitions(void)
 	Check(step.find("case SelectGamePhase::ChildModal") != std::string::npos
 		&& InOrder(step, {"m_Impl->Child->Step()", "UIModalStepResult::Active", "UIResult const child_result", "UI_Campaign_Selection_Result", "m_Impl->Child->Finish()", "Campaign = result.Campaign", "Difficulty = result.Difficulty"}),
 		"campaign child result and chosen difficulty are consumed only after a resumed terminal child Step");
+	std::string const return_to_product_menu = ExtractBlock(step, "auto return_to_product_menu =");
 	Check(step.find("CampaignOutcome = SelectGameCampaignOutcome::Cancelled") != std::string::npos
-		&& InOrder(step, {"CampaignOutcome = SelectGameCampaignOutcome::Cancelled", "Process = true", "Selection = SEL_NONE", "Phase = SelectGamePhase::MainMenu"})
+		&& step.find("return(return_to_product_menu())") != std::string::npos
+		&& InOrder(return_to_product_menu, {"Process = true", "Selection = SEL_NONE", "Phase = SelectGamePhase::MainMenu", "AtIterationStart = true"})
 		&& step.find("Selection == SEL_EXIT") != std::string::npos
 		&& step.find("Phase = SelectGamePhase::Exit") != std::string::npos,
-		"menu and campaign cancel return to the menu while exit reaches the native exit outcome");
+		"campaign cancel and invalid campaign return to the selected-product menu while Exit stays explicit");
 	Check(step.find("UI_Campaign_Commit_Difficulty(result, Options.Difficulty)") != std::string::npos
 		&& step.find("WaitDeadlineMs = (std::uint32_t)(TickCount + 5 * TIMER_SECOND)") != std::string::npos
 		&& campaign.find("UI_Campaign_Selection_Result") != std::string::npos,

@@ -66,6 +66,7 @@
 
 #include "bench.hh"
 #include "special.hh"
+#include "browsertelemetry.h"
 
 #include <algorithm>
 
@@ -299,7 +300,13 @@ static bool Run_Main_Loop_Frame(void)
 	Call_Back();
 
 	bool done = false;
-	if (PlayerWins || PlayerLoses || PlayerRestarts || PlayerAborts) {
+	int const result_flags = (PlayerWins ? 1 : 0) | (PlayerLoses ? 2 : 0)
+		| (PlayerRestarts ? 4 : 0) | (PlayerAborts ? 8 : 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_LAST_RESULT_FLAGS, result_flags);
+	if (result_flags != 0) {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MAIN_LOOP_NATIVE_RESULT_FLAGS_OBSERVED);
+	}
+	if (result_flags != 0) {
 		Unlock_Scenario_Input();
 
 		/*
@@ -414,7 +421,24 @@ static bool MainLoop_Focus_Ready(void *)
 
 static bool MainLoop_Run_Frame(void *)
 {
-	return(Run_Main_Loop_Frame());
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MAIN_LOOP_NATIVE_FRAME_ENTRIES);
+	int const frame_at_entry = Frame;
+	if (OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_ACTIVE) == 0) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_ACTIVE, 1);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_NATIVE_FRAME_ENTRY_FRAME, frame_at_entry);
+	}
+	bool const done = Run_Main_Loop_Frame();
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MAIN_LOOP_NATIVE_FRAME_RETURNS);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_LAST_GAME_ACTIVE, GameActive ? 1 : 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_LAST_SCENARIO_ACTIVE, ScenarioActive ? 1 : 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_LAST_TACTICAL_ACTIVE, TacticalActive ? 1 : 0);
+	if (OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_ACTIVE) == 1
+		&& OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_NATIVE_FRAME_RETURN_FRAME) < 0) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_NATIVE_FRAME_RETURN_FRAME, Frame);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_SCENARIO_ACTIVE_AFTER_FIRST_FRAME, ScenarioActive ? 1 : 0);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_TACTICAL_ACTIVE_AFTER_FIRST_FRAME, TacticalActive ? 1 : 0);
+	}
+	return(done);
 }
 
 

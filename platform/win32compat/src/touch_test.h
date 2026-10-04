@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <windows.h>
 #include <SDL3/SDL.h>
 
 // Private deterministic hooks used only by the owner-data-free G3 touch contract. They
@@ -20,3 +21,8 @@ void Win32_Touch_Test_Set_Direct_Device(bool direct);
 void Win32_Touch_Test_Set_Now(Uint64 now);
 unsigned int Win32_Touch_Test_Button_Down_Count(void);
 unsigned int Win32_Touch_Test_Button_Up_Count(void);
+void Win32_Message_Test_Reset(HWND main_window);
+void Win32_Message_Test_Set_Procedure(WNDPROC procedure);
+void Win32_Message_Test_Translate(SDL_Event const & event);
+bool Win32_Message_Test_Pop(MSG * message);
+void Win32_Window_Test_Set_Pixel_Density(float density);

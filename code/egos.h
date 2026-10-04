@@ -40,6 +40,9 @@
 
 #include "dialog.hh"
 
+#include <cstdint>
+#include <memory>
+
 class Surface;
 
 class EgoClass {
@@ -61,3 +64,26 @@ class EgoClass {
 };
 
 void Show_Who_Was_Responsible(void);
+
+enum class CreditsStepResult : std::uint8_t {
+	Waiting,
+	Complete,
+	Fault,
+};
+
+class CreditsSession
+{
+	public:
+		CreditsSession(void);
+		~CreditsSession(void);
+		CreditsSession(CreditsSession const &) = delete;
+		CreditsSession & operator=(CreditsSession const &) = delete;
+
+		bool Begin(void);
+		CreditsStepResult Step(void);
+		bool Finish(void);
+
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> m_Impl;
+};

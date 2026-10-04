@@ -23,6 +23,11 @@ static std::unordered_map<std::string, WNDPROC> _Classes;
 static HWND _MainWindow;
 static SDL_MetalView _MetalView;
 
+#ifdef OPENTS_TOUCH_TEST
+static bool _Test_Pixel_Density_Enabled;
+static float _Test_Pixel_Density;
+#endif
+
 
 Win32Window * Win32_Lookup(HWND window)
 {
@@ -63,6 +68,11 @@ WNDPROC Win32_Class_Procedure(char const * name)
 // before creation the display mode is the only available estimate.
 float Win32_Pixel_Density(void)
 {
+#ifdef OPENTS_TOUCH_TEST
+	if (_Test_Pixel_Density_Enabled) {
+		return(_Test_Pixel_Density);
+	}
+#endif
 	SDL_DisplayID display = SDL_GetPrimaryDisplay();
 	Win32Window * main = Win32_Lookup(_MainWindow);
 
@@ -82,6 +92,15 @@ float Win32_Pixel_Density(void)
 
 	return(mode->pixel_density);
 }
+
+
+#ifdef OPENTS_TOUCH_TEST
+void Win32_Window_Test_Set_Pixel_Density(float density)
+{
+	_Test_Pixel_Density_Enabled = density > 0.0f;
+	_Test_Pixel_Density = density;
+}
+#endif
 
 
 extern "C" ATOM RegisterClass(WNDCLASS const * cls)

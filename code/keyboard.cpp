@@ -58,6 +58,10 @@
 #include "msgloop.h"
 #include "vidscale.h"
 
+#ifndef _WIN32
+void Win32_Touch_Click_Consumed(void);
+#endif
+
 #include <cmath>
 
 
@@ -119,6 +123,11 @@ unsigned short WWKeyboardClass::Buff_Get(void)
 		MouseQY = Fetch_Element();
 		MousePos = Point2D(MouseQX, MouseQY);
 	}
+#ifndef _WIN32
+	if (temp == KN_LMOUSE) {
+		Win32_Touch_Click_Consumed();
+	}
+#endif
 	return(temp);
 }
 
@@ -589,6 +598,9 @@ void WWKeyboardClass::Clear(void)
 	*/
 	Fill_Buffer_From_System();
 	Head = Tail;
+#ifndef _WIN32
+	Win32_Touch_Click_Consumed();
+#endif
 }
 
 

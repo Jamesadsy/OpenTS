@@ -57,6 +57,8 @@
 #include "always.h"
 
 #include "init.h"
+#include "initgamesession.h"
+#include "browsertelemetry.h"
 
 #ifdef __EMSCRIPTEN__
 extern "C" void OpenTS_Browser_Startup_Reach_OwnerData_Boundary(void);
@@ -66,6 +68,10 @@ extern "C" int OpenTS_126_Storage_Is_Ready(void);
 extern "C" int OpenTS_126_Data_Probe(void);
 extern "C" void OpenTS_Browser_Startup_Record_Bootstrap_Mixfiles(void);
 extern "C" void OpenTS_Browser_Startup_Record_Secondary_Mixfiles(void);
+extern "C" void OpenTS_Browser_Startup_Record_Operation(int operation);
+#define OPENTS_BROWSER_STARTUP_OPERATION(operation) OpenTS_Browser_Startup_Record_Operation(operation)
+#else
+#define OPENTS_BROWSER_STARTUP_OPERATION(operation) ((void)0)
 #endif
 
 #include "_bench.h"
@@ -172,6 +178,7 @@ extern "C" void OpenTS_Browser_Startup_Record_Secondary_Mixfiles(void);
 #include "savemgr.h"
 #include "savever.h"
 #include "scenario.h"
+#include "scenariostart.h"
 #include "scheme.h"
 #include "script.h"
 #include "session.h"
@@ -211,6 +218,8 @@ extern "C" void OpenTS_Browser_Startup_Record_Secondary_Mixfiles(void);
 #include "ui/uicampaign.h"
 #include "ui/uimainoptions.h"
 #include "ui/uimainmenu.h"
+#include "ui/uisavebrowser.h"
+#include "ui/uiskirmish.h"
 #include "ui/uifrontendcontinuation.h"
 
 #include <algorithm>
@@ -343,8 +352,11 @@ static bool Read_INI_And_Expansion(CCINIClass & ini, char const * basename, char
  * HISTORY:                                                                                    *
  *   10/07/1992 JLB : Created.                                                                 *
  *=============================================================================================*/
-int Init_Game(int , char * [])
+static int Init_Game_Before_Movies(void)
 {
+#ifdef __EMSCRIPTEN__
+	OpenTS_Browser_Startup_Record_Operation(100);
+#endif
 	DebugString("Init Game\n");
 	Scen = new ScenarioClass;
 
@@ -374,6 +386,7 @@ int Init_Game(int , char * [])
 	*/
 	DebugString("Init Encryption Keys.\n");
 
+	OPENTS_BROWSER_STARTUP_OPERATION(101);
 	Init_Keys();
 
 	/*
@@ -383,6 +396,7 @@ int Init_Game(int , char * [])
 	*/
 	DebugString("Bootstrap.....");
 
+	OPENTS_BROWSER_STARTUP_OPERATION(102);
 	if (!Bootstrap()) {
 		DebugStringNoPrefix(" ..Failed to bootstrap!\n");
 		return(-1);
@@ -396,6 +410,7 @@ int Init_Game(int , char * [])
 	*/
 	DebugString("Init Mouse\n");
 
+	OPENTS_BROWSER_STARTUP_OPERATION(103);
 	Init_Mouse();
 
 	/*
@@ -403,6 +418,7 @@ int Init_Game(int , char * [])
 	*/
 	DebugString("Init Secondary Mixfiles.....");
 
+	OPENTS_BROWSER_STARTUP_OPERATION(104);
 	if (!Init_Secondary_Mixfiles()) {
 		DebugStringNoPrefix(" ...Failed!!!\n");
 		return(-1);
@@ -414,15 +430,18 @@ int Init_Game(int , char * [])
 	DebugStringNoPrefix(" ...OK\n");
 
 	DebugString("Init Campaigns\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(105);
 	Init_Campaigns();
 
 	/*
 	**	Initialize the game object heaps as well as other rules-dependant buffer allocations.
 	*/
 	DebugString("Init Heaps\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(106);
 	Init_Heaps();
 
 	DebugString("Init Threads\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(107);
 	Init_Threads();
 
 	/*
@@ -430,6 +449,7 @@ int Init_Game(int , char * [])
 	**	dialogs are invoked. (GameSpeed must be synchronized between systems.)
 	*/
 	DebugString("Reading Game Settings\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(108);
 	Options.Load_Settings();
 	SaveManager.Autosave.Set_Interval(Options.AutoSaveInterval);
 
@@ -442,28 +462,46 @@ int Init_Game(int , char * [])
 	**	Initialize the animation system.
 	*/
 	DebugString("Init Anim System\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(109);
 	Anim_Init();
+	return(0);
+}
+
+
+static void Init_Game_Movies(void)
+{
 
 	/*
 	**	Play the startup animation.
 	*/
+	OPENTS_BROWSER_STARTUP_OPERATION(110);
 	if (!Spawner_Is_Requested()) {
 		if (Special.IsFromInstall == true) {
 			DebugString("Playing first time intro sequence.\n");
+			OPENTS_BROWSER_STARTUP_OPERATION(111);
 			Play_Movie("EVA.VQA", THEME_NONE, false);
 		}
 
 		DebugString("Playing startup movies.\n");
+		OPENTS_BROWSER_STARTUP_OPERATION(112);
 		Play_Movie("WWLOGO.VQA", THEME_NONE);
 		if (!Get_New_Menu()->MixFile) {
 			if (CCFileClass("FS_TITLE.VQA").Is_Available() == true) {
+				OPENTS_BROWSER_STARTUP_OPERATION(113);
 				Play_Movie("FS_TITLE.VQA", THEME_NONE, false);
 			} else {
+				OPENTS_BROWSER_STARTUP_OPERATION(114);
 				Play_Movie("STARTUP.VQA", THEME_NONE, false);
 			}
 		}
 	}
 
+}
+
+
+static int Init_Game_After_Movies(void)
+{
+	OPENTS_BROWSER_STARTUP_OPERATION(115);
 	Draw_Menu_Background();
 	Call_Back();
 
@@ -471,6 +509,7 @@ int Init_Game(int , char * [])
 	**	Initialize the text remap tables.
 	*/
 	DebugString("Init Color Remap Tables\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(116);
 	Init_Color_Remaps();
 
 	/*
@@ -497,6 +536,7 @@ int Init_Game(int , char * [])
 	*/
 	DebugString("Init Bulk Data\n");
 
+	OPENTS_BROWSER_STARTUP_OPERATION(117);
 	if (!Init_Bulk_Data()) {
 		return(-1);
 	}
@@ -525,15 +565,18 @@ int Init_Game(int , char * [])
 	*/
 	DebugString("Init Rules\n");
 
+	OPENTS_BROWSER_STARTUP_OPERATION(118);
 	if (!Init_Rules()) {
 		DebugString("Failed to initialize Rules!\n");
 		return(-1);
 	}
 
 	// A map names its theater before anything else about it is read.
+	OPENTS_BROWSER_STARTUP_OPERATION(119);
 	Prepare_Theater_Roster();
 
 	// A score's Side= names a side the rules declare, so the roster is built before the scores are read.
+	OPENTS_BROWSER_STARTUP_OPERATION(120);
 	Prepare_Side_Roster();
 
 	DebugString("Reading %s\n", DeploymentConfig.ThemeFile.c_str());
@@ -547,6 +590,7 @@ int Init_Game(int , char * [])
 	Theme.Free_Themes();
 	Theme.Init_Themes(theme_ini);
 	Theme.Scan();
+	OPENTS_BROWSER_STARTUP_OPERATION(121);
 
 	Session.MaxPlayers = Rule->MaxPlayers;
 
@@ -582,12 +626,80 @@ int Init_Game(int , char * [])
 	Init_Random();
 
 	DebugString("Init Commands\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(122);
 	Init_Commands();
 
 	DebugString("Game Init Completed.\n");
+	OPENTS_BROWSER_STARTUP_OPERATION(123);
 
 	return(0);
 }
+
+
+int Init_Game(int, char **)
+{
+	if (Init_Game_Before_Movies() != 0) return(-1);
+	Init_Game_Movies();
+	return(Init_Game_After_Movies());
+}
+
+
+#ifdef __EMSCRIPTEN__
+namespace
+{
+	InitGameSession BrowserInitialization;
+	std::unique_ptr<TitleMovieSession> BrowserStartupMovie;
+}
+
+int Init_Game_Browser_Begin(void)
+{
+	InitGameSessionOps ops;
+	ops.Prepare = [](void *) { return(Init_Game_Before_Movies()); };
+	ops.BeginMovie = [](void *, unsigned index) {
+		char const * name = nullptr;
+		if (!Spawner_Is_Requested()) {
+			if (index == 0 && Special.IsFromInstall) {
+				OPENTS_BROWSER_STARTUP_OPERATION(111);
+				name = "EVA.VQA";
+			} else if (index == 1) {
+				OPENTS_BROWSER_STARTUP_OPERATION(112);
+				name = "WWLOGO.VQA";
+			} else if (index == 2 && !Get_New_Menu()->MixFile) {
+				bool const expansion = CCFileClass("FS_TITLE.VQA").Is_Available();
+				OPENTS_BROWSER_STARTUP_OPERATION(expansion ? 113 : 114);
+				name = expansion ? "FS_TITLE.VQA" : "STARTUP.VQA";
+			}
+		}
+		if (name == nullptr) return(InitGameStepResult::Complete);
+		BrowserStartupMovie = std::make_unique<TitleMovieSession>();
+		return(BrowserStartupMovie->Begin(name, THEME_NONE, index == 1, true, true)
+			? InitGameStepResult::Waiting : InitGameStepResult::Fault);
+	};
+	ops.StepMovie = [](void *) {
+		if (!BrowserStartupMovie) return(InitGameStepResult::Complete);
+		TitleMovieStepResult const result = BrowserStartupMovie->Step();
+		return(result == TitleMovieStepResult::Waiting ? InitGameStepResult::Waiting
+			: result == TitleMovieStepResult::Complete ? InitGameStepResult::Complete : InitGameStepResult::Fault);
+	};
+	ops.FinishMovie = [](void *) { BrowserStartupMovie.reset(); };
+	ops.Complete = [](void *) {
+		OPENTS_BROWSER_STARTUP_OPERATION(187);
+		return(Init_Game_After_Movies());
+	};
+	return(BrowserInitialization.Begin(ops) ? 0 : -1);
+}
+
+int Init_Game_Browser_Step(void)
+{
+	InitGameStepResult const result = BrowserInitialization.Step();
+	return(result == InitGameStepResult::Waiting ? 0 : result == InitGameStepResult::Complete ? 1 : -1);
+}
+
+void Init_Game_Browser_Finish(void)
+{
+	BrowserInitialization.Finish();
+}
+#endif
 
 
 /// <summary>
@@ -752,6 +864,7 @@ static bool Init_Rules(void)
 	DynamicVectorClass<CCINIClass*> Rules;
 
 	bool found = false;
+	OPENTS_BROWSER_STARTUP_OPERATION(170);
 
 	for (std::string const & name : Search_Files("RULE*.INI")) {
 		CCFileClass file(name.c_str());
@@ -782,6 +895,7 @@ static bool Init_Rules(void)
 
 	CCFileClass art_file(DeploymentConfig.ArtFile.c_str());
 
+	OPENTS_BROWSER_STARTUP_OPERATION(171);
 	if (!ArtINI.Load(art_file, false)) {
 		DebugString("Failed to load %s!\n", DeploymentConfig.ArtFile.c_str());
 		return(false);
@@ -808,6 +922,7 @@ static bool Init_Rules(void)
 	if (Rules.Count() == 1) {
 		RuleINI = Rules[0];
 	} else {
+		OPENTS_BROWSER_STARTUP_OPERATION(172);
 		MouseCursor->Release_Mouse();
 		int rules_choice = DialogBoxParam(ProgramInstance, MAKEINTRESOURCE(IDD_RULES_CHOICE), MainWindow, Rules_Choice_Dialog_Proc, (LPARAM)&Rules);
 		MouseCursor->Capture_Mouse();
@@ -819,6 +934,7 @@ static bool Init_Rules(void)
 		RuleINI = Rules[rules_choice];
 	}
 
+	OPENTS_BROWSER_STARTUP_OPERATION(173);
 	Rule->Color_Schemes(*RuleINI);
 	Rule->Do_Movies(ArtINI);
 	Rule->Do_Movies(art_ini);
@@ -891,6 +1007,106 @@ static void Draw_Title_Screen(void);
 static void Seed_Crypto_Random(void);
 
 
+class SelectGameLoadOptionsClass : public LoadOptionsClass
+{
+	public:
+		void Prepare_Load_Browser(void)
+		{
+			Style = LOAD;
+			Description = nullptr;
+			State = STATE_PENDING;
+		}
+};
+
+
+enum ProductMenuChildKind
+{
+	PRODUCT_MENU_CHILD_NONE = 0,
+	PRODUCT_MENU_CHILD_CAMPAIGN = 1,
+	PRODUCT_MENU_CHILD_OPTIONS = 2,
+	PRODUCT_MENU_CHILD_VERSION = 3,
+	PRODUCT_MENU_CHILD_LOAD = 4,
+	PRODUCT_MENU_CHILD_SKIRMISH = 5,
+	PRODUCT_MENU_CHILD_INTRO = 6,
+	PRODUCT_MENU_CHILD_CREDITS = 7,
+};
+
+
+static void Record_Product_Menu_Child(int kind, SelectGamePhase phase)
+{
+	OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_CREATED);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_KIND, kind);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_PHASE, (int)phase);
+	int const action_sequence = OpenTS_Browser_Telemetry_Value(
+		OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_ACTION_SEQUENCE,
+		action_sequence);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_BEFORE_CHILD,
+		OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_AFTER_CHILD,
+		OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)phase);
+	DebugString("[UI] Product-menu child created: action=%d kind=%d parentPhase=%d product=%d.\n",
+		action_sequence, kind, (int)phase,
+		OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT));
+}
+
+
+static void Begin_Product_Menu_Action_Diagnostics(int selected_product)
+{
+	int action_sequence = OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE) + 1;
+	if (action_sequence <= 0) action_sequence = 1;
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE, action_sequence);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_ACTION_SEQUENCE, 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_COMPLETED_SEQUENCE, 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_BEFORE, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_AFTER, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_RESULT, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_RESULT_OUTCOME, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_KIND, PRODUCT_MENU_CHILD_NONE);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_PHASE, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_BEFORE_CHILD, selected_product);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_AFTER_CHILD, selected_product);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)SelectGamePhase::NewMenuChild);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEPS_BASELINE,
+		OpenTS_Browser_Telemetry_Counter(OPENTS_TELEMETRY_COOPERATIVE_CHILD_STEPS));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_COMPLETED_BASELINE,
+		OpenTS_Browser_Telemetry_Counter(OPENTS_TELEMETRY_COOPERATIVE_CHILD_COMPLETED));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CALLER_CONTINUATIONS_BASELINE,
+		OpenTS_Browser_Telemetry_Counter(OPENTS_TELEMETRY_CALLER_CONTINUATIONS));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CAMPAIGN_PHASES_BASELINE,
+		OpenTS_Browser_Telemetry_Counter(OPENTS_TELEMETRY_CAMPAIGN_PREPARATION_PHASES));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_MAIN_LOOP_HANDOFFS_BASELINE,
+		OpenTS_Browser_Telemetry_Counter(OPENTS_TELEMETRY_MAIN_LOOP_HANDOFFS));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_ACTUAL_EXITS_BASELINE,
+		OpenTS_Browser_Telemetry_Counter(OPENTS_TELEMETRY_ACTUAL_EXIT));
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_CAMPAIGN_SELECTION_OUTCOME, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_CAMPAIGN_SELECTION_RESULT, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_SCENARIO_PREPARATION_ENTRY, 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_SCENARIO_PREPARATION_RESULT, -1);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE,
+		OPENTS_UI_PREPARE_FAILURE_NONE);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_CAMPAIGN_PREPARATION_PHASE,
+		OPENTS_PRODUCT_MENU_CAMPAIGN_NONE);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_HANDOFF, 0);
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PROCESS_COMPLETION_KIND,
+		OPENTS_PRODUCT_MENU_COMPLETION_IN_PROGRESS);
+	DebugString("[UI] Product-menu action dispatched: sequence=%d product=%d.\n",
+		action_sequence, selected_product);
+}
+
+
+static void Record_Product_Menu_Campaign_Phase(int phase, char const * reason)
+{
+	int const previous = OpenTS_Browser_Telemetry_Value(
+		OPENTS_TELEMETRY_CAMPAIGN_PREPARATION_PHASE);
+	if (previous == phase) return;
+	OpenTS_Browser_Telemetry_Record_Campaign_Phase(phase);
+	DebugString("[UI] Campaign preparation phase %d -> %d (%s).\n",
+		previous, phase, reason != nullptr ? reason : "unspecified");
+}
+
+
 struct SelectGameSession::Impl
 {
 	enum class ChildType : std::uint8_t {
@@ -899,10 +1115,17 @@ struct SelectGameSession::Impl
 		Campaign,
 		MainOptions,
 		Version,
+		Load,
+		Skirmish,
 	};
 
 	std::unique_ptr<UIFrontendContinuation> Child;
 	std::unique_ptr<NewMenuSession> NewMenu;
+	std::unique_ptr<SelectGameLoadOptionsClass> LoadOptions;
+	std::unique_ptr<UISaveBrowserPresenterClass> LoadPresenter;
+	std::unique_ptr<UISkirmishPresenterClass> SkirmishPresenter;
+	std::unique_ptr<TitleMovieSession> SelectionMovie;
+	std::unique_ptr<CreditsSession> Credits;
 	UIMainMenuPresenterClass MainMenuPresenter;
 	UICampaignPresenterClass CampaignPresenter;
 	UIMainOptionsPresenterClass MainOptionsPresenter;
@@ -915,6 +1138,9 @@ struct SelectGameSession::Impl
 	bool TitleMediaAvailable = false;
 	bool TitleMediaCompletedNaturally = false;
 	bool TitleMediaSkipped = false;
+	bool IntroMovieOptionCleared = false;
+	int IntroMovieStage = 0;
+	int SelectedProduct = -1;
 };
 
 
@@ -944,6 +1170,20 @@ void SelectGameSession::Reset(void)
 		m_Impl->Child->Finish();
 		m_Impl->Child.reset();
 	}
+	if (m_Impl->SelectionMovie != nullptr) {
+		m_Impl->SelectionMovie->Finish();
+		m_Impl->SelectionMovie.reset();
+	}
+	if (m_Impl->Credits != nullptr) {
+		m_Impl->Credits->Finish();
+		m_Impl->Credits.reset();
+	}
+	m_Impl->LoadPresenter.reset();
+	m_Impl->LoadOptions.reset();
+	if (m_Impl->SkirmishPresenter != nullptr) {
+		m_Impl->SkirmishPresenter->End();
+		m_Impl->SkirmishPresenter.reset();
+	}
 	GameLoaded = false;
 	Selection = SEL_NONE;
 	Process = true;
@@ -960,6 +1200,9 @@ void SelectGameSession::Reset(void)
 	m_Impl->TitleMediaAvailable = false;
 	m_Impl->TitleMediaCompletedNaturally = false;
 	m_Impl->TitleMediaSkipped = false;
+	m_Impl->IntroMovieOptionCleared = false;
+	m_Impl->IntroMovieStage = 0;
+	m_Impl->SelectedProduct = -1;
 }
 
 
@@ -1020,7 +1263,7 @@ int SelectGameSession::Browser_Menu_State(void) const
 
 int SelectGameSession::Selected_Product(void) const
 {
-	return(m_Impl->NewMenu != nullptr ? m_Impl->NewMenu->Selected_Product() : -1);
+	return(m_Impl->NewMenu != nullptr ? m_Impl->NewMenu->Selected_Product() : m_Impl->SelectedProduct);
 }
 
 
@@ -1032,18 +1275,21 @@ bool SelectGameSession::Product_Menu_Ready(void) const
 
 SelectGameStepResult SelectGameSession::Step(void)
 {
+	auto fail_step = [this]() -> SelectGameStepResult {
+		Phase = SelectGamePhase::Fault;
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+		return(SelectGameStepResult::Fault);
+	};
 	auto begin_campaign = [this]() -> SelectGameStepResult {
+		Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_CAMPAIGN_REQUESTED, "campaign result dispatched");
 		new (&Environment) EnvironmentClass;
 		if (Campaigns.Count() == 0) {
 			Init_Campaigns();
 			if (Campaigns.Count() == 0) {
-				CampaignOutcome = SelectGameCampaignOutcome::PresentationFailure;
-				DebugString("[UI] Campaign selection unavailable: no campaigns were loaded.\n");
-				Theme.Stop(true);
-				Process = false;
-				Phase = SelectGamePhase::Exit;
-				m_Impl->ImmediateExit = true;
-				return(SelectGameStepResult::Exited);
+				CampaignOutcome = SelectGameCampaignOutcome::Unavailable;
+				Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_CAMPAIGNS_UNAVAILABLE,
+					"native campaign list unavailable");
+				DebugString("[UI] Campaign selection has no available campaigns; keeping the native selector active.\n");
 			}
 		}
 
@@ -1051,10 +1297,31 @@ SelectGameStepResult SelectGameSession::Step(void)
 		m_Impl->CampaignPresenter.IsClosing = false;
 		m_Impl->CampaignPresenter.Choice = UICampaignPresenterClass::CHOICE_NONE;
 		m_Impl->CampaignPresenter.Refresh();
+		if (m_Impl->CampaignPresenter.Campaigns.empty()) {
+			CampaignOutcome = SelectGameCampaignOutcome::Unavailable;
+			Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_CAMPAIGNS_UNAVAILABLE,
+				"campaign presenter has no entries");
+		}
 		m_Impl->Child = UI_Campaign_Screen_Continuation(
 			m_Impl->CampaignPresenter, m_Impl->NativeBlockingAdapter);
 		m_Impl->ActiveChild = Impl::ChildType::Campaign;
 		Phase = SelectGamePhase::ChildModal;
+		if (!m_Impl->CampaignPresenter.Campaigns.empty()) {
+			Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_CAMPAIGN_SELECTOR_OPEN,
+				"native campaign selector created");
+		}
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_CAMPAIGN, Phase);
+		return(SelectGameStepResult::Waiting);
+	};
+	auto return_to_product_menu = [this]() -> SelectGameStepResult {
+		OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+		Process = true;
+		Selection = SEL_NONE;
+		Phase = SelectGamePhase::MainMenu;
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_AFTER_CHILD,
+			m_Impl->SelectedProduct);
+		m_Impl->AtIterationStart = true;
 		return(SelectGameStepResult::Waiting);
 	};
 	auto begin_main_menu = [this]() -> SelectGameStepResult {
@@ -1072,6 +1339,7 @@ SelectGameStepResult SelectGameSession::Step(void)
 		}
 		m_Impl->ActiveChild = Impl::ChildType::MainMenu;
 		Phase = SelectGamePhase::ChildModal;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_NONE, Phase);
 		return(SelectGameStepResult::Waiting);
 	};
 	auto begin_options = [this]() -> SelectGameStepResult {
@@ -1085,6 +1353,7 @@ SelectGameStepResult SelectGameSession::Step(void)
 		}
 		m_Impl->ActiveChild = Impl::ChildType::MainOptions;
 		Phase = SelectGamePhase::ChildModal;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_OPTIONS, Phase);
 		return(SelectGameStepResult::Waiting);
 	};
 	auto begin_version = [this]() -> SelectGameStepResult {
@@ -1095,16 +1364,93 @@ SelectGameStepResult SelectGameSession::Step(void)
 		}
 		m_Impl->ActiveChild = Impl::ChildType::Version;
 		Phase = SelectGamePhase::ChildModal;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_VERSION, Phase);
+		return(SelectGameStepResult::Waiting);
+	};
+	auto begin_load = [this]() -> SelectGameStepResult {
+		m_Impl->LoadOptions = std::make_unique<SelectGameLoadOptionsClass>();
+		m_Impl->LoadOptions->Prepare_Load_Browser();
+		m_Impl->LoadPresenter = std::make_unique<UISaveBrowserPresenterClass>(
+			*m_Impl->LoadOptions, UISaveBrowserPresenterClass::STYLE_LOAD);
+		if (!m_Impl->LoadPresenter->Can_Open()) {
+			m_Impl->LoadPresenter.reset();
+			m_Impl->LoadOptions.reset();
+			Selection = SEL_NONE;
+			Phase = SelectGamePhase::MainMenu;
+			m_Impl->AtIterationStart = true;
+			return(SelectGameStepResult::Waiting);
+		}
+		m_Impl->LoadPresenter->Refresh();
+		m_Impl->Child = UI_Save_Browser_Screen_Continuation(
+			*m_Impl->LoadPresenter, m_Impl->NativeBlockingAdapter);
+		if (m_Impl->Child == nullptr) {
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		m_Impl->ActiveChild = Impl::ChildType::Load;
+		Phase = SelectGamePhase::ChildModal;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_LOAD, Phase);
+		return(SelectGameStepResult::Waiting);
+	};
+	auto begin_skirmish = [this]() -> SelectGameStepResult {
+		Session.Read_MultiPlayer_Settings();
+		Prepare_Side_Roster();
+		Session.Suspended = false;
+		Hide_Mouse();
+		Draw_Menu_Background();
+		Show_Mouse();
+		m_Impl->SkirmishPresenter = std::make_unique<UISkirmishPresenterClass>();
+		m_Impl->SkirmishPresenter->Refresh();
+		m_Impl->Child = UI_Skirmish_Screen_Continuation(
+			*m_Impl->SkirmishPresenter, m_Impl->NativeBlockingAdapter);
+		if (m_Impl->Child == nullptr) {
+			m_Impl->SkirmishPresenter->End();
+			m_Impl->SkirmishPresenter.reset();
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		m_Impl->ActiveChild = Impl::ChildType::Skirmish;
+		Phase = SelectGamePhase::ChildModal;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_SKIRMISH, Phase);
+		return(SelectGameStepResult::Waiting);
+	};
+	auto begin_intro = [this]() -> SelectGameStepResult {
+		Theme.Stop();
+		m_Impl->SelectionMovie = std::make_unique<TitleMovieSession>();
+		std::string const name = Select_Side_Intro_Movie(0);
+		if (!m_Impl->SelectionMovie->Begin(name.c_str(), THEME_NONE, true, true, true)) {
+			m_Impl->SelectionMovie.reset();
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		m_Impl->IntroMovieStage = 0;
+		Phase = SelectGamePhase::IntroMovie;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_INTRO, Phase);
+		return(SelectGameStepResult::Waiting);
+	};
+	auto begin_credits = [this]() -> SelectGameStepResult {
+		m_Impl->Credits = std::make_unique<CreditsSession>();
+		if (!m_Impl->Credits->Begin()) {
+			m_Impl->Credits.reset();
+			Phase = SelectGamePhase::Fault;
+			return(SelectGameStepResult::Fault);
+		}
+		Phase = SelectGamePhase::Credits;
+		Record_Product_Menu_Child(PRODUCT_MENU_CHILD_CREDITS, Phase);
 		return(SelectGameStepResult::Waiting);
 	};
 
-	auto dispatch_selection = [this, &begin_campaign, &begin_main_menu, &begin_options, &begin_version]() -> SelectGameStepResult {
+	auto dispatch_selection = [this, &begin_campaign, &begin_main_menu, &begin_options,
+		&begin_version, &begin_load, &begin_skirmish, &begin_intro, &begin_credits]() -> SelectGameStepResult {
 		if (!Process) {
 			Phase = SelectGamePhase::ReadyForGameplay;
 			return(SelectGameStepResult::ReadyForGameplay);
 		}
 		if (Selection == SEL_CAMPAIGN_GAME) return(begin_campaign());
 		if (Selection == SEL_EXIT) {
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_ACTUAL_EXIT);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PROCESS_COMPLETION_KIND,
+				OPENTS_PRODUCT_MENU_COMPLETION_EXPLICIT_EXIT);
 			Theme.Stop(true);
 			WaitDeadlineMs = (std::uint32_t)(TickCount + 50 * TIMER_SECOND);
 			Phase = SelectGamePhase::Exit;
@@ -1118,24 +1464,12 @@ SelectGameStepResult SelectGameSession::Step(void)
 		if (!m_Impl->NativeBlockingAdapter) {
 			if (Selection == SEL_OPTIONS) return(begin_options());
 			if (Selection == SEL_VERSION) return(begin_version());
-			if (Selection == SEL_LOAD_GAME) {
-				m_Impl->LaterBoundary = SelectGameLaterBoundary::Load;
-				Phase = SelectGamePhase::LaterBoundary;
-				return(SelectGameStepResult::LaterBoundary);
-			}
-			if (Selection == SEL_INTRO) {
-				m_Impl->LaterBoundary = SelectGameLaterBoundary::Intro;
-				Phase = SelectGamePhase::LaterBoundary;
-				return(SelectGameStepResult::LaterBoundary);
-			}
-			if (Selection == SEL_VIEW_CREDITS) {
-				m_Impl->LaterBoundary = SelectGameLaterBoundary::Credits;
-				Phase = SelectGamePhase::LaterBoundary;
-				return(SelectGameStepResult::LaterBoundary);
-			}
+			if (Selection == SEL_LOAD_GAME) return(begin_load());
+			if (Selection == SEL_INTRO) return(begin_intro());
+			if (Selection == SEL_VIEW_CREDITS) return(begin_credits());
+			if (Selection == SEL_MULTIPLAYER_GAME && Session.Type == GAME_SKIRMISH) return(begin_skirmish());
 			if (Selection == SEL_MULTIPLAYER_GAME) {
 				if (Session.Type == GAME_IPX) m_Impl->LaterBoundary = SelectGameLaterBoundary::Lan;
-				else if (Session.Type == GAME_SKIRMISH) m_Impl->LaterBoundary = SelectGameLaterBoundary::Skirmish;
 				else if (Session.Type == GAME_INTERNET) m_Impl->LaterBoundary = SelectGameLaterBoundary::Online;
 				if (m_Impl->LaterBoundary != SelectGameLaterBoundary::None) {
 					Phase = SelectGamePhase::LaterBoundary;
@@ -1266,6 +1600,9 @@ SelectGameStepResult SelectGameSession::Step(void)
 			}
 
 			int const menu_selection = m_Impl->NewMenu->Result();
+			m_Impl->SelectedProduct = m_Impl->NewMenu->Selected_Product();
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT,
+				m_Impl->SelectedProduct);
 			m_Impl->TitleMediaAvailable = m_Impl->NewMenu->TitleMediaAvailable();
 			m_Impl->TitleMediaCompletedNaturally = m_Impl->NewMenu->TitleMediaCompletedNaturally();
 			m_Impl->TitleMediaSkipped = m_Impl->NewMenu->TitleMediaSkipped();
@@ -1276,25 +1613,74 @@ SelectGameStepResult SelectGameSession::Step(void)
 			m_Impl->NewMenu.reset();
 			if (menu_selection == NSEL_OLD_MENU) return(begin_main_menu());
 			Selection = New_Main_Menu_Apply_Result(menu_selection, m_Impl->NativeBlockingAdapter);
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_PRODUCT_MENU_ACTIONS_CONSUMED);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_HANDLER, Selection);
+			Begin_Product_Menu_Action_Diagnostics(m_Impl->SelectedProduct);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_KIND,
+				PRODUCT_MENU_CHILD_NONE);
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
 			return(dispatch_selection());
 		}
 
 		case SelectGamePhase::ChildModal: {
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_STEPS);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_PHASE, (int)Phase);
+			int const previous_child_step = OpenTS_Browser_Telemetry_Value(
+				OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_AFTER);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_BEFORE,
+				previous_child_step);
 			if (m_Impl->Child == nullptr) {
 				Phase = SelectGamePhase::Fault;
 				return(SelectGameStepResult::Fault);
 			}
 			OpenTS_UIModal::UIModalStepResult const child_step = m_Impl->Child->Step();
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_RESULT,
+				(int)child_step);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_STEP_AFTER,
+				(int)child_step);
+			if (previous_child_step != (int)child_step) {
+				DebugString("[UI] Product-menu child step changed: action=%d kind=%d result=%d -> %d parentPhase=%d.\n",
+					OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE),
+					OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_KIND),
+					previous_child_step, (int)child_step, (int)Phase);
+			}
 			if (child_step == OpenTS_UIModal::UIModalStepResult::Active
-				|| child_step == OpenTS_UIModal::UIModalStepResult::Waiting) {
+				|| child_step == OpenTS_UIModal::UIModalStepResult::Waiting
+				|| child_step == OpenTS_UIModal::UIModalStepResult::Suspended) {
 				return(SelectGameStepResult::Waiting);
 			}
 			if (child_step == OpenTS_UIModal::UIModalStepResult::Fault) {
 				Phase = SelectGamePhase::Fault;
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
 				return(SelectGameStepResult::Fault);
 			}
 
 			UIResult const child_result = m_Impl->Child->Result();
+			int const child_action_sequence = OpenTS_Browser_Telemetry_Value(
+				OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_ACTION_SEQUENCE);
+			int const action_sequence = OpenTS_Browser_Telemetry_Value(
+				OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_RESULT_OUTCOME,
+				(int)child_result.Outcome);
+			if (child_action_sequence != action_sequence) {
+				Phase = SelectGamePhase::Fault;
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+				DebugString("[UI] Stale product-menu child completion ignored: childAction=%d currentAction=%d.\n",
+					child_action_sequence, action_sequence);
+				return(SelectGameStepResult::Fault);
+			}
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_COMPLETED_SEQUENCE,
+				child_action_sequence);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_AFTER_CHILD,
+				m_Impl->SelectedProduct);
+			DebugString("[UI] Product-menu child terminal: action=%d kind=%d step=%d outcome=%d uiPrepareFailure=%d product=%d.\n",
+				action_sequence,
+				OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_KIND),
+				(int)child_step,
+				(int)child_result.Outcome,
+				OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE),
+				m_Impl->SelectedProduct);
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_COMPLETED);
 			if (m_Impl->ActiveChild == Impl::ChildType::MainMenu) {
 				if (child_result.Outcome == UIResult::OUTCOME_SESSION_ENDED) {
 					m_Impl->MainMenuPresenter.Choice = UIMainMenuPresenterClass::CHOICE_EXIT;
@@ -1309,6 +1695,7 @@ SelectGameStepResult SelectGameSession::Step(void)
 				Seed_Crypto_Random();
 				SetFocus(MainWindow);
 				Call_Back();
+				OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
 				return(dispatch_selection());
 			}
 
@@ -1322,6 +1709,66 @@ SelectGameStepResult SelectGameSession::Step(void)
 				m_Impl->ActiveChild = Impl::ChildType::None;
 				Selection = SEL_NONE;
 				Phase = SelectGamePhase::MainMenu;
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+				m_Impl->AtIterationStart = true;
+				OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+				return(SelectGameStepResult::Waiting);
+			}
+
+			if (m_Impl->ActiveChild == Impl::ChildType::Load) {
+				bool const accepted = child_result.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+					&& m_Impl->LoadPresenter != nullptr && m_Impl->LoadPresenter->Accepted();
+				if (!m_Impl->Child->Finish()) {
+					Phase = SelectGamePhase::Fault;
+					return(SelectGameStepResult::Fault);
+				}
+				m_Impl->Child.reset();
+				m_Impl->LoadPresenter.reset();
+				if (m_Impl->LoadOptions != nullptr) {
+					m_Impl->LoadOptions->State = accepted
+						? LoadOptionsClass::STATE_OK : LoadOptionsClass::STATE_CLOSE;
+				}
+				m_Impl->LoadOptions.reset();
+				m_Impl->ActiveChild = Impl::ChildType::None;
+				OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+				if (accepted) {
+					GameLoaded = true;
+					Process = false;
+					Theme.Stop(true);
+					Phase = SelectGamePhase::ScenarioPrepare;
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+					return(SelectGameStepResult::NativeChild);
+				}
+				Selection = SEL_NONE;
+				Phase = SelectGamePhase::MainMenu;
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+				m_Impl->AtIterationStart = true;
+				return(SelectGameStepResult::Waiting);
+			}
+
+			if (m_Impl->ActiveChild == Impl::ChildType::Skirmish) {
+				bool const accepted = child_result.Outcome != UIResult::OUTCOME_FAILED_TO_OPEN
+					&& m_Impl->SkirmishPresenter != nullptr && m_Impl->SkirmishPresenter->Accepted();
+				if (!m_Impl->Child->Finish()) {
+					Phase = SelectGamePhase::Fault;
+					return(SelectGameStepResult::Fault);
+				}
+				m_Impl->Child.reset();
+				m_Impl->SkirmishPresenter->End();
+				m_Impl->SkirmishPresenter.reset();
+				m_Impl->ActiveChild = Impl::ChildType::None;
+				OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+				if (accepted) {
+					Theme.Stop(true);
+					Process = false;
+					Phase = SelectGamePhase::ScenarioPrepare;
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+					return(SelectGameStepResult::NativeChild);
+				}
+				Session.Type = GAME_NORMAL;
+				Selection = SEL_NONE;
+				Phase = SelectGamePhase::MainMenu;
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
 				m_Impl->AtIterationStart = true;
 				return(SelectGameStepResult::Waiting);
 			}
@@ -1339,32 +1786,35 @@ SelectGameStepResult SelectGameSession::Step(void)
 				m_Impl->ActiveChild = Impl::ChildType::None;
 				Campaign = result.Campaign;
 				Difficulty = result.Difficulty;
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_CAMPAIGN_SELECTION_OUTCOME,
+					(int)result.Outcome);
+				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_CAMPAIGN_SELECTION_RESULT,
+					result.Campaign);
 				switch (result.Outcome) {
-					case UICampaignSelectionOutcome::CANCELLED:
-						CampaignOutcome = SelectGameCampaignOutcome::Cancelled;
-						Process = true;
-						Selection = SEL_NONE;
-						Phase = SelectGamePhase::MainMenu;
-						m_Impl->AtIterationStart = true;
-						return(SelectGameStepResult::Waiting);
+				case UICampaignSelectionOutcome::CANCELLED:
+					CampaignOutcome = SelectGameCampaignOutcome::Cancelled;
+					return(return_to_product_menu());
 
-					case UICampaignSelectionOutcome::PRESENTATION_FAILURE:
-						CampaignOutcome = SelectGameCampaignOutcome::PresentationFailure;
-						DebugString("[UI] Campaign presentation failed to open; ending selection attempt.\n");
-						Theme.Stop(true);
-						Process = false;
-						Phase = SelectGamePhase::Exit;
-						m_Impl->ImmediateExit = true;
-						return(SelectGameStepResult::Exited);
+				case UICampaignSelectionOutcome::PRESENTATION_FAILURE:
+					CampaignOutcome = SelectGameCampaignOutcome::PresentationFailure;
+					Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_CAMPAIGN_SELECTOR_FAILED,
+						child_result.Outcome == UIResult::OUTCOME_FAILED_TO_OPEN
+							? "native campaign RML view failed to open" : "native campaign selection result was invalid");
+					DebugString("[UI] Campaign presentation failed; returning to the selected product menu.\n");
+					return(return_to_product_menu());
 
-					case UICampaignSelectionOutcome::ACCEPTED:
-						CampaignOutcome = SelectGameCampaignOutcome::Accepted;
-						Scen->Campaign = (CampaignType)result.Campaign;
-						UI_Campaign_Commit_Difficulty(result, Options.Difficulty);
-						Theme.Stop(true);
-						WaitDeadlineMs = (std::uint32_t)(TickCount + 5 * TIMER_SECOND);
-						Phase = SelectGamePhase::ThemeDrain;
-						return(SelectGameStepResult::Waiting);
+				case UICampaignSelectionOutcome::ACCEPTED:
+					CampaignOutcome = SelectGameCampaignOutcome::Accepted;
+					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+					Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_CAMPAIGN_SELECTED,
+						"native campaign selection accepted");
+					Scen->Campaign = (CampaignType)result.Campaign;
+					UI_Campaign_Commit_Difficulty(result, Options.Difficulty);
+					Theme.Stop(true);
+					WaitDeadlineMs = (std::uint32_t)(TickCount + 5 * TIMER_SECOND);
+					Phase = SelectGamePhase::ThemeDrain;
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+					return(SelectGameStepResult::Waiting);
 				}
 			}
 
@@ -1381,6 +1831,8 @@ SelectGameStepResult SelectGameSession::Step(void)
 			Session.Type = GAME_NORMAL;
 			Process = false;
 			Phase = SelectGamePhase::ScenarioPrepare;
+			Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_SCENARIO_PREPARATION_STARTED,
+				"campaign theme drain completed; native scenario preparation begins");
 			return(SelectGameStepResult::NativeChild);
 
 		case SelectGamePhase::Exit:
@@ -1400,22 +1852,293 @@ SelectGameStepResult SelectGameSession::Step(void)
 			return(SelectGameStepResult::LaterBoundary);
 
 		case SelectGamePhase::ScenarioPrepare:
+			if (CampaignOutcome == SelectGameCampaignOutcome::Accepted) {
+				Record_Product_Menu_Campaign_Phase(OPENTS_PRODUCT_MENU_SCENARIO_PREPARATION_RUNNING,
+					"native scenario preparation is being stepped");
+			}
 			return(SelectGameStepResult::NativeChild);
 
 		case SelectGamePhase::ReadyForGameplay:
 			return(SelectGameStepResult::ReadyForGameplay);
 
-		case SelectGamePhase::IntroMovie:
 		case SelectGamePhase::ScenarioChild:
 		case SelectGamePhase::ConnectionSetup:
 		case SelectGamePhase::InitialPresentation:
 		case SelectGamePhase::Fault:
 			return(SelectGameStepResult::Fault);
+
+		case SelectGamePhase::IntroMovie: {
+			if (m_Impl->SelectionMovie == nullptr) return(fail_step());
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_STEPS);
+			TitleMovieStepResult const result = m_Impl->SelectionMovie->Step();
+			if (result == TitleMovieStepResult::Waiting) return(SelectGameStepResult::Waiting);
+			if (result == TitleMovieStepResult::Fault) {
+				if (m_Impl->IntroMovieOptionCleared) {
+					Set_Option(OPTION_PLAY_FROM_MIXFILE);
+					m_Impl->IntroMovieOptionCleared = false;
+				}
+				Phase = SelectGamePhase::Fault;
+				return(SelectGameStepResult::Fault);
+			}
+			if (!m_Impl->SelectionMovie->Finish()) return(fail_step());
+			m_Impl->SelectionMovie.reset();
+			if (m_Impl->IntroMovieStage == 0) {
+				Clear_Option(OPTION_PLAY_FROM_MIXFILE);
+				m_Impl->IntroMovieOptionCleared = true;
+				m_Impl->SelectionMovie = std::make_unique<TitleMovieSession>();
+				if (!m_Impl->SelectionMovie->Begin("SIZZLE1.VQA", THEME_NONE, true, true, true)) {
+					Set_Option(OPTION_PLAY_FROM_MIXFILE);
+					m_Impl->IntroMovieOptionCleared = false;
+					Phase = SelectGamePhase::Fault;
+					return(SelectGameStepResult::Fault);
+				}
+				m_Impl->IntroMovieStage = 1;
+				return(SelectGameStepResult::Waiting);
+			}
+			if (m_Impl->IntroMovieOptionCleared) {
+				Set_Option(OPTION_PLAY_FROM_MIXFILE);
+				m_Impl->IntroMovieOptionCleared = false;
+			}
+			Theme.Queue_Song(Fetch_Main_Menu_Theme());
+			m_Impl->IntroMovieStage = 0;
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_COMPLETED);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_COMPLETED_SEQUENCE,
+				OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE));
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_RESULT_OUTCOME,
+				(int)UIResult::OUTCOME_ACCEPTED);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_AFTER_CHILD,
+				m_Impl->SelectedProduct);
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+			Selection = SEL_NONE;
+			Phase = SelectGamePhase::MainMenu;
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+			m_Impl->AtIterationStart = true;
+			return(SelectGameStepResult::Waiting);
+		}
+
+		case SelectGamePhase::Credits: {
+			if (m_Impl->Credits == nullptr) return(fail_step());
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_STEPS);
+			CreditsStepResult const result = m_Impl->Credits->Step();
+			if (result == CreditsStepResult::Waiting) return(SelectGameStepResult::Waiting);
+			if (result == CreditsStepResult::Fault) return(fail_step());
+			if (!m_Impl->Credits->Finish()) return(fail_step());
+			m_Impl->Credits.reset();
+			Theme.Queue_Song(Fetch_Main_Menu_Theme());
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_COOPERATIVE_CHILD_COMPLETED);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_COMPLETED_SEQUENCE,
+				OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_PRODUCT_MENU_ACTION_SEQUENCE));
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_CHILD_RESULT_OUTCOME,
+				(int)UIResult::OUTCOME_ACCEPTED);
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_SELECTED_PRODUCT_AFTER_CHILD,
+				m_Impl->SelectedProduct);
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_CALLER_CONTINUATIONS);
+			Selection = SEL_NONE;
+			Phase = SelectGamePhase::MainMenu;
+			OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_PRODUCT_MENU_PARENT_PHASE, (int)Phase);
+			m_Impl->AtIterationStart = true;
+			return(SelectGameStepResult::Waiting);
+		}
 	}
 
 	Phase = SelectGamePhase::Fault;
 	return(SelectGameStepResult::Fault);
 }
+
+
+static void Select_Game_Reset_For_Scenario(void)
+{
+	/*
+	**	Don't carry stray keystrokes into game.
+	*/
+	Keyboard->Clear();
+	SaveManager.Reset_Multiplayer_Save_State();
+
+	/*
+	**	Initialize the random number generator(s)
+	*/
+	Init_Random();
+
+}
+
+static void Select_Game_Before_Scenario(int selection)
+{
+	SaveManager.Clear_Manual_Save_Identity();
+	DebugString("About to load a %d player game.\n",Session.Players.Count());
+
+	/*
+	**	Start_Scenario() changes the palette; so, fade out & clear the screen
+	**	before calling it.
+	*/
+	Hide_Mouse();
+
+	if (selection != SEL_CAMPAIGN_GAME) {
+		HiddenSurface->Fill(0);
+		Update_Visible_Surface(HiddenSurface);
+	}
+
+	Show_Mouse();
+
+	if (Session.Type != GAME_NORMAL) {
+		Session.PlayerHouse = (HousesType)Session.Players[0]->Player.House;
+	}
+
+	// The menu sets the difficulty pair on every path but a client launch, which chose it.
+	if (!Spawner_Is_Active()) {
+		Session.CampaignDifficulty = (DiffType)Options.Difficulty;
+		Session.CampaignCDifficulty = (DiffType)(DIFF_COUNT - 1 - Options.Difficulty);
+	}
+
+}
+
+static void Select_Game_After_Scenario(void)
+{
+	// The mission read clears these, so a launch file's carried-over flags are set after it.
+	if (Spawner_Is_Active() && Session.Type == GAME_NORMAL) {
+		for (int index = 0; index < ARRAY_SIZE(Environment.Globals); index++) {
+			Scen->Set_Global_To(index, Environment.Globals[index]);
+		}
+	}
+
+	/*
+	**	Save initialization values if we're recording this game.
+	*/
+	if (Session.Record) {
+		if (Session.RecordFile.Open(FileClass::WRITE)) {
+			Save_Recording_Values(Session.RecordFile);
+		} else {
+			Session.Record = false;
+		}
+	}
+
+	if (Special.IsFromInstall == true) {
+		Show_Mouse();
+	}
+
+	Special.IsFromInstall = false;
+}
+
+static void Select_Game_Initial_Presentation(bool gameloaded)
+{
+	DebugString("IsTGrowth = %d\n", Special.IsTGrowth);
+	DebugString("IsTSpread = %d\n", Special.IsTSpread);
+
+	if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && !Session.Play) {
+		Session.Create_Connections();
+		Spawner_Announce_Master();
+		SaveManager.Multiplayer_Saves_Begin_Match(gameloaded || Session.LoadGame);
+
+		if (Session.Type == GAME_IPX) {
+			Ipx.Set_Timing(std::max<unsigned>(TIMER_SECOND / 4, Ipx.Global_Response_Time() + 2), (unsigned int) -1, 10 * TIMER_SECOND);
+
+			Ipx.Set_External_Timing(std::max<unsigned>(TIMER_SECOND, Ipx.Global_Response_Time() + 2), (unsigned int) -1, 10 * TIMER_SECOND);
+		} else {
+			if (Session.Type == GAME_INTERNET) {
+
+				Ipx.Set_Timing(std::max<unsigned>(TIMER_SECOND, Ipx.Global_Response_Time() + 2), (unsigned int) -1, 10 * TIMER_SECOND);
+			}
+		}
+	}
+
+	/*
+	**	Hide the SeenPage; force the map to render one frame.  The caller can
+	**	then fade the palette in.
+	**	(If we loaded a game, this step will fade out the title screen.  If we
+	**	started a scenario, Start_Scenario() will have played a couple of VQ
+	**	movies, which will have cleared the screen to black already.)
+	*/
+	Call_Back();
+	Hide_Mouse();
+
+	HiddenSurface->Fill(0);
+	Update_Visible_Surface(HiddenSurface);
+	Show_Mouse();
+	LogicalSurface = HiddenSurface;
+	Map.Override_Mouse_Shape(MOUSE_NO_MOVE);
+	Map.Revert_Mouse_Shape();
+
+	/*
+	**	Sidebar is always active in hi-res.
+	*/
+	if (!Debug_Map) {
+		Map.Activate(1);
+	}
+
+	Map.Flag_To_Redraw();
+	Call_Back();
+
+	Hide_Mouse();
+
+}
+
+#ifdef __EMSCRIPTEN__
+namespace
+{
+	struct BrowserPreparationState
+	{
+		int Phase = 0;
+		int Selection = 0;
+		bool GameLoaded = false;
+		std::unique_ptr<ScenarioStartSession> Scenario;
+	};
+	BrowserPreparationState BrowserPreparation;
+}
+
+bool Select_Game_Browser_Prepare_Begin(SelectGameSession const & selection)
+{
+	if (BrowserPreparation.Scenario) return(false);
+	BrowserPreparation = BrowserPreparationState{};
+	BrowserPreparation.Selection = selection.Selection;
+	BrowserPreparation.GameLoaded = selection.GameLoaded;
+	return(Session.Type == GAME_NORMAL || Session.Type == GAME_SKIRMISH);
+}
+
+int Select_Game_Browser_Prepare_Step(void)
+{
+	auto & state = BrowserPreparation;
+	switch (state.Phase) {
+		case 0:
+			OPENTS_BROWSER_STARTUP_OPERATION(188);
+			Select_Game_Reset_For_Scenario();
+			state.Phase = 3;
+			if (!state.GameLoaded && !Session.LoadGame) {
+				Select_Game_Before_Scenario(state.Selection);
+				bool const direct = Session.Type != GAME_NORMAL || Debug_ForceScenario || Session.Play || Spawner_Is_Active();
+				CampaignType const campaign = direct && !Spawner_Is_Active() ? CAMPAIGN_NONE : Scen->Campaign;
+				char const * name = direct ? Scen->ScenarioName : Campaigns[campaign]->ScenarioName;
+				state.Scenario = std::make_unique<ScenarioStartSession>();
+				if (!state.Scenario->Begin(name, true, campaign)) return(-1);
+				state.Phase = 1;
+			}
+			return(0);
+		case 1: {
+			OPENTS_BROWSER_STARTUP_OPERATION(189);
+			int const result = state.Scenario->Step();
+			if (result <= 0) return(result);
+			state.Scenario.reset();
+			state.Phase = 2;
+			return(0);
+		}
+		case 2:
+			Select_Game_After_Scenario();
+			state.Phase = 3;
+			return(0);
+		case 3:
+			OPENTS_BROWSER_STARTUP_OPERATION(190);
+			Select_Game_Initial_Presentation(state.GameLoaded);
+			Main_Game_Prepare_Gameplay();
+			state.Phase = 4;
+			return(1);
+		case 4: return(1);
+		default: return(-1);
+	}
+}
+
+void Select_Game_Browser_Prepare_Finish(void)
+{
+	BrowserPreparation.Scenario.reset();
+}
+#endif
 
 
 bool Select_Game(bool fade)
@@ -1622,46 +2345,13 @@ bool Select_Game(bool fade)
 			select_game.Complete_Native_Child(process, selection, gameloaded);
 		}
 
-	/*
-	**	Don't carry stray keystrokes into game.
-	*/
-	Keyboard->Clear();
-	SaveManager.Reset_Multiplayer_Save_State();
-
-	/*
-	**	Initialize the random number generator(s)
-	*/
-	Init_Random();
+	Select_Game_Reset_For_Scenario();
 
 	/*
 	**	Load the scenario.
 	*/
 	if (!gameloaded && !Session.LoadGame) {
-		SaveManager.Clear_Manual_Save_Identity();
-		DebugString("About to load a %d player game.\n",Session.Players.Count());
-
-		/*
-		**	Start_Scenario() changes the palette; so, fade out & clear the screen
-		**	before calling it.
-		*/
-		Hide_Mouse();
-
-		if (selection != SEL_CAMPAIGN_GAME) {
-			HiddenSurface->Fill(0);
-			Update_Visible_Surface(HiddenSurface);
-		}
-
-		Show_Mouse();
-
-		if (Session.Type != GAME_NORMAL) {
-			Session.PlayerHouse = (HousesType)Session.Players[0]->Player.House;
-		}
-
-		// The menu sets the difficulty pair on every path but a client launch, which chose it.
-		if (!Spawner_Is_Active()) {
-			Session.CampaignDifficulty = (DiffType)Options.Difficulty;
-			Session.CampaignCDifficulty = (DiffType)(DIFF_COUNT - 1 - Options.Difficulty);
-		}
+		Select_Game_Before_Scenario(selection);
 
 		if (Session.Type != GAME_NORMAL || Debug_ForceScenario || Session.Play || Spawner_Is_Active()) {
 			if (!Start_Scenario(Scen->ScenarioName, true, Spawner_Is_Active() ? Scen->Campaign : CAMPAIGN_NONE)) {
@@ -1683,79 +2373,11 @@ bool Select_Game(bool fade)
 			}
 		}
 
-		// The mission read clears these, so a launch file's carried-over flags are set after it.
-		if (Spawner_Is_Active() && Session.Type == GAME_NORMAL) {
-			for (int index = 0; index < ARRAY_SIZE(Environment.Globals); index++) {
-				Scen->Set_Global_To(index, Environment.Globals[index]);
-			}
-		}
+		Select_Game_After_Scenario();
 
-		/*
-		**	Save initialization values if we're recording this game.
-		*/
-		if (Session.Record) {
-			if (Session.RecordFile.Open(FileClass::WRITE)) {
-				Save_Recording_Values(Session.RecordFile);
-			} else {
-				Session.Record = false;
-			}
-		}
-
-		if (Special.IsFromInstall == true) {
-			Show_Mouse();
-		}
-
-		Special.IsFromInstall = false;
 	}
 
-	DebugString("IsTGrowth = %d\n", Special.IsTGrowth);
-	DebugString("IsTSpread = %d\n", Special.IsTSpread);
-
-	if (Session.Type != GAME_NORMAL && Session.Type != GAME_SKIRMISH && !Session.Play) {
-		Session.Create_Connections();
-		Spawner_Announce_Master();
-		SaveManager.Multiplayer_Saves_Begin_Match(gameloaded || Session.LoadGame);
-
-		if (Session.Type == GAME_IPX) {
-			Ipx.Set_Timing(std::max<unsigned>(TIMER_SECOND / 4, Ipx.Global_Response_Time() + 2), (unsigned int) -1, 10 * TIMER_SECOND);
-
-			Ipx.Set_External_Timing(std::max<unsigned>(TIMER_SECOND, Ipx.Global_Response_Time() + 2), (unsigned int) -1, 10 * TIMER_SECOND);
-		} else {
-			if (Session.Type == GAME_INTERNET) {
-
-				Ipx.Set_Timing(std::max<unsigned>(TIMER_SECOND, Ipx.Global_Response_Time() + 2), (unsigned int) -1, 10 * TIMER_SECOND);
-			}
-		}
-	}
-
-	/*
-	**	Hide the SeenPage; force the map to render one frame.  The caller can
-	**	then fade the palette in.
-	**	(If we loaded a game, this step will fade out the title screen.  If we
-	**	started a scenario, Start_Scenario() will have played a couple of VQ
-	**	movies, which will have cleared the screen to black already.)
-	*/
-	Call_Back();
-	Hide_Mouse();
-
-	HiddenSurface->Fill(0);
-	Update_Visible_Surface(HiddenSurface);
-	Show_Mouse();
-	LogicalSurface = HiddenSurface;
-	Map.Override_Mouse_Shape(MOUSE_NO_MOVE);
-	Map.Revert_Mouse_Shape();
-
-	/*
-	**	Sidebar is always active in hi-res.
-	*/
-	if (!Debug_Map) {
-		Map.Activate(1);
-	}
-
-	Map.Flag_To_Redraw();
-	Call_Back();
-
-	Hide_Mouse();
+	Select_Game_Initial_Presentation(gameloaded);
 
 	return(true);
 	}
@@ -2801,6 +3423,7 @@ static bool Init_Secondary_Mixfiles(void)
  *=============================================================================================*/
 static bool Bootstrap(void)
 {
+	OPENTS_BROWSER_STARTUP_OPERATION(140);
 	/*
 	**	Process the message loop until we are in focus. We need to be in focus to read pixels from
 	**	the screen.
@@ -2823,6 +3446,7 @@ static bool Bootstrap(void)
 
 #ifdef __EMSCRIPTEN__
 	if (OpenTS_126_Storage_Is_Ready()) {
+		OPENTS_BROWSER_STARTUP_OPERATION(141);
 		if (!OpenTS_126_Data_Probe()) return(false);
 		OpenTS_Browser_Startup_Reach_OwnerData_Boundary();
 	} else {
@@ -2839,6 +3463,7 @@ static bool Bootstrap(void)
 	**	process further initialization.
 	*/
 
+	OPENTS_BROWSER_STARTUP_OPERATION(142);
 	if (!Init_Bootstrap_Mixfiles()) {
 		DebugString("Failed to initialize bootstrap mixfiles!\n");
 		return(false);
@@ -2850,6 +3475,7 @@ static bool Bootstrap(void)
 	/*
 	**	Initialize the resident font pointers.
 	*/
+	OPENTS_BROWSER_STARTUP_OPERATION(143);
 	if (!Init_Fonts()) {
 		DebugString("Failed to initialize fonts!\n");
 		return(false);
@@ -2870,6 +3496,7 @@ static bool Bootstrap(void)
 	/*
 	 * House specific scheme palette initialization.
 	 */
+	OPENTS_BROWSER_STARTUP_OPERATION(144);
 	Read_Palette(SchemePalette, DeploymentConfig.SchemePaletteFile.c_str());
 
 	/*
@@ -2886,6 +3513,7 @@ static bool Bootstrap(void)
 	/*
 	 * Voxel system initialization.
 	 */
+	OPENTS_BROWSER_STARTUP_OPERATION(145);
 	CCFileClass vplfile("voxels.vpl");
 	int vplres = VoxelDrawSystem::Load_VPL_File(vplfile);
 	assert(vplres == 0);
@@ -2905,6 +3533,7 @@ static bool Bootstrap(void)
 	/*
 	 * Drawer system initialization.
 	 */
+	OPENTS_BROWSER_STARTUP_OPERATION(146);
 	TerrainDrawer = new ConvertClass(GamePalette, GamePalette, *VisibleSurface, NUM_INTENSITY_LEVELS);
 
 	PaletteClass pal = BlackPalette;
@@ -2930,7 +3559,9 @@ static bool Bootstrap(void)
 	**	Initialize expansion files (if present). Expansion files must be located
 	**	in the current directory.
 	*/
+	OPENTS_BROWSER_STARTUP_OPERATION(147);
 	Init_Expansion_Files();
+	OPENTS_BROWSER_STARTUP_OPERATION(148);
 
 	return(true);
 }
@@ -2953,6 +3584,7 @@ static bool Bootstrap(void)
  *=============================================================================================*/
 void Init_Mouse(void)
 {
+	OPENTS_BROWSER_STARTUP_OPERATION(150);
 	/*
 	**	Since there is no mouse shape currently available we need
 	**	to set one of our own.
@@ -2965,6 +3597,7 @@ void Init_Mouse(void)
 	ShapeSet const * temp_mouse_shapes = (ShapeSet const *)MFCD::Retrieve("MOUSE.SHP");
 
 	if (temp_mouse_shapes) {
+		OPENTS_BROWSER_STARTUP_OPERATION(151);
 		Hide_Mouse();
 		Point2D pt = Point2D(0, 0);
 		Set_Mouse_Cursor(pt, temp_mouse_shapes, 0);
@@ -2976,8 +3609,10 @@ void Init_Mouse(void)
 	}
 
 	Map.Set_Default_Mouse(MOUSE_NORMAL, false);
+	OPENTS_BROWSER_STARTUP_OPERATION(152);
 	//Show_Mouse();
 	while (Get_Mouse_State() < 0) Show_Mouse();
+	OPENTS_BROWSER_STARTUP_OPERATION(153);
 	Call_Back();
 	Hide_Mouse();
 }
@@ -3000,6 +3635,7 @@ void Init_Mouse(void)
  *=============================================================================================*/
 static bool Init_Bulk_Data(void)
 {
+	OPENTS_BROWSER_STARTUP_OPERATION(160);
 	/*
 	**	Cache the main game data. This operation can take a very long time.
 	*/
@@ -3008,14 +3644,17 @@ static bool Init_Bulk_Data(void)
 	}
 
 	if (AudioEngine.Is_Available() && !Debug_Quiet) {
+		OPENTS_BROWSER_STARTUP_OPERATION(161);
 		if (SoundsMix != NULL && !SoundsMix->Cache()) {
 			return(false);
 		}
+		OPENTS_BROWSER_STARTUP_OPERATION(162);
 		if (Sounds01Mix != NULL && !Sounds01Mix->Cache()) {
 			return(false);
 		}
 	}
 
+	OPENTS_BROWSER_STARTUP_OPERATION(163);
 	Call_Back();
 
 	/*
@@ -3029,6 +3668,7 @@ static bool Init_Bulk_Data(void)
 	/*
 	**	Perform one-time game system initializations.
 	*/
+	OPENTS_BROWSER_STARTUP_OPERATION(164);
 	return(Init_One_Time_Systems());
 }
 
@@ -6667,49 +7307,28 @@ int New_Main_Menu(void)
 
 int New_Main_Menu_Apply_Result(int selection, bool prepare_native_multiplayer)
 {
-	switch (selection) {
-		case NSEL_START_NEW_GAME:
-			return(SEL_CAMPAIGN_GAME);
-
-		case NSEL_LOAD_MISSION:
-			return(SEL_LOAD_GAME);
-
-		case NSEL_LAN:
+	ProductMenuAction const action = Resolve_Product_Menu_Action(selection);
+	if (action == ProductMenuAction::Lan) {
 			Session.Type = GAME_IPX;
-			break;
-
-		case NSEL_SKIRMISH:
+	} else if (action == ProductMenuAction::Skirmish) {
 			Session.Type = GAME_SKIRMISH;
-			break;
-
-		case NSEL_OPTIONS:
-			return(SEL_OPTIONS);
-
-		case NSEL_INTRO:
-			return(SEL_INTRO);
-
-		case NSEL_VERSION:
-			return(SEL_VERSION);
-
-		case NSEL_VIEW_CREDITS:
-			return(SEL_VIEW_CREDITS);
-
-		case NSEL_EXIT:
-			return(SEL_EXIT);
-
-		default:
-			break;
 	}
 
-	if (Session.Type != GAME_NORMAL) {
+	if (action != ProductMenuAction::Lan && action != ProductMenuAction::Skirmish) {
+		// Online keeps its native result ID in telemetry and returns to the menu. The
+		// cooperative browser path has no online/network implementation to enter.
+		return(Product_Menu_Selection(action));
+	}
+
+	if (Session.Type == GAME_IPX || Session.Type == GAME_SKIRMISH) {
 		if (prepare_native_multiplayer) {
 			Session.Read_MultiPlayer_Settings();
 			Prepare_Side_Roster();
 			Session.Suspended = false;
 			Session.Read_Scenario_Descriptions();
 		}
-		return(SEL_MULTIPLAYER_GAME);
+		return(Product_Menu_Selection(action));
 	}
 
-	return(SEL_NONE);
+	return(Product_Menu_Selection(action));
 }

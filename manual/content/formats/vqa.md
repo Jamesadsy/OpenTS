@@ -11,6 +11,8 @@ related:
 source_files:
   - code/audio/audiomovie.cpp
   - code/movie.cpp
+  - code/initgamesession.cpp
+  - code/scenario.cpp
   - code/movies.cpp
   - code/rules.cpp
   - code/vqa.cpp
@@ -95,6 +97,8 @@ A movie is read from the archive file itself rather than from a cached copy, so 
 The filename is built from the registered name and `.VQA` into a buffer sized for the longest name the registry accepts, so a name of any length the registry admits is truncated rather than written past the end. The names the game ships with are all eight characters or fewer.
 
 ## Sound and picture
+
+In the browser runtime, startup, title-menu and scenario-start movies keep their decoder and audio state between native Steps. Each playback Step services input and asks the decoder for at most one frame, then returns to the browser. A frame that is not due yet leaves the movie waiting. Completion or an accepted skip releases the movie once, after which the startup or scenario sequence continues. Campaign focus loss pauses playback until focus returns. The desktop `Play_Movie` adapter still waits until playback ends.
 
 The picture follows the sound. The player hands the sound track to the audio engine one block at a time, asks how much of it has been heard, and draws the frame due at that moment. The answer is the number of frames the mixer has taken from the track, less what the output device still holds, so the two stay in step through a device change or a stall on the game's own thread. While the sound stands still, as when the track ends before the picture does or the device is being recovered, the clock runs on wall time instead, and a pause is left out of the count altogether.
 

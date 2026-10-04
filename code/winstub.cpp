@@ -178,6 +178,10 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_ACTIVATE_APP_CONSUMED);
 					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_ACTIVATE_APP_SEQUENCE,
 						OpenTS_Browser_Telemetry_Next_Event());
+					if (wParam == 0) {
+						OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_FOCUS_LOSS_SEQUENCE,
+							OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_ACTIVATE_APP_SEQUENCE));
+					}
 					break;
 				case WM_SETFOCUS:
 					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_SET_FOCUS_CONSUMED);
@@ -189,8 +193,13 @@ LRESULT CALLBACK /*_export*/ Windows_Procedure(HWND hwnd, UINT message, WPARAM w
 				OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_IN_FOCUS, GameInFocus ? 1 : 0);
 				break;
 				case WM_LBUTTONDOWN:
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_FOCUS_AT_CLICK, GameInFocus ? 1 : 0);
 					OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MOUSE_DOWN);
 					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GAME_IN_FOCUS, GameInFocus ? 1 : 0);
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_ACTIVATE_BEFORE_CLICK_SEQUENCE,
+						OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_ACTIVATE_APP_SEQUENCE));
+					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_SET_FOCUS_BEFORE_CLICK_SEQUENCE,
+						OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_SET_FOCUS_SEQUENCE));
 					OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MOUSE_DOWN_SEQUENCE,
 						OpenTS_Browser_Telemetry_Next_Event());
 					break;

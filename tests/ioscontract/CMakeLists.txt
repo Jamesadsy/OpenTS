@@ -11,16 +11,21 @@ add_test(NAME ios-path-contract COMMAND IOSPathContract)
 
 add_executable(IOSTouchContract
     iostouchcontract.cpp
+    ${CMAKE_SOURCE_DIR}/code/keyboard.cpp
 )
 
 target_compile_features(IOSTouchContract PRIVATE cxx_std_20)
 target_compile_definitions(IOSTouchContract PRIVATE OPENTS_TOUCH_TEST)
 target_include_directories(IOSTouchContract PRIVATE
-    ${CMAKE_SOURCE_DIR}/platform/win32compat/src
+	${CMAKE_SOURCE_DIR}/code
+	${CMAKE_SOURCE_DIR}/platform/win32compat/src
     ${CMAKE_SOURCE_DIR}/platform/win32compat/include
 )
 target_link_libraries(IOSTouchContract PRIVATE win32compat)
 add_test(NAME ios-touch-contract COMMAND IOSTouchContract)
+set_tests_properties(ios-touch-contract PROPERTIES
+    PASS_REGULAR_EXPRESSION "All checks passed\\."
+    FAIL_REGULAR_EXPRESSION "FAILED;There were failures")
 
 add_executable(IOSControllerContract
     ioscontrollercontract.cpp

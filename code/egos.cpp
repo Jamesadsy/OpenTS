@@ -54,12 +54,14 @@
 #include "globals.h"
 #include "goptions.h"
 #include "gscreen.h"
+#include "hostclock.h"
 #include "language/language.h"
 #include "misc.h"
 #include "drawhelp.h"
 #include "scheme.h"
 #include "theme.h"
 #include "utf8.h"
+#include "video.h"
 #include "vector.h"
 
 #include "color.hh"
@@ -244,7 +246,7 @@ void EgoClass::Wipe (Surface *background)
 
 
 /***********************************************************************************************
- * Show_Who_Was_Responsible -- Main function to print the credits.                             *
+ * CreditsSession -- Retained owner for the native scrolling credits presentation.            *
  *                                                                                             *
  *                                                                                             *
  *                                                                                             *
@@ -257,338 +259,226 @@ void EgoClass::Wipe (Surface *background)
  * HISTORY:                                                                                    *
  *    9/10/96 0:20AM ST : Created                                                              *
  *=============================================================================================*/
-void Show_Who_Was_Responsible (void)
+struct CreditsSession::Impl
 {
-
-	int	i;
-	int	key = KN_NONE;
-
-	/*
-	**	Deault speed of credits scolling. This is the frame delay between pixel scrolls.
-	*/
-	static int speed = 2;
-
-	if (Addon_Enabled(ADDON_FIRESTORM) == true) return;
-
-	LogicalSurface = AlternateSurface;
-
-	/*
-	**	Read in the credits file to be displayed
-	**
-	**	Lines of text in CREDITS.TXT are treated as follows....
-	**
-	**	If the text starts and ends to the left of column 40 then text will be right justified.
-	**	If the text starts before column 40 and ends after it then it will be centered.
-	**	If the text starts after column 40 it will be right justified.
-	*/
-	CCFileClass creditsfile ("TSCREDIT.txt");
-	if ( !creditsfile.Is_Available()) return;
-	char *credits = new char [creditsfile.Size()+1];
-	creditsfile.Read (credits, creditsfile.Size());
-
-	/*
-	**	Initialise the text printing system.
-	*/
-	GadgetClass::Set_Color_Scheme("Green");
-	Fancy_Text_Print(TXT_NONE, *LogicalSurface, LogicalSurface->Get_Rect(), Point2D(0, 0), Fetch_Scheme_By_Name("LightGold"),
-		TBLACK, TextPrintType(TPF_CENTER|TPF_METAL12|TPF_FULLSHADOW));
+	enum class Phase : std::uint8_t { Idle, Scroll, Fade, Complete, Fault };
+	Phase State = Phase::Idle;
+	std::unique_ptr<char[]> Text;
+	std::unique_ptr<DSurface> Background;
+	float OldVolume = 0.0f;
+	int Time = 0;
+	int Frame = 0;
+	int PictureFrame = 0;
+	int SlideNumber = 0;
+	int Speed = 2;
+	bool Fresh = false;
+	bool ResourcesReady = false;
+	bool CleanupDone = false;
+};
 
 
-	/*
-	**	Miscellaneous stuff for parsing the credits text file.
-	*/
-	int 				length = creditsfile.Size();
-	int 				line   = 0;
-	int 				column = 0;
-	char				*cptr = credits;
-	char				ch, lastchar, oldchar;
-	char				*strstart, *strparse;
-	bool				gotendstr;
-	int				startcolumn, endcolumn, x;
-	int				y=HiddenSurface->Get_Height()+2;
-	int 				lastline = -2;
-	EgoClass 		*ego;
-	TextPrintType 	flags;
+CreditsSession::CreditsSession(void) : m_Impl(std::make_unique<Impl>())
+{
+}
 
 
-	int bom = (int)UTF8::BOM_Length(std::string_view(cptr, length));
+CreditsSession::~CreditsSession(void)
+{
+	Finish();
+}
+
+
+bool CreditsSession::Begin(void)
+{
+	using Phase = Impl::Phase;
+	if (m_Impl->State != Phase::Idle) return(false);
+	if (Addon_Enabled(ADDON_FIRESTORM)) {
+		m_Impl->State = Phase::Complete;
+		return(true);
+	}
+
+	CCFileClass creditsfile("TSCREDIT.txt");
+	if (!creditsfile.Is_Available()) {
+		m_Impl->State = Phase::Complete;
+		return(true);
+	}
+
+	int const text_length = creditsfile.Size();
+	m_Impl->Text = std::make_unique<char[]>((size_t)text_length + 1);
+	creditsfile.Read(m_Impl->Text.get(), text_length);
+	int length = text_length;
+	int line = 0;
+	int column = 0;
+	char * cptr = m_Impl->Text.get();
+	char ch = 0;
+	char lastchar = 0;
+	char oldchar = 0;
+	char * strstart = nullptr;
+	char * strparse = nullptr;
+	bool gotendstr = false;
+	int startcolumn = 0;
+	int endcolumn = 0;
+	int x = 0;
+	int y = HiddenSurface->Get_Height() + 2;
+	int lastline = -2;
+	int const bom = (int)UTF8::BOM_Length(std::string_view(cptr, length));
 	cptr += bom;
 	length -= bom;
 
-	/*
-	**	Search through the text file and extract the strings, using each string to create
-	**	a new EgoClass
-	*/
-	do {
-		/*
-		**	Search for text
-		*/
+	LogicalSurface = AlternateSurface;
+	GadgetClass::Set_Color_Scheme("Green");
+	Fancy_Text_Print(TXT_NONE, *LogicalSurface, LogicalSurface->Get_Rect(), Point2D(0, 0),
+		Fetch_Scheme_By_Name("LightGold"), TBLACK,
+		TextPrintType(TPF_CENTER | TPF_METAL12 | TPF_FULLSHADOW));
+
+	if (length > 0) do {
 		ch = *cptr++;
-		length --;
-
-		/*
-		**	Look for a non whitespace character.
-		*/
-		switch ( ch ){
-
+		length--;
+		switch (ch) {
 			case 13:
-				/*
-				**	Char was carriage return. Go on to the next line starting at column 0.
-				*/
 				line++;
 				y += 16;
 				column = 0;
 				break;
-
-
 			case 10:
-				/*
-				**	Ignore line feed. CR does both.
-				*/
 				break;
-
-				/*
-				**	Space character. Just advance the cursor and move on.
-				*/
 			case 32:
 				column++;
 				break;
-
-				/*
-				**	Tab char. Advance to the next tab column. Tabs are every 8 columns.
-				*/
 			case 9:
 				column += 8;
 				column &= 0xfffffff8;
 				break;
-
-			default:
-				/*
-				**	Found new string. Work out where it ends so we know how to treat it.
-				*/
+			default: {
 				lastchar = ch;
-				strstart = cptr-1;
-				strparse = cptr-1;
+				strstart = cptr - 1;
+				strparse = cptr - 1;
 				endcolumn = startcolumn = column;
 				gotendstr = false;
-
-				do	{
+				do {
 					ch = *strparse++;
-					switch ( ch ){
+					switch (ch) {
 						case 9:
 						case 10:
-						case 13:
-							gotendstr = true;
-							break;
-
-						case 32:
-							if (lastchar == 32) gotendstr = true;
-							//endcolumn++;
-							break;
-
-						default:
-							//endcolumn++;
-							break;
+						case 13: gotendstr = true; break;
+						case 32: if (lastchar == 32) gotendstr = true; break;
+						default: break;
 					}
-					if (strparse >= cptr+length) gotendstr = true;
-
+					if (strparse >= cptr + length) gotendstr = true;
 					lastchar = ch;
-				}while (!gotendstr);
+				} while (!gotendstr);
+				if (strparse >= cptr + length) break;
+				if (*(strparse - 2) == 32) strparse--;
 
-
-				if (strparse >= cptr+length) break;
-
-				/*
-				**	Strip off any trailing space.
-				*/
-				if (*(strparse-2) == 32){
-					strparse--;
-					//endcolumn -= 2;
-				}
-
-
-				/*
-				**	If string straddles the center column then center it.
-				**
-				**	If string is on the left hand side then right justify it.
-				**
-				**	If string is on the right hand side then left justify it.
-				*/
-				flags = TextPrintType(TPF_METAL12 | TPF_FULLSHADOW );
-
-				if (startcolumn > 3 && endcolumn < 8){
+				TextPrintType flags = TextPrintType(TPF_METAL12 | TPF_FULLSHADOW);
+				if (startcolumn > 3 && endcolumn < 8) {
 					flags = TextPrintType(flags | TPF_CENTER);
 					x = HiddenSurface->Get_Width() / 2;
-				}else{
-					if (startcolumn <3){
-						flags = TextPrintType(flags | TPF_RIGHT);
-						//x = endcolumn *HiddenSurface->Get_Width() /80;
-						x = (HiddenSurface->Get_Width() /2) - (HiddenSurface->Get_Width() /12);
-					}else{
-						//x = startcolumn * HiddenSurface->Get_Width() / 2;
-						x = HiddenSurface->Get_Width() / 2;
-					}
+				} else if (startcolumn < 3) {
+					flags = TextPrintType(flags | TPF_RIGHT);
+					x = (HiddenSurface->Get_Width() / 2) - (HiddenSurface->Get_Width() / 12);
+				} else {
+					x = HiddenSurface->Get_Width() / 2;
 				}
-
 				if (startcolumn > 3 && endcolumn < 8 && line - lastline > 1) {
 					flags = TextPrintType(flags | TPF_LIGHTSHADOW);
 				} else {
 					flags = TextPrintType(flags | TPF_DROPSHADOW);
 				}
 				lastline = line;
-
-				/*
-				**	Temporarily terminate the string.
-				*/
-				oldchar = *(strparse-1);
-				*(strparse-1) = 0;
-
-				/*
-				**	Create the new class and add it to our list.
-				*/
-				ego = new EgoClass (x, y, strstart, flags);
-
-				EgoList.Add (ego);
-
-				/*
-				**	Restore the character that was lost when we added the terminator.
-				*/
-				*(strparse-1) = oldchar;
-
-				/*
-				**	Fix up our outer loop parsing variables.
-				*/
+				oldchar = *(strparse - 1);
+				*(strparse - 1) = 0;
+				EgoList.Add(new EgoClass(x, y, strstart, flags));
+				*(strparse - 1) = oldchar;
 				cptr = strparse;
-				column += strparse - strstart;
-				length -= strparse - strstart-1;
-
+				column += (int)(strparse - strstart);
+				length -= (int)(strparse - strstart) - 1;
 				if (ch == 13) {
 					line++;
 					y += 16;
 					column = 0;
-				}else{
-					if (ch == 9){
-						column += 7;
-						column &= 0xfffffff8;
-					}
+				} else if (ch == 9) {
+					column += 7;
+					column &= 0xfffffff8;
 				}
 				break;
-		}
-
-	} while ( length>0 );
-
-	/*
-	**	Stop the music.
-	*/
-	Theme.Stop();
-
-	/*
-	**	Clear the Seen Page since we will not be blitting to all of it.
-	*/
-	HiddenSurface->Fill(TBLACK);
-	Update_Visible_Surface();
-
-	/*
-	**	Create a new graphic buffer to restore the background from. Initialise it to black so
-	**	we can start scrolling before the first slideshow picture is blitted.
-	*/
-	BackgroundSurface = new DSurface(VisibleRect.Width, VisibleRect.Height);
-	BackgroundSurface->Blit_From(*HiddenSurface);
-
-	/*
-	**	Go away nasty keyboard.
-	*/
-	Keyboard->Clear();
-
-	LogicalSurface = HiddenSurface;
-
-	/*
-	**	Start any old song.
-	*/
-	float oldvolume = Options.ScoreVolume;
-	if ((double)oldvolume == 0) {
-		Options.Set_Score_Volume(0.4f, false);
-	}
-	Theme.Queue_Song(Theme.From_Name("MADRAP"));
-
-	/*
-	**	Init misc timing variables.
-	*/
-	int time  = TickCount;
-	int frame = 0;
-	int picture_frame = 0;
-	int slide_number = 0;
-	bool fresh = false;
-
-	Hide_Mouse();
-
-	/*
-	**	Main scrolling loop.
-	**	Keeps going until all the EgoClass objects are deleted or esc is pressed.
-	*/
-	while ( EgoList.Count() ){
-
-		frame++;
-
-		/*
-		**	Update the slideshow frame and switch to the next picture if its time.
-		*/
-		picture_frame++;
-
-		if (picture_frame > FRAME_DELAY+50){
-			if (slide_number <NUM_SLIDES-1){
-				slide_number++;
-				picture_frame = 0;
-			}else{
-				//slide_number = 0;
-				//picture_frame = 0;
 			}
 		}
+	} while (length > 0);
 
-		/*
-		**	Scroll the text. If any text goes off the top then delete that object.
-		*/
-		for (i=EgoList.Count()-1 ; i>=0 ; i--){
-			//EgoList[i]->Wipe(BackgroundSurface);
-			if ( EgoList[i]->Scroll(2) ){
+	Theme.Stop();
+	HiddenSurface->Fill(TBLACK);
+	Update_Visible_Surface();
+	m_Impl->Background = std::make_unique<DSurface>(VisibleRect.Width, VisibleRect.Height);
+	BackgroundSurface = m_Impl->Background.get();
+	m_Impl->Background->Blit_From(*HiddenSurface);
+	Keyboard->Clear();
+	LogicalSurface = HiddenSurface;
+	m_Impl->OldVolume = Options.ScoreVolume;
+	if ((double)m_Impl->OldVolume == 0) Options.Set_Score_Volume(0.4f, false);
+	Theme.Queue_Song(Theme.From_Name("MADRAP"));
+	m_Impl->Time = TickCount;
+	Hide_Mouse();
+	m_Impl->ResourcesReady = true;
+	m_Impl->State = Phase::Scroll;
+	return(true);
+}
+
+
+CreditsStepResult CreditsSession::Step(void)
+{
+	using Phase = Impl::Phase;
+	using Result = CreditsStepResult;
+	if (m_Impl->State == Phase::Complete) return(Result::Complete);
+	if (m_Impl->State != Phase::Scroll && m_Impl->State != Phase::Fade) return(Result::Fault);
+
+	Call_Back();
+	if (m_Impl->State == Phase::Scroll && Keyboard->Check()) {
+		if (Keyboard->Get() == KN_ESC) {
+			Theme.Fade_Out();
+			m_Impl->State = Phase::Complete;
+			return(Finish() ? Result::Complete : Result::Fault);
+		}
+	}
+	if (m_Impl->Frame != 0
+		&& TickCount - m_Impl->Time < m_Impl->Frame * m_Impl->Speed) {
+		return(Result::Waiting);
+	}
+
+	if (m_Impl->State == Phase::Scroll) {
+		m_Impl->Frame++;
+		m_Impl->PictureFrame++;
+		if (m_Impl->PictureFrame > FRAME_DELAY + 50) {
+			if (m_Impl->SlideNumber < NUM_SLIDES - 1) {
+				m_Impl->SlideNumber++;
+				m_Impl->PictureFrame = 0;
+			}
+		}
+		for (int i = EgoList.Count() - 1; i >= 0; i--) {
+			if (EgoList[i]->Scroll(2)) {
 				delete EgoList[i];
 				EgoList.Delete_Index(i);
 				break;
 			}
 		}
 
-		/*
-		 * The scroll is performed by copying the middle of the visible surface two
-		 * scan lines upward. The top and bottom bands lie outside that copy, so they
-		 * are cleared and then refreshed from the background surface every frame.
-		 */
 		Rect scroll_dest(0, 32, VideoModeWidth, VideoModeHeight - 66);
 		Rect scroll_source(0, 34, VideoModeWidth, VideoModeHeight - 66);
 		Rect top_band(0, 0, VideoModeWidth, 34);
 		Rect bottom_band(0, VideoModeHeight - 34, VideoModeWidth, 34);
 		BackgroundSurface->Fill_Rect(top_band, TBLACK);
 		BackgroundSurface->Fill_Rect(bottom_band, TBLACK);
+		for (int i = EgoList.Count() - 1; i >= 0; i--) EgoList[i]->Render(m_Impl->Fresh);
 
-		/*
-		**	Render all the text strings in their new positions.
-		*/
-		for (i=EgoList.Count()-1 ; i>=0 ; i--){
-			EgoList[i]->Render(fresh);
-		}
-
-		int step = 0;
-		unsigned short *bsurf = (unsigned short *)BackgroundSurface->Lock();
-		if (bsurf) {
-			step = BackgroundSurface->Stride() / 2;
-			int fade_x;
+		unsigned short * bsurf = (unsigned short *)BackgroundSurface->Lock();
+		if (bsurf != nullptr) {
+			int const step = BackgroundSurface->Stride() / 2;
 			int fade_y = 0;
-			int xidx;
-			int yidx;
 			for (int raw_alpha = 256; raw_alpha > 0; raw_alpha -= 8) {
-				int alpha = std::min(raw_alpha, 255);
-				xidx = step * fade_y;
-				yidx = step * (VideoModeHeight - fade_y - 1);
-				for (fade_x = 0; fade_x < VideoModeWidth; fade_x++) {
+				int const alpha = std::min(raw_alpha, 255);
+				int const xidx = step * fade_y;
+				int const yidx = step * (VideoModeHeight - fade_y - 1);
+				for (int fade_x = 0; fade_x < VideoModeWidth; fade_x++) {
 					(bsurf + xidx)[fade_x] = OD_Blend_Color((bsurf + xidx)[fade_x], 0, alpha);
 					(bsurf + yidx)[fade_x] = OD_Blend_Color((bsurf + yidx)[fade_x], 0, alpha);
 				}
@@ -596,9 +486,8 @@ void Show_Who_Was_Responsible (void)
 			}
 			BackgroundSurface->Unlock();
 		}
-
 		if (GameInFocus) {
-			if (fresh) {
+			if (m_Impl->Fresh) {
 				VisibleSurface->Blit_From(*BackgroundSurface);
 			} else {
 				VisibleSurface->Blit_From(top_band, *BackgroundSurface, top_band);
@@ -606,92 +495,59 @@ void Show_Who_Was_Responsible (void)
 				VisibleSurface->Blit_From(bottom_band, *BackgroundSurface, bottom_band);
 			}
 		}
-
-		fresh = false;
-		if (frame > 1000 && !Theme.Still_Playing()){
-			Theme.Queue_Song(THEME_NONE);
-		}
-
-		/*
-		**	Stop calling Theme.AI after a while so a different song doesnt start playing
-		*/
-		Call_Back();
-
-		/*
-		**	Kill any spare time before blitting the hid page forward.
-		*/
-		while (TickCount - time < frame * speed && !Keyboard->Check()) {}
-
-		/*
-		**	If user hits escape then break.
-		*/
-		key = KN_NONE;
-		if (Keyboard->Check()){
-			key = Keyboard->Get();
-			if (key == KN_ESC){
-				break;
-			}
-#if (0)
-			if (key == KN_Z){
-				speed--;
-				if (speed <1 ) speed=1;
-				time = TickCount;
-				frame = 0;
-			}
-			if (key == KN_X){
-				speed++;
-				time = TickCount;
-				frame = 0;
-			}
-#endif	//(0)
-
-		}
-
+		m_Impl->Fresh = false;
+		if (m_Impl->Frame > 1000 && !Theme.Still_Playing()) Theme.Queue_Song(THEME_NONE);
+		if (EgoList.Count() == 0) m_Impl->State = Phase::Fade;
+		return(Result::Waiting);
 	}
 
-	if (key == KN_ESC){
-		Theme.Fade_Out();
-	}else{
-		/*
-		**	Wait for the picture to fade down
-		*/
-		while (picture_frame <= FADE_DELAY+FRAME_DELAY){
-			if (picture_frame < FRAME_DELAY && picture_frame > 10+FADE_DELAY){
-				picture_frame = FRAME_DELAY;
-			}
-			frame++;
-			picture_frame++;
+	if (m_Impl->PictureFrame < FRAME_DELAY && m_Impl->PictureFrame > 10 + FADE_DELAY) {
+		m_Impl->PictureFrame = FRAME_DELAY;
+	}
+	m_Impl->Frame++;
+	m_Impl->PictureFrame++;
+	if (m_Impl->PictureFrame > FADE_DELAY + FRAME_DELAY) {
+		m_Impl->State = Phase::Complete;
+		return(Finish() ? Result::Complete : Result::Fault);
+	}
+	return(Result::Waiting);
+}
 
-			Call_Back();
 
-			/*
-			**	Kill any spare time
-			*/
-			while (TickCount - time < frame * speed && !Keyboard->Check()) {}
-
+bool CreditsSession::Finish(void)
+{
+	if (m_Impl->CleanupDone) return(true);
+	if (m_Impl->ResourcesReady) {
+		HiddenSurface->Fill(TBLACK);
+		Update_Visible_Surface();
+		Show_Mouse();
+		GadgetClass::Set_Color_Scheme("Blue");
+		Theme.Stop();
+		Options.Set_Score_Volume(m_Impl->OldVolume, false);
+		BackgroundSurface = nullptr;
+		m_Impl->Background.reset();
+		while (EgoList.Count() > 0) {
+			delete EgoList[0];
+			EgoList.Delete_Index(0);
 		}
+		EgoList.Clear();
+		m_Impl->ResourcesReady = false;
 	}
+	m_Impl->Text.reset();
+	m_Impl->CleanupDone = true;
+	m_Impl->State = Impl::Phase::Complete;
+	return(true);
+}
 
-	/*
-	**	Tidy up.
-	*/
-	HiddenSurface->Fill(TBLACK);
-	Update_Visible_Surface();
 
-	Show_Mouse();
-
-	GadgetClass::Set_Color_Scheme("Blue");
-
-	Theme.Stop();
-	Options.Set_Score_Volume(oldvolume, false);
-
-	delete BackgroundSurface;
-
-	delete [] credits;
-
-	while (EgoList.Count() > 0) {
-		delete EgoList[0];
-		EgoList.Delete_Index(0);
+void Show_Who_Was_Responsible(void)
+{
+	CreditsSession session;
+	if (!session.Begin()) return;
+	CreditsStepResult result = CreditsStepResult::Waiting;
+	while (result == CreditsStepResult::Waiting) {
+		result = session.Step();
+		if (result == CreditsStepResult::Waiting) Host_Sleep(Video_Milliseconds_Until_Present());
 	}
-	EgoList.Clear();
+	session.Finish();
 }

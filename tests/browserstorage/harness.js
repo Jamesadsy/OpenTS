@@ -290,7 +290,10 @@
       "recognizerAccepted", "recognizerRejected", "touchServiceRuns", "activateAppPosted",
       "setFocusPosted", "activateAppConsumed", "setFocusConsumed", "wmMouseMove",
       "wmLButtonDown", "wmLButtonUp", "menuCandidateChecks", "menuActiveRectHits", "hostSleep",
-      "themeRequests", "productChoicesApplied"];
+      "themeRequests", "productChoicesApplied", "messagePumpYields", "touchFocusRestores",
+      "menuTouchFocusRestores", "productMenuActionsConsumed", "cooperativeChildrenCreated",
+      "cooperativeChildSteps", "cooperativeChildrenCompleted", "callerContinuations",
+      "campaignPreparationPhases", "mainLoopHandoffs", "actualExits"];
     var values = [];
     for (var i = 0; i < counterNames.length; i++) values.push(nativeTelemetryCounter(i));
     return {
@@ -298,23 +301,87 @@
         result[name] = values[index];
         return result;
       }, {}),
+      productMenuAction: {
+        actionSequence: nativeTelemetryValue(44),
+        candidateItemId: nativeTelemetryValue(14),
+        itemId: nativeTelemetryValue(35),
+        nativeResultId: nativeTelemetryValue(36),
+        nativeHandlerSelection: nativeTelemetryValue(37),
+        selectedProduct: nativeTelemetryValue(38),
+        cooperativeChildKind: nativeTelemetryValue(39),
+        childActionSequence: nativeTelemetryValue(45),
+        childCompletedSequence: nativeTelemetryValue(46),
+        childCreatedThisAction: nativeTelemetryValue(45) === nativeTelemetryValue(44),
+        childCompletedThisAction: nativeTelemetryValue(46) === nativeTelemetryValue(44),
+        childStepResultBefore: nativeTelemetryValue(47),
+        childStepResultAfter: nativeTelemetryValue(48),
+        childStepResult: nativeTelemetryValue(49),
+        childStepResultName: ["active", "waiting", "suspended", "complete", "session-ended", "fault"][nativeTelemetryValue(49)] || "unknown",
+        childResultOutcome: nativeTelemetryValue(50),
+        childCompletionReason: ["accepted", "cancelled", "session-ended", "failed-to-open"][nativeTelemetryValue(50)] || "unknown",
+        selectedProductBeforeChild: nativeTelemetryValue(51),
+        selectedProductAfterChild: nativeTelemetryValue(52),
+        parentContinuationPhase: nativeTelemetryValue(53),
+        campaignSelectionOutcome: nativeTelemetryValue(54),
+        campaignSelectionOutcomeName: ["accepted", "cancelled", "presentation-failure"][nativeTelemetryValue(54)] || "unknown",
+        campaignSelectionResult: nativeTelemetryValue(55),
+        scenarioPreparationEntry: nativeTelemetryValue(56),
+        scenarioPreparationEntryName: ["not-entered", "entered", "preparing", "prepared", "failed"][nativeTelemetryValue(56)] || "unknown",
+        scenarioPreparationResult: nativeTelemetryValue(57),
+        uiPrepareFailureStage: nativeTelemetryValue(58),
+        uiPrepareFailureReason: ["none", "context-missing", "view-already-open", "data-model-create", "document-load"][nativeTelemetryValue(58)] || "unknown",
+        campaignPreparationPhaseName: ["none", "requested", "campaigns-unavailable", "selector-open",
+          "campaign-selected", "scenario-preparation-started", "scenario-preparation-running",
+          "main-loop-handoff", "campaign-selector-failed"][nativeTelemetryValue(41)] || "unknown",
+        parentContinuationPhaseName: ["idle", "reset", "main-menu", "child-modal", "theme-drain",
+          "intro-movie", "scenario-preparation", "scenario-child", "connection-setup",
+          "initial-presentation", "native-child", "new-menu-child", "ready-for-gameplay",
+          "later-boundary", "credits", "exit", "fault"][nativeTelemetryValue(53)] || "unknown",
+        campaignPreparationPhase: nativeTelemetryValue(41),
+        mainLoopHandoff: nativeTelemetryValue(42),
+        processCompletionKind: nativeTelemetryValue(43),
+        dispatchEntered: nativeTelemetryValue(44) > 0,
+        childSteps: Math.max(0, values[24] - nativeTelemetryValue(59)),
+        childCompleted: Math.max(0, values[25] - nativeTelemetryValue(60)),
+        callerContinuations: Math.max(0, values[26] - nativeTelemetryValue(61)),
+        campaignPreparationPhases: Math.max(0, values[27] - nativeTelemetryValue(62)),
+        mainLoopHandoffCount: Math.max(0, values[28] - nativeTelemetryValue(63)),
+        actualExitCount: Math.max(0, values[29] - nativeTelemetryValue(64))
+      },
       nativeInputOrdering: (function () {
-        var activate = nativeTelemetryValue(17) || 0;
-        var setFocus = nativeTelemetryValue(18) || 0;
+        var activate = nativeTelemetryValue(24) || 0;
+        var setFocus = nativeTelemetryValue(25) || 0;
         var down = nativeTelemetryValue(19) || 0;
         var route = nativeTelemetryValue(21) || 0;
         var hit = nativeTelemetryValue(22) || 0;
         var choice = nativeTelemetryValue(23) || 0;
         return {
-          gameInFocusAtClickConsumption: nativeTelemetryValue(10),
+          gameInFocusAtClickConsumption: nativeTelemetryValue(26),
+          currentGameInFocus: nativeTelemetryValue(10),
           activationAndSetFocusBeforeClick: activate > 0 && setFocus > 0 && down > 0
-            && activate < down && setFocus < down && nativeTelemetryValue(10) === 1,
+            && activate < down && setFocus < down && nativeTelemetryValue(26) === 1,
+          touchFocusPath: {
+            pendingAtMouseDownDispatch: nativeTelemetryValue(27),
+            synchronousRestoreCalls: nativeTelemetryCounter(20),
+            focusAfterActivation: nativeTelemetryValue(28),
+            focusAfterSetFocus: nativeTelemetryValue(29),
+            lastFocusLossSequence: nativeTelemetryValue(30),
+            pendingAtGraphicMenu: nativeTelemetryValue(31),
+            keyAtGraphicMenu: nativeTelemetryValue(32),
+            graphicMenuRestoreCalls: nativeTelemetryCounter(21),
+            focusAtGraphicMenuGate: nativeTelemetryValue(33),
+            graphicMenuPhase: nativeTelemetryValue(34)
+          },
           clickReachedGameFrameRoute: down > 0 && route >= down,
           gameFrameRouteReachedGraphicMenuActiveRect: route > 0 && hit > route,
           graphicMenuSelectionReachedNewMenuResult: hit > 0 && choice > hit,
           sequences: {
             activateAppConsumed: activate,
             setFocusConsumed: setFocus,
+            activateAppConsumedBeforeClick: activate,
+            setFocusConsumedBeforeClick: setFocus,
+            latestActivateAppConsumed: nativeTelemetryValue(17),
+            latestSetFocusConsumed: nativeTelemetryValue(18),
             lButtonDownConsumed: down,
             gameFrameRoute: route,
             graphicMenuActiveRectHit: hit,
@@ -530,6 +597,13 @@
       frontendReady: nativeValue("OpenTS_Browser_Frontend_Ready") === 1,
       menuState: nativeValue("OpenTS_Browser_Menu_State"),
       selectedProduct: nativeValue("OpenTS_Browser_Selected_Product"),
+      productMenuItemId: nativeTelemetryValue(35),
+      productMenuResultId: nativeTelemetryValue(36),
+      productMenuActionHandler: nativeTelemetryValue(37),
+      productMenuAction: ownerInputTelemetry().productMenuAction,
+      campaignPreparationPhase: nativeTelemetryValue(41),
+      mainLoopHandoff: nativeTelemetryValue(42),
+      processCompletionKind: nativeTelemetryValue(43),
       titleMediaAvailable: nativeValue("OpenTS_Browser_Title_Media_Available") === 1,
       titleMediaNatural: nativeValue("OpenTS_Browser_Title_Media_Natural") === 1,
       titleMediaSkipped: nativeValue("OpenTS_Browser_Title_Media_Skipped") === 1,

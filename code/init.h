@@ -30,6 +30,11 @@ class ObjectClass;
 bool Parse_Command_Line(int argc, char * argv[]);
 
 int Init_Game(int argc, char * argv[]);
+#ifdef __EMSCRIPTEN__
+int Init_Game_Browser_Begin(void);
+int Init_Game_Browser_Step(void);
+void Init_Game_Browser_Finish(void);
+#endif
 bool Select_Game(bool fade);
 
 enum class SelectGamePhase : std::uint8_t {
@@ -47,6 +52,7 @@ enum class SelectGamePhase : std::uint8_t {
 	NewMenuChild,
 	ReadyForGameplay,
 	LaterBoundary,
+	Credits,
 	Exit,
 	Fault,
 };
@@ -72,6 +78,7 @@ enum class SelectGameLaterBoundary : std::uint8_t {
 
 enum class SelectGameCampaignOutcome : std::uint8_t {
 	Pending,
+	Unavailable,
 	Accepted,
 	Cancelled,
 	PresentationFailure,
@@ -119,6 +126,12 @@ class SelectGameSession
 		std::unique_ptr<Impl> m_Impl;
 		friend bool Select_Game(bool fade);
 };
+
+#ifdef __EMSCRIPTEN__
+bool Select_Game_Browser_Prepare_Begin(SelectGameSession const & selection);
+int Select_Game_Browser_Prepare_Step(void);
+void Select_Game_Browser_Prepare_Finish(void);
+#endif
 
 int Main_Menu(unsigned int timeout);
 

@@ -8,7 +8,9 @@
  ******************************************************************************/
 
 #include "maingamesession.h"
+#include "globals.h"
 #include "special.hh"
+#include "scenario.h"
 
 #include <cstdio>
 #include <cstring>
@@ -22,6 +24,11 @@
 #endif
 
 SpecialDialogType SpecialDialog = SDLG_NONE;
+bool GameActive = true;
+bool ScenarioActive = true;
+bool TacticalActive = true;
+int Frame = 0;
+ScenarioClass * Scen = nullptr;
 
 struct SelectGameSession::Impl {};
 SelectGameSession::SelectGameSession(void) = default;
@@ -158,19 +165,20 @@ namespace
 		return(SelectGameStepResult::ReadyForGameplay);
 	}
 
-	bool BeginGameplay(void * context, OpenTS_MainLoop::MainLoopSession &)
+	bool BeginGameplay(void * context, OpenTS_MainLoop::MainLoopSession & loop)
 	{
 		++static_cast<Runtime *>(context)->GameplayBegins;
+		loop.LoopStarted = true;
 		return(true);
 	}
 
-	OpenTS_MainLoop::CooperativeResult StepGameplay(void * context, OpenTS_MainLoop::MainLoopSession &)
+	OpenTS_MainLoop::CooperativeResult StepGameplay(void * context, OpenTS_MainLoop::MainLoopSession & loop)
 	{
 		Runtime & runtime = *static_cast<Runtime *>(context);
 		++runtime.GameplaySteps;
-		return(runtime.GameplaySteps == 1
-			? OpenTS_MainLoop::CooperativeResult::Waiting
-			: OpenTS_MainLoop::CooperativeResult::Complete);
+		if (runtime.GameplaySteps == 1) return(OpenTS_MainLoop::CooperativeResult::Waiting);
+		if (runtime.GameplaySteps == 3) loop.Result = true;
+		return(OpenTS_MainLoop::CooperativeResult::Complete);
 	}
 
 	bool FinishGameplay(void * context, OpenTS_MainLoop::MainLoopSession &)
@@ -239,8 +247,9 @@ namespace
 		return(ops);
 	}
 
-	void Test_MainGameSession_Lifecycle(void)
+	void Test_MainGameSession_Lifecycle(char const * campaign)
 	{
+		std::printf("Live MainLoop continuation regression: %s campaign\n", campaign);
 		Runtime runtime;
 		MainGameSession session;
 		MainGameSessionOps const ops = MakeOps(runtime);
@@ -280,8 +289,13 @@ namespace
 			&& runtime.GameplaySteps == 1,
 			"the accepted MainLoopSession becomes the sole gameplay path after modal completion");
 		Check(session.Step() == MainGameStepResult::Waiting
-			&& runtime.GameplaySteps == 2 && runtime.GameplayFinishes == 1,
-			"completed MainLoopSession is finished once before game cleanup");
+			&& runtime.GameplaySteps == 2 && runtime.GameplayFinishes == 1
+			&& session.Phase() == MainGamePhase::Gameplay && runtime.CleanupCalls == 0,
+			"a completed live native frame is finished and resumed without mission cleanup");
+		Check(session.Step() == MainGameStepResult::Waiting
+			&& runtime.GameplaySteps == 3 && runtime.GameplayBegins == 2
+			&& runtime.GameplayFinishes == 2 && session.Phase() == MainGamePhase::GameCleanup,
+			"native GameActive end result, rather than a frame boundary, starts mission cleanup");
 		Check(session.Step() == MainGameStepResult::Waiting
 			&& runtime.CleanupCalls == 1 && session.Cleanup_Owned() && session.Fade(),
 			"game-end cleanup runs once and preserves frontend return fade semantics");
@@ -290,7 +304,7 @@ namespace
 			"ReturnFrontend is applied exactly once after cleanup");
 		Check(session.Step() == MainGameStepResult::Complete
 			&& runtime.InitCalls == 1 && runtime.SelectionBegins == 1
-			&& runtime.GameplaySteps == 2 && runtime.CleanupCalls == 1
+			&& runtime.GameplaySteps == 3 && runtime.CleanupCalls == 1
 			&& runtime.FrontendReturns == 1,
 			"terminal MainGameSession Steps are idempotent");
 		Check(session.Finish() && session.Finish(), "MainGameSession Finish is idempotent");
@@ -424,10 +438,16 @@ namespace
 	}
 }
 
-int main(void)
+int Test_Cooperative_Movie(void);
+
+int main(int argc, char ** argv)
 {
-	Test_MainGameSession_Lifecycle();
-	Test_Production_Seams();
+#ifdef OPENTS_TEST_BROWSER_MOVIES
+	Failures += Test_Cooperative_Movie();
+#endif
+	bool const nod_smoke = argc > 1 && std::strcmp(argv[1], "--nod-smoke") == 0;
+	Test_MainGameSession_Lifecycle(nod_smoke ? "Nod" : "GDI");
+	if (!nod_smoke) Test_Production_Seams();
 	std::printf("\n%s\n", Failures == 0 ? "PASSED" : "FAILED");
 	return(Failures == 0 ? 0 : 1);
 }

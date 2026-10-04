@@ -295,7 +295,12 @@ today.
 
 Shipped UI files (documents, styles, images, the font) live in `ui/` at the
 repository root. The build copies the tree beside the executable as it copies
-`Language.dll`, and the client package ships it.
+`Language.dll`, and the client package ships it. The Emscripten target preloads
+the same source-owned tree into `/ui` in its browser filesystem; its generated
+`OpenTS.data` package is staged with the development TS runtime. Browser startup
+registers that directory in the existing `CCFileClass` search order, after the
+owner-data and installed search paths. Both routes therefore feed the same native
+lookup without a browser-owned screen.
 
 ## Rendering
 

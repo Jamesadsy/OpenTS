@@ -12,6 +12,7 @@
 
 #include "msengine.h"
 #include "legacyinputpolicy.hh"
+#include "animationwaitpolicy.hh"
 
 #include "_surface.h"
 #include "conquer.h"
@@ -469,6 +470,12 @@ void MSEngine::Cooperative_Service_Step(bool advance_animations)
 bool MSEngine::Has_Animation(MSAnim * anim) const
 {
 	return(anim != NULL && Anims.ID(anim) != -1);
+}
+
+
+bool MSEngine::Animation_Pending(MSAnim * anim) const
+{
+	return(MSEngine_Animation_Pending(Anims, anim));
 }
 
 

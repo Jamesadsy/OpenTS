@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include <memory>
+
 class TechnoTypeClass;
 class XSurface;
 class ConvertClass;
@@ -32,6 +34,7 @@ class DropshipLoadoutClass
 
 	private:
 		friend void Dropship_Screen(void);
+		friend class DropshipSession;
 		static int Get_Allowable_Index(TechnoTypeClass * ttype);
 
 	public:
@@ -72,3 +75,14 @@ class DropshipLoadoutClass
 };
 
 void Dropship_Screen(void);
+
+class DropshipSession
+{
+	public:
+		DropshipSession(void);
+		~DropshipSession(void);
+		bool Step(void);
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> State;
+};

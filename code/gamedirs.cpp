@@ -279,7 +279,7 @@ void Init_Bundle_UI_Search_Path(void)
 		CDFileClass::Add_Search_Drive(path.c_str());
 	}
 
-	DebugString("[GameDirs] iOS bundle UI search path registered: %s\n", path.c_str());
+	DebugString("[GameDirs] UI search path registered: %s\n", path.c_str());
 }
 
 

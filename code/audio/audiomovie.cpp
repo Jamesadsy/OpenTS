@@ -23,8 +23,11 @@ namespace {
 // Blocks pushed but not yet fully heard; the ring holds fewer than this.
 unsigned const MAX_PENDING_BLOCKS = AUDIO_MOVIE_RING_BLOCKS + 2;
 
-// How long STOP waits for the mixer to let go of the ring.
-int const STOP_WAIT_MS = 250;
+// A movie stop is a renderer quiesce, not the generic 5 ms SFX kill. The mixer
+// advances gain at its 64-frame render boundary, so give the movie voice enough
+// coherent blocks to reach zero before the sink releases its stream storage.
+int const QUIESCE_RAMP_MS = 32;
+int const QUIESCE_WAIT_MS = 250;
 
 
 // The one movie the player can have open, as a producer the feeder services.
@@ -89,6 +92,11 @@ class MovieSinkClass : public AudioStreamProducerClass
 			PendingCount = 0;
 		}
 
+		bool Renderer_Quiesced(void) const
+		{
+			return(Handle.Is_Null() || AudioEngine.Events().Is_Finished(Handle));
+		}
+
 		bool Used = false;
 		bool Started = false;
 		bool Paused = false;
@@ -103,6 +111,8 @@ class MovieSinkClass : public AudioStreamProducerClass
 		AHANDLE_CALLBACK_2 DoneCallback = nullptr;
 		VQAHandle * Owner = nullptr;
 		AudioHandle Handle;
+		uint32_t FinalPlaybackFrame = 0;
+		bool QuiesceTimedOut = false;
 		AudioPushStreamProducerClass Pusher;
 		AudioMovieClockClass Clock;
 
@@ -200,6 +210,15 @@ long Start_Audio_Handler(VQAHandleP * vqap)
 	if (!_sink.Used) {
 		return(VQAERR_AUDIO);
 	}
+	if (_sink.QuiesceTimedOut) {
+		if (!_sink.Renderer_Quiesced()) {
+			return(VQAERR_AUDIO);
+		}
+	_sink.Stream->Reset();
+	_sink.Handle.Clear();
+	_sink.QuiesceTimedOut = false;
+	_sink.Clear_Pending();
+	}
 	if (_sink.Paused) {
 		return(Play_Audio_Handler(vqap));
 	}
@@ -225,6 +244,7 @@ long Start_Audio_Handler(VQAHandleP * vqap)
 		return(VQAERR_AUDIO);
 	}
 	_sink.Started = true;
+	_sink.FinalPlaybackFrame = 0;
 	return(VQAERR_NONE);
 }
 
@@ -245,15 +265,26 @@ long Stop_Audio_Handler(VQAHandleP * vqap)
 {
 	(void)vqap;
 	if (_sink.Used && _sink.Started) {
+		// First stop production, then ask the mixer voice to ramp to a silent
+		// render boundary. Pool.Is_Finished only becomes true after Render marks
+		// the voice DONE and the game-thread service reaps it.
 		AudioEngine.Feeder_Ref().Detach((unsigned)_sink.Slot);
-		AudioEngine.Events().Stop(_sink.Handle);
-		if (!AudioEngine.Wait_Finished(_sink.Handle, STOP_WAIT_MS)) {
-			DebugString("Ahandle: movie voice did not stop in time\n");
-		}
-		_sink.Handle.Clear();
+		_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed();
+		AudioEngine.Events().Fade(_sink.Handle, QUIESCE_RAMP_MS);
+		bool const quiesced = AudioEngine.Wait_Finished(_sink.Handle, QUIESCE_WAIT_MS);
 		_sink.Started = false;
 		_sink.Paused = false;
-		_sink.Stream->Reset();
+		_sink.QuiesceTimedOut = !quiesced;
+		if (!quiesced) {
+			// Do not reset or release the ring while the renderer may still hold its
+			// pointer. Release_Stream_Slot retains it until the later render ack.
+			DebugString("Ahandle: movie quiesce timed out at playback frame %u; retaining stream until renderer ack\n",
+				_sink.FinalPlaybackFrame);
+		} else {
+			_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed();
+			_sink.Stream->Reset();
+			_sink.Handle.Clear();
+		}
 		_sink.Clear_Pending();
 	}
 	return(VQAERR_NONE);
@@ -265,11 +296,13 @@ long Close_Audio_Handler(VQAHandleP * vqap)
 	if (_sink.Used) {
 		Stop_Audio_Handler(vqap);
 		_sink.Pusher.Close();
-		AudioEngine.Release_Stream_Slot(_sink.Slot);
+		AudioEngine.Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle());
 		_sink.Slot = -1;
 		_sink.Stream = nullptr;
+		_sink.Handle.Clear();
 		_sink.Owner = nullptr;
 		_sink.Used = false;
+		_sink.QuiesceTimedOut = false;
 	}
 	return(VQAERR_NONE);
 }

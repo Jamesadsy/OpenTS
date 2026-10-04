@@ -59,6 +59,11 @@ WNDPROC Win32_Class_Procedure(char const * name);
 // waits for a message calls this, so the engine keeps its own pump and its own frame pace.
 void Win32_Pump_Host_Events(void);
 void Win32_Post_Message(HWND window, UINT message, WPARAM wparam, LPARAM lparam);
+void Win32_Ensure_Input_Focus(void);
+void Win32_Touch_Click_Begin(void);
+bool Win32_Touch_Click_Pending(void);
+void Win32_Touch_Click_Consumed(void);
+bool Win32_Restore_Focus_For_Touch_Click(void);
 
 // Converts between the host's coordinates and the physical client pixels the engine
 // measures its frame in. The two agree on a display whose pixel density is one.

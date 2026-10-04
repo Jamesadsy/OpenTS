@@ -23,6 +23,10 @@
 #include "win.h"
 #include "video.h"
 
+#ifdef __EMSCRIPTEN__
+extern "C" void OpenTS_Browser_Startup_Record_Operation(int operation);
+#endif
+
 
 DynamicVectorClass<char const *> Movies;
 
@@ -37,7 +41,6 @@ namespace
 		int StartFrame = 0;
 		int EndFrame = -1;
 		int Iterations = 0;
-	int FrameCursor = 0;
 	};
 
 	CooperativePlaybackState CooperativePlayback;
@@ -47,7 +50,7 @@ namespace
 		if (CooperativePlayback.Handle->PlayMode == 2 || CooperativePlayback.StartFrame != 0) {
 			CooperativePlayback.Handle->VQA->Seek_To_Frame(CooperativePlayback.StartFrame);
 		}
-		CooperativePlayback.FrameCursor = CooperativePlayback.StartFrame;
+		CooperativePlayback.Handle->VQA->Begin_Cooperative_Playback(CooperativePlayback.EndFrame);
 	}
 
 	bool Cooperative_End_Pass(void)
@@ -278,6 +281,9 @@ void Movie_Play(VQHandle *movie, bool hide_mouse, ThemeType theme, bool user_bre
 			if (movie->PlayMode == 2 || start_frame != 0) {
 				movie->VQA->Seek_To_Frame(start_frame);
 			}
+#ifdef __EMSCRIPTEN__
+			OpenTS_Browser_Startup_Record_Operation(134);
+#endif
 			int ret = movie->VQA->Play_VQA(end_frame, user_break_not_allowed);
 			if (movie->PlayMode == 1) {
 				iterations = 0;
@@ -354,18 +360,10 @@ bool Movie_Advance_Cooperative_Frame(VQHandle * handle, bool &finished)
 		finished = false;
 		return(false);
 	}
-	bool const advanced = handle->VQA->Advance_Frame(finished);
+	bool const advanced = handle->VQA->Advance_Cooperative_Playback(finished);
 	if (finished) {
 		finished = Cooperative_End_Pass();
 		return(advanced);
-	}
-	if (advanced) {
-		if (CooperativePlayback.EndFrame >= 0
-			&& CooperativePlayback.FrameCursor >= CooperativePlayback.EndFrame) {
-			finished = Cooperative_End_Pass();
-		} else {
-			CooperativePlayback.FrameCursor++;
-		}
 	}
 	return(advanced);
 }

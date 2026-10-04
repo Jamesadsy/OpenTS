@@ -169,6 +169,7 @@ void Log_Display(void);
 // is intentionally separate from the pointer position, and the next real pointer movement
 // clears it.
 bool _EdgeScrollSuppressionPending;
+bool _TouchClickPending;
 
 FILE * _Log;
 bool _LogChecked;
@@ -437,6 +438,12 @@ void Press(Uint8 button)
 #ifdef OPENTS_TOUCH_TEST
 	_Test_Button_Down_Count++;
 #endif
+	if (button == SDL_BUTTON_LEFT) {
+		// Button-up can be dispatched while the click is still in the native input queue.
+		Win32_Touch_Click_Begin();
+	}
+	// A pending host focus loss can enter the queue while the touch waits for pointer settlement.
+	Win32_Ensure_Input_Focus();
 	_HeldButton = button;
 	Win32_Pointer_Button(button, true);
 	Win32_Post_Pointer_Message(button == SDL_BUTTON_RIGHT ? WM_RBUTTONDOWN : WM_LBUTTONDOWN);
@@ -843,7 +850,7 @@ void Win32_Touch_Cancel(void)
 	// Nothing here may touch a pointer this layer is not driving: on a host with a mouse
 	// this is reached with a real button held, and releasing it would end the player's drag.
 	if (_Phase == PHASE_IDLE && _Fingers.empty() && _HeldButton == 0
-	&&	!_Press.Pending && !_Release.Pending && !_Coasting) {
+	&&	!_Press.Pending && !_Release.Pending && !_Coasting && !_TouchClickPending) {
 		return;
 	}
 
@@ -860,11 +867,30 @@ void Win32_Touch_Cancel(void)
 
 	_Fingers.clear();
 	_Samples.clear();
+	_TouchClickPending = false;
 	Stop_Coast();
 	_PanEngaged = false;
 	Set_Phase(PHASE_IDLE, "cancelled");
 	_EdgeScrollSuppressionPending = true;
 	Win32_Pointer_Set_Direct_Touch(false);
+}
+
+
+void Win32_Touch_Click_Begin(void)
+{
+	_TouchClickPending = true;
+}
+
+
+bool Win32_Touch_Click_Pending(void)
+{
+	return(_TouchClickPending);
+}
+
+
+void Win32_Touch_Click_Consumed(void)
+{
+	_TouchClickPending = false;
 }
 
 
@@ -1111,6 +1137,7 @@ void Win32_Touch_Test_Reset(void)
 	_MovieSkipHold.Reset();
 	_HeldButton = 0;
 	_EdgeScrollSuppressionPending = false;
+	_TouchClickPending = false;
 	_Test_Window_Size_Enabled = false;
 	_Test_Window_Width = 0.0f;
 	_Test_Window_Height = 0.0f;

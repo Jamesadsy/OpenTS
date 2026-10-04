@@ -32,4 +32,7 @@
 
 #pragma once
 
+#include <string>
+
 void Choose_Side(int side = 0);
+std::string Select_Side_Intro_Movie(int side = 0);

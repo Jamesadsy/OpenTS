@@ -54,15 +54,17 @@
  *=============================================================================================*/
 void Choose_Side(int side)
 {
+	std::string const name = Select_Side_Intro_Movie(side);
+	Play_Movie(name.c_str());
+}
+
+
+std::string Select_Side_Intro_Movie(int side)
+{
 	char name[16];
 	std::snprintf(name, sizeof(name), "INTR%d.VQA", side);
 
 	// Each side's intro was INTRO.VQA on its own disc, so an installation
 	// holding both has to keep them apart by name.
-	if (CCFileClass(name).Is_Available()) {
-		Play_Movie(name);
-		return;
-	}
-
-	Play_Movie("INTRO.VQA");
+	return(CCFileClass(name).Is_Available() ? name : "INTRO.VQA");
 }

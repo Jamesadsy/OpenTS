@@ -687,6 +687,47 @@ bool IngameMenuSession::Finish(void) noexcept
  * HISTORY:                                                                                    *
  *   10/01/1994 JLB : Created.                                                                 *
  *=============================================================================================*/
+void Main_Game_Prepare_Gameplay(void)
+{
+	ScenarioInit = 0;		// Kludge.
+
+	/*
+	**	Make the game screen visible, clear the keyboard buffer of spurious
+	**	values, and then show the mouse.  This PRESUMES that Select_Game() has
+	**	told the map to draw itself.
+	*/
+	Keyboard->Clear();
+	/*
+	**	Only show the mouse if we're not playing back a recording.
+	*/
+	if (Session.Play) {
+		Hide_Mouse();
+		TeamEvent = 0;
+		TeamNumber = 0;
+	}
+
+	if (Session.Type == GAME_INTERNET) {
+		Register_Game_Start_Time();
+		GameStatisticsPacketSent = false;
+		PacketLater = NULL;
+		ConnectionLost = false;
+	}
+
+	if (ToolTips != NULL) {
+		ToolTips->Activate(Options.ToolTips);
+	}
+
+	IgnoreInput = Scen->IsInputLocked;
+	if (!Scen->IsInputLocked) {
+		Show_Mouse();
+	}
+
+	SpecialDialog = SDLG_NONE;
+	_special_dialog_flag = true;
+
+}
+
+
 void Main_Game(int argc, char * argv[])
 {
 	static bool fade = true;
@@ -727,42 +768,8 @@ void Main_Game(int argc, char * argv[])
 	*/
 	while (Select_Game(fade)) {
 		fade = false;
-		ScenarioInit = 0;		// Kludge.
 		fade = true;
-
-		/*
-		**	Make the game screen visible, clear the keyboard buffer of spurious
-		**	values, and then show the mouse.  This PRESUMES that Select_Game() has
-		**	told the map to draw itself.
-		*/
-		Keyboard->Clear();
-		/*
-		**	Only show the mouse if we're not playing back a recording.
-		*/
-		if (Session.Play) {
-			Hide_Mouse();
-			TeamEvent = 0;
-			TeamNumber = 0;
-		}
-
-		if (Session.Type == GAME_INTERNET) {
-			Register_Game_Start_Time();
-			GameStatisticsPacketSent = false;
-			PacketLater = NULL;
-			ConnectionLost = false;
-		}
-
-		if (ToolTips != NULL) {
-			ToolTips->Activate(Options.ToolTips);
-		}
-
-		IgnoreInput = Scen->IsInputLocked;
-		if (!Scen->IsInputLocked) {
-			Show_Mouse();
-		}
-
-		SpecialDialog = SDLG_NONE;
-		_special_dialog_flag = true;
+		Main_Game_Prepare_Gameplay();
 
 #ifdef _DEBUG
 		/*

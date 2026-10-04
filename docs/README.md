@@ -2,6 +2,9 @@
 
 The developer guides are split by subject:
 
+- [Cooperative browser startup](BROWSER-STARTUP.md) — retained movie and campaign
+  lifetimes, bounded native Steps, and startup diagnostics.
+
 - [Building OpenTS](BUILDING.md) — supported toolchain, commands, outputs,
   build identity, and continuous integration.
 - [Style](STYLE.md) — source formatting, naming, C++ use, and comments.

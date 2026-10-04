@@ -476,13 +476,8 @@ bool VQAClass::Seek_To_Stored_Frame(void)
  * HISTORY:                                                                *
  *   02/20/1995  MG : Created.                                             *
  *=========================================================================*/
-int VQAClass::Play_VQA(int last_frame_to_play, bool nobreakout)
+void VQAClass::Prepare_Playback(int last_frame_to_play)
 {
-	long errval;
-
-	bool brokeout = false;
-	bool sleeping = false;
-
 	if (last_frame_to_play < 0 || last_frame_to_play >= TotalFrames) {
 		last_frame_to_play = TotalFrames - 1;
 	}
@@ -508,10 +503,39 @@ int VQAClass::Play_VQA(int last_frame_to_play, bool nobreakout)
 		}
 	}
 
-	//
-	// Play frames until the last desired frame is drawn or breakout occurs.
-	//
-	errval = 0;
+}
+
+
+void VQAClass::Begin_Cooperative_Playback(int last_frame_to_play)
+{
+	Prepare_Playback(last_frame_to_play);
+	CooperativePlayback = VqaCooperativeState{};
+}
+
+
+bool VQAClass::Advance_Cooperative_Playback(bool & finished)
+{
+	return(CooperativePlayback.Step(GameInFocus, PauseOnFocusLoss, IsPaused, finished,
+	[this](bool & finished) {
+		long const result = VQA_Play(Handle, VQAMODE_WALK, 0);
+		if (result >= VQAERR_OK) {
+			if (SurfaceDrawCallback) SurfaceDrawCallback();
+			CurrentFrame = result + 1;
+			return(true);
+		}
+		finished = result != VQAERR_NOT_TIME && result != VQAERR_NOBUFFER
+			&& result != VQAERR_SLEEPING && result != VQAERR_NONE;
+		return(false);
+	}, [this]() { Pause_VQA(); }, [this]() { IsPaused = false; }));
+}
+
+
+int VQAClass::Play_VQA(int last_frame_to_play, bool nobreakout)
+{
+	Prepare_Playback(last_frame_to_play);
+	bool brokeout = false;
+	bool sleeping = false;
+	long errval = 0;
 
 	while (errval >= VQAERR_OK || errval == VQAERR_NOT_TIME || errval == VQAERR_NOBUFFER || errval == VQAERR_SLEEPING || errval == VQAERR_NONE) {
 		if (brokeout) {

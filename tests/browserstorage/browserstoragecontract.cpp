@@ -138,6 +138,10 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 	std::string const sdl = ReadSource("thirdparty/SDL/src/video/emscripten/SDL_emscriptenevents.c");
 	std::string const entry = ReadSource("platform/win32compat/src/entry.cpp");
 	std::string const message = ReadSource("platform/win32compat/src/message.cpp");
+	std::size_t const dispatch_begin = message.find("extern \"C\" LRESULT DispatchMessage(MSG const * msg)");
+	std::size_t const dispatch_end = message.find("extern \"C\" BOOL PostMessage", dispatch_begin);
+	std::string const dispatch = dispatch_begin != std::string::npos && dispatch_end != std::string::npos
+		? message.substr(dispatch_begin, dispatch_end - dispatch_begin) : std::string();
 	std::string const touch = ReadSource("platform/win32compat/src/touch.cpp");
 	std::string const touch_test = ReadSource("tests/ioscontract/iostouchcontract.cpp");
 	std::string const menu = ReadSource("code/grphmenu.cpp");
@@ -208,11 +212,18 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 	Check(runtime.find("activationAndSetFocusBeforeClick") != std::string::npos
 		&& runtime.find("gameFrameRouteReachedGraphicMenuActiveRect") != std::string::npos
 		&& runtime.find("graphicMenuSelectionReachedNewMenuResult") != std::string::npos
+		&& runtime.find("nativeTelemetryValue(24)") != std::string::npos
+		&& runtime.find("nativeTelemetryValue(25)") != std::string::npos
+		&& runtime.find("activateAppConsumedBeforeClick") != std::string::npos
 		&& coordinator.find("OpenTS_Browser_Step_Entry_Ms") != std::string::npos
 		&& coordinator.find("OpenTS_Browser_Telemetry_Counter") != std::string::npos
 		&& message.find("Record_Browser_Finger_Event(event)") != std::string::npos
 		&& touch.find("OPENTS_TELEMETRY_TOUCH_ACCEPTED") != std::string::npos
 		&& window_procedure.find("OPENTS_TELEMETRY_ACTIVATE_APP_SEQUENCE") != std::string::npos
+		&& window_procedure.find("OPENTS_TELEMETRY_ACTIVATE_BEFORE_CLICK_SEQUENCE")
+			< window_procedure.find("OPENTS_TELEMETRY_MOUSE_DOWN_SEQUENCE")
+		&& window_procedure.find("OPENTS_TELEMETRY_SET_FOCUS_BEFORE_CLICK_SEQUENCE")
+			< window_procedure.find("OPENTS_TELEMETRY_MOUSE_DOWN_SEQUENCE")
 		&& message_route.find("OPENTS_TELEMETRY_GAME_FRAME_X") != std::string::npos
 		&& menu.find("OPENTS_TELEMETRY_MENU_HIT_SEQUENCE") != std::string::npos
 		&& newmenu.find("OPENTS_TELEMETRY_PRODUCT_CHOICE_APPLIED") != std::string::npos,
@@ -247,10 +258,23 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 	Check(message.find("event.motion.which == SDL_TOUCH_MOUSEID") != std::string::npos
 		&& message.find("event.button.which == SDL_TOUCH_MOUSEID") != std::string::npos
 		&& CountOccurrences(message, "#if defined(OPENTS_IOS) || defined(__EMSCRIPTEN__)") == 3
-		&& message.find("static void Activate_Main_Window_From_Input(HWND main)") != std::string::npos
+		&& message.find("static void Activate_Main_Window_From_Input(HWND main, bool force)") != std::string::npos
 		&& message.find("Win32_Post_Message(main, WM_ACTIVATEAPP, 1, 0);") != std::string::npos
 		&& message.find("if (event.type == SDL_EVENT_FINGER_DOWN)") != std::string::npos
-		&& message.find("Activate_Main_Window_From_Input(main);") != std::string::npos
+		&& message.find("Activate_Main_Window_From_Input(main, false);") != std::string::npos
+		&& message.find("HWND const main = Message_Main_Window();", message.find("static void Translate_Event"))
+			!= std::string::npos
+		&& dispatch.find("msg->message == WM_LBUTTONDOWN && Win32_Touch_Click_Pending()")
+			!= std::string::npos
+		&& dispatch.find("Win32_Restore_Focus_For_Touch_Click()")
+			< dispatch.find("window->Procedure(msg->hwnd, msg->message")
+		&& message.find("bool Win32_Restore_Focus_For_Touch_Click(void)")
+			< message.find("extern SDL_Scancode Scancode_For_Virtual_Key")
+		&& message.find("SendMessage(main, WM_ACTIVATEAPP, TRUE, 0)")
+			< message.find("SendMessage(main, WM_SETFOCUS, 0, 0)")
+		&& touch.find("Win32_Touch_Click_Begin()") < touch.find("Win32_Ensure_Input_Focus()")
+		&& touch.find("Win32_Ensure_Input_Focus()")
+			< touch.find("Win32_Post_Pointer_Message(button == SDL_BUTTON_RIGHT ? WM_RBUTTONDOWN : WM_LBUTTONDOWN)")
 		&& entry.find("SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, \"0\")")
 			< entry.find("OpenTS_Browser_Begin();")
 		&& entry.find("SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, \"0\")")
@@ -259,7 +283,12 @@ void Test_Physical_Runtime_Input_And_Presentation(void)
 		&& touch.find("button == SDL_BUTTON_RIGHT ? WM_RBUTTONUP : WM_LBUTTONUP") != std::string::npos
 		&& touch_test.find("Win32_Touch_Test_Button_Down_Count() == 1") != std::string::npos
 		&& touch_test.find("Win32_Touch_Test_Button_Up_Count() == 1") != std::string::npos,
-		"browser and iPhone finger-down activate the native window before the native touch recognizer while SDL compatibility mouse duplicates are suppressed");
+		"touch clicks preserve their origin and synchronously restore focus at dispatch, while SDL compatibility mouse duplicates are suppressed");
+	Check(touch_test.find("DispatchMessage(&message)") != std::string::npos
+		&& touch_test.find("FirstTouchTrace.FocusedAtClick") != std::string::npos
+		&& touch_test.find("candidate_checks == 2 && active_rect_hits == 1 && native_result == 101")
+			!= std::string::npos,
+		"first-tap contract dispatches the native queue focused and proves a DPR-scaled selector hit");
 	Check(menu.find("PendingKey == KN_LMOUSE || PendingKey == KN_RETURN") != std::string::npos
 		&& menu.find("PresentationActionStarted") != std::string::npos
 		&& menu_test.find("fixture.Starts == 1 && fixture.Sound == 1 && fixture.VQ == 1") != std::string::npos,

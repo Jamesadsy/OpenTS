@@ -28,6 +28,8 @@
 #include "uicontrollerfocus.h"
 #include "uirmlview.h"
 
+#include "browsertelemetry.h"
+
 #include "_keyboar.h"
 #include "_xmouse.h"
 #include "dbgprint.h"
@@ -1180,12 +1182,23 @@ UIRmlViewClass::~UIRmlViewClass(void)
 /// <returns>bool; Is the view ready to be interacted with?</returns>
 bool UIRmlViewClass::Prepare(bool modal)
 {
-	if (_Context == nullptr || Element != nullptr) {
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE,
+		OPENTS_UI_PREPARE_FAILURE_NONE);
+	if (_Context == nullptr) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE,
+			OPENTS_UI_PREPARE_FAILURE_CONTEXT_MISSING);
+		return(false);
+	}
+	if (Element != nullptr) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE,
+			OPENTS_UI_PREPARE_FAILURE_ALREADY_OPEN);
 		return(false);
 	}
 
 	Rml::DataModelConstructor constructor = _Context->CreateDataModel(ModelName);
 	if (!constructor) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE,
+			OPENTS_UI_PREPARE_FAILURE_DATA_MODEL);
 		DebugString("[UI] The data model for %s could not be created.\n", Document.c_str());
 		return(false);
 	}
@@ -1195,6 +1208,8 @@ bool UIRmlViewClass::Prepare(bool modal)
 
 	Element = _Context->LoadDocument(Document);
 	if (Element == nullptr) {
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_UI_PREPARE_FAILURE_STAGE,
+			OPENTS_UI_PREPARE_FAILURE_DOCUMENT_LOAD);
 		_Context->RemoveDataModel(ModelName);
 		DebugString("[UI] The document %s could not be loaded.\n", Document.c_str());
 		return(false);

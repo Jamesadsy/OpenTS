@@ -86,6 +86,9 @@
 #include "infantry.h"
 #include "infatype.h"
 #include "init.h"
+#ifdef __EMSCRIPTEN__
+extern "C" int OpenTS_126_Storage_Is_Ready(void);
+#endif
 #include "ionblast.h"
 #include "ipxmgr.h"
 #include "isotype.h"
@@ -173,6 +176,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <SDL3/SDL.h>
+#include <emscripten/emscripten.h>
 void Win32_Gamepad_Initialize(void);
 void Win32_Gamepad_Shutdown(void);
 #endif
@@ -385,6 +389,16 @@ MainGameSession BrowserMainGame;
 
 } // namespace
 
+extern "C" void OpenTS_Browser_Startup_Record_Operation(int operation)
+{
+	if (!OpenTS_Browser_Step_Active()) return;
+	EM_ASM({
+		if (typeof window.__VV_TS_RECORD_NATIVE_OPERATION__ === "function") {
+			window.__VV_TS_RECORD_NATIVE_OPERATION__($0);
+		}
+	}, operation);
+}
+
 
 extern "C" int OpenTS_Browser_Startup_Bootstrap(void)
 {
@@ -466,6 +480,9 @@ extern "C" int OpenTS_Browser_Startup_Bootstrap(void)
 	Exception_Run_Immediate_Test();
 	DeploymentConfig.Read_File(Data_Directory().c_str());
 	Init_Search_Folders(DeploymentConfig.SearchPaths.c_str());
+	// The native RmlUi views use the same CCFileClass search order in the browser.
+	// Keep the packaged loose ui/ documents behind user and installed data overrides.
+	Init_Bundle_UI_Search_Path();
 	Session.RecordFile.Set_Name("RECORD.BIN");
 
 	BrowserStartup.BootstrapStage = 7;
@@ -570,19 +587,25 @@ extern "C" int OpenTS_Browser_Startup_Begin_MainGame(void)
 	if (!BrowserStartup.BootstrapComplete || BrowserStartup.MainGameBeginAttempted || !GameInFocus) return(-1);
 	BrowserStartup.MainGameBeginAttempted = true;
 
+	OpenTS_Browser_Startup_Record_Operation(1);
 	VisibleSurface->Fill(0);
 	Rect sidebar_rect(0, 0, SidebarClass::SIDE_WIDTH, VisibleRect.Height);
 	Rect tile_rect(0, 0, VisibleRect.Width - sidebar_rect.Width, sidebar_rect.Height);
 	Rect composite_rect(0, 0, VisibleRect.Width - sidebar_rect.Width, sidebar_rect.Height);
+	OpenTS_Browser_Startup_Record_Operation(2);
 	Allocate_Surfaces(VisibleRect, composite_rect, tile_rect, sidebar_rect, false);
 	LogicalSurface = HiddenSurface;
+	OpenTS_Browser_Startup_Record_Operation(3);
 	Update_Visible_Surface(HiddenSurface);
+	OpenTS_Browser_Startup_Record_Operation(4);
 	DepthBuffer = new ZBuffer(Rect(TacticalRect.X, TacticalRect.Y, 480, 480 - TacticalRect.Y));
 	DepthBuffer->Set_Scroll(ZBUFFER_MAX);
 	AlphaBuffer = new ABuffer(Rect(TacticalRect.X, TacticalRect.Y, 480, 480 - TacticalRect.Y));
+	OpenTS_Browser_Startup_Record_Operation(5);
 	MouseCursor = new WWMouseClass(MainWindow);
 	MouseCursor->Capture_Mouse();
 
+	OpenTS_Browser_Startup_Record_Operation(6);
 	if (!Special.IsFromInstall && !Spawner_Is_Requested()) {
 		Special.IsFromInstall = ConfigINI.Get_Bool("Intro", "PlayIntro", true);
 	}
@@ -596,7 +619,24 @@ extern "C" int OpenTS_Browser_Startup_Begin_MainGame(void)
 	BrowserStartup.ConfigFile = nullptr;
 
 	DebugString("Main_Game\n");
-	bool const began = BrowserMainGame.Begin(BrowserStartup.Argc, BrowserStartup.Argv, true);
+	OpenTS_Browser_Startup_Record_Operation(7);
+	MainGameSessionOps ops;
+	ops.InitGame = [](void *, int, char **) { return(Init_Game_Browser_Begin()); };
+	ops.StepInitGame = [](void *) {
+		int const result = Init_Game_Browser_Step();
+		return(result == 0 ? MainGameStepResult::Waiting
+			: result == 1 ? MainGameStepResult::Complete : MainGameStepResult::Fault);
+	};
+	ops.FinishInitGame = [](void *) { Init_Game_Browser_Finish(); };
+	ops.BeginPreparation = [](void *, SelectGameSession & selection) { return(Select_Game_Browser_Prepare_Begin(selection)); };
+	ops.StepPreparation = [](void *) {
+		int const result = Select_Game_Browser_Prepare_Step();
+		return(result == 0 ? MainGameStepResult::Waiting
+			: result == 1 ? MainGameStepResult::Complete : MainGameStepResult::Fault);
+	};
+	ops.FinishPreparation = [](void *) { Select_Game_Browser_Prepare_Finish(); };
+	bool const began = BrowserMainGame.Begin(BrowserStartup.Argc, BrowserStartup.Argv, true, ops);
+	OpenTS_Browser_Startup_Record_Operation(8);
 	if (BrowserStartup.OwnerDataBoundaryReached
 		&& BrowserMainGame.Init_Game_Owned()
 		&& BrowserMainGame.Phase() == MainGamePhase::Complete) {
@@ -611,6 +651,8 @@ extern "C" int OpenTS_Browser_Startup_Step_MainGame(void)
 	if (!BrowserStartup.MainGameBeginAttempted) return(-1);
 	if (BrowserStartup.ProofStopRequested) return(1);
 	MainGameStepResult const result = BrowserMainGame.Step();
+	if (result == MainGameStepResult::Fault && BrowserStartup.OwnerDataBoundaryReached
+		&& !OpenTS_126_Storage_Is_Ready()) return(1);
 	if (result == MainGameStepResult::Waiting) return(0);
 	if (result == MainGameStepResult::Complete) return(1);
 	if (result == MainGameStepResult::NativeChild) return(2);

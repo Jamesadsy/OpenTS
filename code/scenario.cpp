@@ -60,6 +60,8 @@
 #include "always.h"
 
 #include "scenario.h"
+#include "scenariostart.h"
+#include "dropship.h"
 
 #include "_bench.h"
 #include "_deploymentconfig.h"
@@ -176,6 +178,7 @@
 #include "bench.hh"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -344,6 +347,8 @@ void ScenarioClass::Reset(void)
  * HISTORY:                                                                                    *
  *   07/04/1995 JLB : Created.                                                                 *
  *=============================================================================================*/
+static bool Start_Scenario_After_Media(bool transit_playing);
+
 bool Start_Scenario(char const * name, bool briefing, CampaignType campaign)
 {
 	if ((name == NULL || strlen(name) == 0) && campaign != CAMPAIGN_NONE) {
@@ -420,6 +425,12 @@ bool Start_Scenario(char const * name, bool briefing, CampaignType campaign)
 		Play_Movie(Scen->ActionMovie, Scen->TransitTheme);
 	}
 
+	return(Start_Scenario_After_Media(transit_playing));
+}
+
+
+static bool Start_Scenario_After_Media(bool transit_playing)
+{
 	if (Scen->ActionMovie == VQ_NONE && Scen->TransitTheme != THEME_NONE) {
 		// The song the mission opened with is already the transit theme, and queuing it again
 		// would start it over; the scheduler still needs something pending either way.
@@ -463,6 +474,136 @@ bool Start_Scenario(char const * name, bool briefing, CampaignType campaign)
 	TacticalActive = true;
 
 	return(true);
+}
+
+
+#ifdef __EMSCRIPTEN__
+extern "C" void OpenTS_Browser_Startup_Record_Operation(int operation);
+static void Browser_Scenario_Operation(int operation) { OpenTS_Browser_Startup_Record_Operation(operation); }
+#endif
+
+struct ScenarioStartSession::Impl
+{
+	enum class Phase { Idle, Prepare, Read, Intro, Brief, Restate, RestateActive, Dropship,
+		DropshipActive, Action, Movie, Finish, Complete, Fault };
+	Phase Current = Phase::Idle;
+	Phase AfterMovie = Phase::Idle;
+	std::string Name;
+	CampaignType Campaign = CAMPAIGN_NONE;
+	bool Briefing = true;
+	bool TransitPlaying = false;
+	std::unique_ptr<TitleMovieSession> Movie;
+	std::unique_ptr<RestateMissionSession> Restatement;
+	std::unique_ptr<DropshipSession> Dropships;
+
+	void BeginMovie(char const * name, Phase next, ThemeType theme = THEME_NONE)
+	{
+		AfterMovie = next;
+		Movie = std::make_unique<TitleMovieSession>();
+		Current = Movie->Begin(name, theme, true, true, true) ? Phase::Movie : Phase::Fault;
+	}
+
+	void BeginMovie(VQType movie, Phase next, ThemeType theme = THEME_NONE)
+	{
+		if (!Briefing || movie == VQ_NONE) { Current = next; return; }
+		char name[MOVIE_FILENAME_SIZE];
+		snprintf(name, sizeof(name), "%s.VQA", Movies[movie]);
+		BeginMovie(name, next, theme);
+	}
+};
+
+ScenarioStartSession::ScenarioStartSession(void) : State(std::make_unique<Impl>()) {}
+ScenarioStartSession::~ScenarioStartSession(void) = default;
+
+bool ScenarioStartSession::Begin(char const * name, bool briefing, CampaignType campaign)
+{
+	if (State->Current != Impl::Phase::Idle) return(false);
+	if ((!name || !*name) && campaign != CAMPAIGN_NONE) {
+		name = Debug_ForceScenario ? Debug_ScenarioName : Campaigns[campaign]->ScenarioName;
+	}
+	if (!name || !*name) return(false);
+	State->Name = name;
+	State->Campaign = campaign;
+	State->Briefing = briefing;
+	State->Current = Impl::Phase::Prepare;
+	return(true);
+}
+
+int ScenarioStartSession::Step(void)
+{
+	using Phase = Impl::Phase;
+	using MovieResult = TitleMovieStepResult;
+	auto & s = *State;
+#ifdef __EMSCRIPTEN__
+	Browser_Scenario_Operation(191 + static_cast<int>(s.Current));
+#endif
+	switch (s.Current) {
+		case Phase::Prepare:
+			Scen->Campaign = s.Campaign;
+			strcpy(Scen->ScenarioName, s.Name.c_str());
+			strupr(Scen->ScenarioName);
+			Theme.Stop();
+			if (s.Briefing && s.Campaign != CAMPAIGN_NONE && Scen->Scenario == 1
+				&& Campaigns[s.Campaign]->CDNumber < 2) {
+				char name[16];
+				snprintf(name, sizeof(name), "INTR%d.VQA", Campaigns[s.Campaign]->CDNumber);
+				s.BeginMovie(CCFileClass(name).Is_Available() ? name : "INTRO.VQA", Phase::Read);
+			} else s.Current = Phase::Read;
+			break;
+		case Phase::Read:
+			if (!Read_Scenario(s.Name.c_str())) { s.Current = Phase::Fault; break; }
+			Theme.Stop();
+			s.Current = Phase::Intro;
+			break;
+		case Phase::Intro: s.BeginMovie(Scen->IntroMovie, Phase::Brief); break;
+		case Phase::Brief: s.BeginMovie(Scen->BriefMovie, Phase::Restate); break;
+		case Phase::Restate: {
+			bool has_movie = Scen->BriefMovie != VQ_NONE;
+			if (has_movie) {
+				char name[MOVIE_FILENAME_SIZE];
+				snprintf(name, sizeof(name), "%s.VQA", Movies[Scen->BriefMovie]);
+				has_movie = CCFileClass(name).Is_Available();
+			}
+			s.Current = Phase::Dropship;
+			if (s.Briefing && Session.Type == GAME_NORMAL && !has_movie) {
+				if (Scen->TransitTheme != THEME_NONE) { Theme.Play_Song(Scen->TransitTheme); s.TransitPlaying = true; }
+				s.Restatement = std::make_unique<RestateMissionSession>();
+				s.Current = s.Restatement->Begin(Scen) ? Phase::RestateActive : Phase::Fault;
+			}
+			break;
+		}
+		case Phase::RestateActive: {
+			int const result = s.Restatement->Step();
+			if (result < 0) s.Current = Phase::Fault;
+			if (result > 0) { s.Restatement.reset(); s.Current = Phase::Dropship; }
+			break;
+		}
+		case Phase::Dropship:
+			if (s.TransitPlaying && s.Briefing && Scen->ActionMovie != VQ_NONE) Theme.Stop(true);
+			s.Current = Phase::Action;
+			if (Scen->StartingDropships > 0) {
+				s.Dropships = std::make_unique<DropshipSession>();
+				s.Current = Phase::DropshipActive;
+			}
+			break;
+		case Phase::DropshipActive:
+			if (s.Dropships->Step()) { s.Dropships.reset(); s.Current = Phase::Action; }
+			break;
+		case Phase::Action: s.BeginMovie(Scen->ActionMovie, Phase::Finish, Scen->TransitTheme); break;
+		case Phase::Movie: {
+			MovieResult const result = s.Movie->Step();
+			if (result == MovieResult::Fault) s.Current = Phase::Fault;
+			if (result == MovieResult::Complete) { s.Movie.reset(); s.Current = s.AfterMovie; }
+			break;
+		}
+		case Phase::Finish:
+			s.Current = Start_Scenario_After_Media(s.TransitPlaying) ? Phase::Complete : Phase::Fault;
+			break;
+		case Phase::Complete: return(1);
+		case Phase::Idle:
+		case Phase::Fault: return(-1);
+	}
+	return(s.Current == Phase::Complete ? 1 : s.Current == Phase::Fault ? -1 : 0);
 }
 
 

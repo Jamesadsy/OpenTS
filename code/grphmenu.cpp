@@ -26,6 +26,11 @@
 #include "theme.h"
 #include "video.h"
 
+#ifndef _WIN32
+bool Win32_Touch_Click_Pending(void);
+bool Win32_Restore_Focus_For_Touch_Click(void);
+#endif
+
 GraphicMenu * _Graphic_Menu(INIClass const & ini, const char * name);
 GraphicMenuItem * GM_Create_Item_From_INI(const char * name, INIClass const & ini, MSEngine & engine, Point2D & image_size);
 
@@ -201,15 +206,31 @@ GraphicMenuStepResult GraphicMenu::Presentation_Step(void)
 {
 	using StepResult = GraphicMenuStepResult;
 	using Phase = PresentationPhase;
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_GRAPHIC_MENU_PHASE, (int)PresentationState);
 	if (PresentationState == Phase::Complete) return(StepResult::Complete);
 	if (PresentationState == Phase::Fault || PresentationState == Phase::Idle) {
 		PresentationState = Phase::Fault;
 		return(StepResult::Fault);
 	}
 
+#ifndef _WIN32
+	if (PresentationState == Phase::AwaitInitialAnimation || PresentationState == Phase::Interactive) {
+		bool const touch_pending = Win32_Touch_Click_Pending();
+		// Check pumps host messages, so test focus only after that pump returns.
+		unsigned short const touch_key = touch_pending ? Keyboard->Check() : KN_NONE;
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_TOUCH_PENDING_AT_MENU, touch_pending ? 1 : 0);
+		OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_TOUCH_KEY_AT_MENU, touch_key);
+		if (touch_pending && touch_key == KN_LMOUSE && !GameInFocus) {
+			OpenTS_Browser_Telemetry_Increment(OPENTS_TELEMETRY_MENU_TOUCH_FOCUS_RESTORES);
+			Win32_Restore_Focus_For_Touch_Click();
+		}
+	}
+#endif
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_FOCUS_AT_MENU_GATE, GameInFocus ? 1 : 0);
+
 	switch (PresentationState) {
 		case Phase::AwaitInitialAnimation:
-			if (Engine.Has_Animation(CurrentAnim)) {
+			if (Engine.Animation_Pending(CurrentAnim)) {
 				Engine.Cooperative_Service_Step(true);
 				return(StepResult::Waiting);
 			}

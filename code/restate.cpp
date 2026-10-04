@@ -31,6 +31,8 @@
 #include "msfont.h"
 #include "drawhelp.h"
 #include "rules.h"
+#include "restate.h"
+#include "movies.h"
 #include "scenario.h"
 #include "srfcache.h"
 #include "surface.h"
@@ -42,6 +44,7 @@
 #include "dialog.hh"
 
 #include <algorithm>
+#include <vector>
 
 class MyButton : public TextButtonClass {
 	public:
@@ -188,6 +191,9 @@ class RestateMission : public MSEngine {
 		RestateMission(void);
 		virtual ~RestateMission(void);
 		bool Presentation(ScenarioClass * scen);
+		bool BeginCooperative(ScenarioClass * scen);
+		int StepCooperative(void);
+		void FinishCooperative(void);
 
 		virtual void Do_Custom_Draw(Surface *surface);
 
@@ -209,6 +215,14 @@ class RestateMission : public MSEngine {
 		ConvertClass * Drawer;
 		GadgetClass * ButtonList;
 		DynamicVectorClass<MyButton *> Buttons;
+		enum class CooperativePhase { Idle, Page, Typing, More, Input, Complete };
+		CooperativePhase Cooperative = CooperativePhase::Idle;
+		std::vector<char *> Pages;
+		std::size_t Page = 0;
+		MSAnim * PageAnimation = nullptr;
+		bool CooperativeOwned = false;
+		bool CooperativeMouseHidden = false;
+		bool RequestedVideo = false;
 };
 
 enum {
@@ -294,7 +308,180 @@ RestateMission::RestateMission(void) :
 /// </summary>
 RestateMission::~RestateMission(void)
 {
+	FinishCooperative();
 	Cleanup();
+}
+
+
+bool RestateMission::BeginCooperative(ScenarioClass * scen)
+{
+	if (Cooperative != CooperativePhase::Idle || !scen || !AlternateSurface || !HiddenSurface || !Init(scen)) return(false);
+	CooperativeOwned = true;
+	Keyboard->Clear();
+	MouseCursor->Release_Mouse();
+	Hide_Mouse();
+	CooperativeMouseHidden = true;
+	Load_Title_Screen("SCORE.PCX", AlternateSurface, &CCPalette);
+	HiddenSurface->Blit_From(*AlternateSurface);
+	Add_Update_Rect(HiddenSurface->Get_Rect());
+	Blit_All(HiddenSurface);
+	if (BriefingText[0]) {
+		Rect rect(CenterX + 110, CenterY + 60, 420, 280);
+		MSPrintAnim::Word_Wrap(BriefingText, Font, 420);
+		Font->Get_String_Rect(BriefingText, StringRect);
+		StringRect.X = rect.X + (rect.Width - StringRect.Width) / 2;
+		StringRect.Y = rect.Y + (rect.Height - Font->Get_Font_Height() * (StringRect.Height / Font->Get_Font_Height())) / 2;
+		StringRect = Intersect(rect, StringRect);
+		MSPrintAnim::Paginate(BriefingText, Font, rect.Height);
+		for (char * page = strtok(BriefingText, "\f"); page; page = strtok(nullptr, "\f")) Pages.push_back(page);
+	}
+	Cooperative = CooperativePhase::Page;
+	return(true);
+}
+
+
+int RestateMission::StepCooperative(void)
+{
+	using Phase = CooperativePhase;
+	if (Cooperative == Phase::Complete) return(RequestedVideo ? 2 : 1);
+	if (!CooperativeOwned) return(-1);
+	Cooperative_Service_Step(true);
+	if (!GameInFocus) return(0);
+	if (Cooperative == Phase::Page) {
+		if (Page < Pages.size()) {
+			PageAnimation = new MSWordAnim(Pages[Page], StringRect.X, StringRect.Y, Font, StringRect, 5);
+			if (Add_Animation(PageAnimation) < 0) { delete PageAnimation; PageAnimation = nullptr; return(-1); }
+			Cooperative = Phase::Typing;
+		} else {
+			Get_Button(BUTTON_RESUME)->Enable();
+			if (Scenario->BriefMovie != VQ_NONE) Get_Button(BUTTON_VIDEO)->Enable();
+			Show_Mouse();
+			CooperativeMouseHidden = false;
+			Keyboard->Clear();
+			ButtonList->Draw_All();
+			Cooperative = Phase::Input;
+		}
+		return(0);
+	}
+	if (Cooperative == Phase::Typing) {
+		if (Has_Animation(PageAnimation) && !PageAnimation->Has_Finished()) return(0);
+		Remove_Anim(PageAnimation);
+		PageAnimation = nullptr;
+		String = Pages[Page++];
+		if (Page == Pages.size()) { Cooperative = Phase::Page; return(0); }
+		MyButton * more = Get_Button(BUTTON_MORE);
+		more->X = StringRect.X + (StringRect.Width - more->Width) / 2;
+		more->Y = StringRect.Y + StringRect.Height;
+		more->Enable();
+		Show_Mouse();
+		CooperativeMouseHidden = false;
+		Keyboard->Clear();
+		ButtonList->Draw_All();
+		Cooperative = Phase::More;
+		return(0);
+	}
+	unsigned const input = ButtonList ? ButtonList->Input() : Keyboard->Get();
+	if (input != (BUTTON_RESUME|KN_BUTTON) && input != (BUTTON_VIDEO|KN_BUTTON)
+		&& input != (BUTTON_MORE|KN_BUTTON) && input != KN_SPACE && input != KN_ESC) return(0);
+	Keyboard->Clear();
+	if (Cooperative == Phase::More) {
+		Get_Button(BUTTON_MORE)->Draw();
+		Get_Button(BUTTON_MORE)->Disable();
+		Hide_Mouse();
+		CooperativeMouseHidden = true;
+		Rect rect(CenterX + 110, CenterY + 60, 420, 280);
+		HiddenSurface->Blit_From(rect, *AlternateSurface, rect);
+		Add_Update_Rect(rect);
+		String = nullptr;
+		Cooperative = Phase::Page;
+		return(0);
+	}
+	RequestedVideo = input == (BUTTON_VIDEO|KN_BUTTON);
+	Cooperative = Phase::Complete;
+	FinishCooperative();
+	return(RequestedVideo ? 2 : 1);
+}
+
+
+void RestateMission::FinishCooperative(void)
+{
+	if (!CooperativeOwned) return;
+	Remove_Anim(PageAnimation);
+	PageAnimation = nullptr;
+	if (!CooperativeMouseHidden) Hide_Mouse();
+	HiddenSurface->Fill(0);
+	Add_Update_Rect(HiddenSurface->Get_Rect());
+	Blit_All(HiddenSurface);
+	Cleanup();
+	Keyboard->Clear();
+	Show_Mouse();
+	MouseCursor->Capture_Mouse();
+	CooperativeOwned = false;
+}
+
+
+struct RestateMissionSession::Impl
+{
+	std::unique_ptr<RestateMission> Page;
+	std::unique_ptr<TitleMovieSession> Movie;
+	ScenarioClass * Scenario = nullptr;
+	ThemeType ThemeBefore = THEME_NONE;
+	bool SavedActive = false;
+	bool Owned = false;
+	bool Complete = false;
+};
+
+RestateMissionSession::RestateMissionSession(void) : State(std::make_unique<Impl>()) {}
+RestateMissionSession::~RestateMissionSession(void) { Finish(); }
+
+bool RestateMissionSession::Begin(ScenarioClass * scenario)
+{
+	if (State->Owned || State->Complete) return(false);
+	State->SavedActive = ScenarioActive;
+	State->Owned = true;
+	State->Scenario = scenario;
+	ScenarioActive = false;
+	State->Page = std::make_unique<RestateMission>();
+	return(State->Page->BeginCooperative(scenario));
+}
+
+int RestateMissionSession::Step(void)
+{
+	if (State->Complete) return(1);
+	if (!State->Owned) return(-1);
+	if (State->Page) {
+		int const result = State->Page->StepCooperative();
+		if (result <= 0) return(result);
+		State->Page.reset();
+		if (result == 2 && State->Scenario->BriefMovie != VQ_NONE) {
+			State->ThemeBefore = Theme.What_Is_Playing();
+			Theme.Stop();
+			char name[MOVIE_FILENAME_SIZE];
+			snprintf(name, sizeof(name), "%s.VQA", Movies[State->Scenario->BriefMovie]);
+			State->Movie = std::make_unique<TitleMovieSession>();
+			if (!State->Movie->Begin(name, THEME_NONE, true, true, true)) return(-1);
+			return(0);
+		}
+	} else if (State->Movie) {
+		auto const result = State->Movie->Step();
+		if (result == TitleMovieStepResult::Waiting) return(0);
+		if (result == TitleMovieStepResult::Fault) return(-1);
+		State->Movie.reset();
+		Theme.Play_Song(State->ThemeBefore);
+	}
+	State->Complete = true;
+	Finish();
+	return(1);
+}
+
+void RestateMissionSession::Finish(void)
+{
+	if (!State->Owned) return;
+	State->Page.reset();
+	State->Movie.reset();
+	ScenarioActive = State->SavedActive;
+	Keyboard->Clear();
+	State->Owned = false;
 }
 
 

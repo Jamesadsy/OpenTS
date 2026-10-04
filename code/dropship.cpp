@@ -267,23 +267,20 @@ struct CrossDissolveEffect
 /// </summary>
 /// <remarks>The alpha and depth buffers are re-created around this screen, so anything
 /// held in them beforehand is lost.</remarks>
-void Dropship_Screen(void)
+struct DropshipSession::Impl
 {
-	int i;
-	int j;
-	int k;
+	Impl(void);
+	~Impl(void) { Finish(false); }
+	bool Step(void);
+	void Finish(bool apply);
 
-	int dropship_count = Scen->StartingDropships;
-	int money = PlayerPtr->Available_Money();
-	unsigned int money_display = 0;
-
-	static const char *_drop_btn_names[] = {
+	static constexpr char const *_drop_btn_names[] = {
 		"DROP0001.SHP",
 		"DROP0002.SHP",
 		"DROP0003.SHP",
 	};
 
-	static const char *_green_btn_names[] = {
+	static constexpr char const *_green_btn_names[] = {
 		"DGREEN1.SHP",
 		"DGREEN2.SHP",
 		"DGREEN3.SHP",
@@ -299,98 +296,98 @@ void Dropship_Screen(void)
 	 * The cameo grid the player picks units from. It is two columns of four,
 	 * each cameo separated from the next by the gap values.
 	 */
-	static const int _cameo_count = 8;
-	static const int _cameo_x = 491;
-	static const int _cameo_y = 25;
-	static const int _cameo_width = 64;
-	static const int _cameo_height = 48;
-	static const int _cameo_gap_x = 4;
-	static const int _cameo_gap_y = 2;
+	static constexpr int _cameo_count = 8;
+	static constexpr int _cameo_x = 491;
+	static constexpr int _cameo_y = 25;
+	static constexpr int _cameo_width = 64;
+	static constexpr int _cameo_height = 48;
+	static constexpr int _cameo_gap_x = 4;
+	static constexpr int _cameo_gap_y = 2;
 
 	/*
 	 * The two buttons that scroll the cameo grid, and the places they occupy
 	 * in the button array.
 	 */
-	static const int _up_x = 527;
-	static const int _up_y = 229;
-	static const int _down_x = 557;
-	static const int _down_y = 229;
-	static const int _up_index = 8;
-	static const int _down_index = 9;
+	static constexpr int _up_x = 527;
+	static constexpr int _up_y = 229;
+	static constexpr int _down_x = 557;
+	static constexpr int _down_y = 229;
+	static constexpr int _up_index = 8;
+	static constexpr int _down_index = 9;
 
 	/*
 	 * The loadout slots the chosen units are shown in. They follow the scroll
 	 * buttons in the button array, and wrap onto a second row after two of them.
 	 */
-	static const int _slot_index = 10;
-	static const int _slot_width = 64;
-	static const int _slot_gap_x = 2;
-	static const int _slot_x = 53;
-	static const int _slot_height = 48;
+	static constexpr int _slot_index = 10;
+	static constexpr int _slot_width = 64;
+	static constexpr int _slot_gap_x = 2;
+	static constexpr int _slot_x = 53;
+	static constexpr int _slot_height = 48;
 
 	/*
 	 * Units cheaper than this are never offered.
 	 */
-	static const int _minimum_cost = 10;
+	static constexpr int _minimum_cost = 10;
 
 	/*
 	 * The green lights that flash beside the dropship as it is loaded.
 	 */
-	static const int _light_rate = 100;
-	static const int _light_x = 371;
+	static constexpr int _light_rate = 100;
+	static constexpr int _light_x = 371;
 
 	/*
 	 * A cameo that has just been used up fades between the two alpha levels at
 	 * this rate.
 	 */
-	static const int _fade_rate = 10;
-	static const int _fade_low = 63;
-	static const int _fade_scale = 70;
+	static constexpr int _fade_rate = 10;
+	static constexpr int _fade_low = 63;
+	static constexpr int _fade_scale = 70;
 
 	/*
 	 * The looping animation printed down the left of the screen.
 	 */
-	static const int _loadout_rate = 250;
-	static const int _loadout_x = 45;
-	static const int _loadout_y = 0;
+	static constexpr int _loadout_rate = 250;
+	static constexpr int _loadout_x = 45;
+	static constexpr int _loadout_y = 0;
 
 	/*
 	 * How quickly a cameo dissolves into the slot it was dropped into.
 	 */
-	static const int _dissolve_scale = 30;
-	static const int _dissolve_rate = 7;
+	static constexpr int _dissolve_scale = 30;
+	static constexpr int _dissolve_rate = 7;
 
 	/*
 	 * The credits readout, and how often it is allowed to count toward the
 	 * amount the player has left.
 	 */
-	static const int _money_x = 500;
-	static const int _money_y = 385;
-	static const int _money_rate = 50;
+	static constexpr int _money_x = 500;
+	static constexpr int _money_y = 385;
+	static constexpr int _money_rate = 50;
 
 	/*
 	 * A button stays "clicked" for this long, so that holding the mouse down
 	 * does not load the dropship in one go.
 	 */
-	static const int _click_delay = 300;
+	static constexpr int _click_delay = 300;
 
 	/*
 	 * A third button width, which nothing reads: every rect that could have
 	 * spent it folds to the same bytes the cameo width gives.
 	 */
-	static const int _button_width = 64;
+	static constexpr int _button_width = 64;
 
 	/*
 	 * The light that blinks in the cockpit. It is stepped at this rate once it
 	 * starts, and it only starts on the rare frame that the chance comes up.
 	 */
-	static const int _pilot_rate = 150;
-	static const float _pilot_chance = 0.02f;
-	static const int _pilot_x = 284;
-	static const int _pilot_y = 151;
-	static const int _pilot_delay = 5;
+	static constexpr int _pilot_rate = 150;
+	static constexpr float _pilot_chance = 0.02f;
+	static constexpr int _pilot_x = 284;
+	static constexpr int _pilot_y = 151;
+	static constexpr int _pilot_delay = 5;
 
-	static const int _loadout_slot_ys[3][3][SLOT_PER_DROPSHIP] = {
+	static constexpr int _loadout_slot_ys[3][3][SLOT_PER_DROPSHIP] = {
 		{
 			{69,69,119,119,119},
 			{0,0,0,0,0},
@@ -408,11 +405,68 @@ void Dropship_Screen(void)
 		}
 	};
 
-	static const int _green_light_ys[] = {
+	static constexpr int _green_light_ys[] = {
 		10, 60, 110, 160
 	};
 
-	ShapeSet *green_shapes[ARRAY_SIZE(_green_btn_names)];
+	ShapeSet *green_shapes[ARRAY_SIZE(_green_btn_names)]{};
+	ShapeSet *loadout_shape{};
+	ShapeSet *pilotlight_shape{};
+	ShapeSet *no_cameo_shape{};
+	unsigned char *drop_shape_buf{};
+	ShapeSet *drop_shape{};
+	BSurface *background_surface{};
+	int drop_height{};
+	int drop_width{};
+	int y{};
+	int x{};
+	ConvertClass *drawer_dropship{};
+	ConvertClass *drawer_dropship_alpha{};
+	ConvertClass *drawer_cameo{};
+	Blitter const *plain_blitter{};
+	Blitter const *cameo_alpha_blitter{};
+	Blitter const *drop_alpha_blitter{};
+	DynamicVectorClass<TechnoTypeClass *> candidates{};
+	int cameo_top{};
+	bool can_scroll_up{};
+	int button_count{};
+	bool can_scroll_down{};
+	ShapeButtonClass **buttons{};
+	ToggleClass *button_list{};
+	ShapeButtonClass *up_button{};
+	ShapeButtonClass *down_button{};
+	bool full_redraw{};
+	bool accept{};
+	bool recent_click{};
+	unsigned int light_frame[ARRAY_SIZE(_green_light_ys)]{};
+	unsigned int light_start[ARRAY_SIZE(_green_light_ys)]{};
+	bool force_light_redraw{};
+	DynamicVectorClass<ButtonFadeEffect *> button_fades{};
+	unsigned int money_display_time{};
+	unsigned int screen_start_time{};
+	int loadout_anim_frame{};
+	unsigned int last_input_time{};
+	int pilot_frame{};
+	CDTimerClass<SystemTimerClass> pilot_timer{};
+	unsigned int pilot_start_time{};
+	DynamicVectorClass<CrossDissolveEffect *> cross_dissolves{};
+	bool force_info_redraw{};
+	TechnoTypeClass *last_hover_type{};
+	int last_hover_slot{};
+	int selected_count{};
+	DynamicVectorClass<TechnoTypeClass *> selections{};
+	Rect alpha_area{};
+	int i = 0, j = 0, k = 0;
+	int dropship_count = 0;
+	int money = 0;
+	unsigned int money_display = 0;
+	bool Cleaned = false;
+};
+
+DropshipSession::Impl::Impl(void)
+{
+	dropship_count = Scen->StartingDropships;
+	money = PlayerPtr->Available_Money();
 	for (i = 0; i < ARRAY_SIZE(_green_btn_names); ++i) {
 		CCFileClass file(_green_btn_names[i]);
 		unsigned char *shape_buf = new unsigned char[file.Size()];
@@ -420,21 +474,21 @@ void Dropship_Screen(void)
 		green_shapes[i] = (ShapeSet *)shape_buf;
 	}
 
-	ShapeSet *loadout_shape = (ShapeSet *)MFCD::Retrieve("LOADOUT.SHP");
-	ShapeSet *pilotlight_shape = (ShapeSet *)MFCD::Retrieve("PILOTLIT.SHP");
-	ShapeSet *no_cameo_shape = (ShapeSet *)MFCD::Retrieve("XXICON.SHP");
+	loadout_shape = (ShapeSet *)MFCD::Retrieve("LOADOUT.SHP");
+	pilotlight_shape = (ShapeSet *)MFCD::Retrieve("PILOTLIT.SHP");
+	no_cameo_shape = (ShapeSet *)MFCD::Retrieve("XXICON.SHP");
 
 	CCFileClass drop_shape_file(_drop_btn_names[dropship_count - 1]);
-	unsigned char *drop_shape_buf = new unsigned char[drop_shape_file.Size()];
+	drop_shape_buf = new unsigned char[drop_shape_file.Size()];
 	drop_shape_file.Read(drop_shape_buf, drop_shape_file.Size());
-	ShapeSet *drop_shape = (ShapeSet *)drop_shape_buf;
+	drop_shape = (ShapeSet *)drop_shape_buf;
 
-	BSurface *background_surface = new BSurface(drop_shape->Get_Width(), drop_shape->Get_Height(), 1, drop_shape->Get_Data(0));
+	background_surface = new BSurface(drop_shape->Get_Width(), drop_shape->Get_Height(), 1, drop_shape->Get_Data(0));
 
-	int drop_height = drop_shape->Get_Height();
-	int drop_width = drop_shape->Get_Width();
-	int y = (HiddenSurface->Get_Height() - drop_height) / 2;
-	int x = (HiddenSurface->Get_Width() - drop_width) / 2;
+	drop_height = drop_shape->Get_Height();
+	drop_width = drop_shape->Get_Width();
+	y = (HiddenSurface->Get_Height() - drop_height) / 2;
+	x = (HiddenSurface->Get_Width() - drop_width) / 2;
 
 	PaletteClass palette_data;
 	memmove(&palette_data, (unsigned char *)MFCD::Retrieve("DROPSHIP.PAL"), sizeof(palette_data));
@@ -442,22 +496,21 @@ void Dropship_Screen(void)
 		palette_data[i] = RGBClass(palette_data[i].Get_Red() * 4, palette_data[i].Get_Green() * 4, palette_data[i].Get_Blue() * 4);
 	}
 
-	ConvertClass *drawer_dropship = new ConvertClass(palette_data, GamePalette, *VisibleSurface, 63, false);
-	ConvertClass *drawer_dropship_alpha = new ConvertClass(palette_data, GamePalette, *VisibleSurface, 1, false);
+	drawer_dropship = new ConvertClass(palette_data, GamePalette, *VisibleSurface, 63, false);
+	drawer_dropship_alpha = new ConvertClass(palette_data, GamePalette, *VisibleSurface, 1, false);
 
 	memmove(&palette_data, (unsigned char *)MFCD::Retrieve("CAMEO.PAL"), sizeof(palette_data));
 	for (i = 0; i < 256; ++i) {
 		palette_data[i] = RGBClass(palette_data[i].Get_Red() * 4, palette_data[i].Get_Green() * 4, palette_data[i].Get_Blue() * 4);
 	}
-	ConvertClass *drawer_cameo = new ConvertClass(palette_data, GamePalette, *VisibleSurface, 1, false);
+	drawer_cameo = new ConvertClass(palette_data, GamePalette, *VisibleSurface, 1, false);
 
-	Blitter const *plain_blitter = drawer_dropship->Blitter_From_Flags(SHAPE_NORMAL);
-	Blitter const *cameo_alpha_blitter = drawer_cameo->Blitter_From_Flags(SHAPE_ALPHA_BLEND);
-	Blitter const *drop_alpha_blitter = drawer_dropship_alpha->Blitter_From_Flags(SHAPE_ALPHA_BLEND);
+	plain_blitter = drawer_dropship->Blitter_From_Flags(SHAPE_NORMAL);
+	cameo_alpha_blitter = drawer_cameo->Blitter_From_Flags(SHAPE_ALPHA_BLEND);
+	drop_alpha_blitter = drawer_dropship_alpha->Blitter_From_Flags(SHAPE_ALPHA_BLEND);
 
 	HiddenSurface->Fill(0);
 
-	DynamicVectorClass<TechnoTypeClass *> candidates;
 	int type_count = InfantryTypes.Count() + UnitTypes.Count();
 
 	unsigned int ownable_mask = 1 << HouseTypes.ID(PlayerPtr->Class);
@@ -498,12 +551,12 @@ void Dropship_Screen(void)
 		}
 	}
 
-	int cameo_top = 0;
-	bool can_scroll_up = false;
-	int button_count = _cameo_count + 2 + dropship_count * SLOT_PER_DROPSHIP;
-	bool can_scroll_down = candidates.Count() > _cameo_count;
-	ShapeButtonClass **buttons = new ShapeButtonClass *[button_count];
-	ToggleClass *button_list = NULL;
+	cameo_top = 0;
+	can_scroll_up = false;
+	button_count = _cameo_count + 2 + dropship_count * SLOT_PER_DROPSHIP;
+	can_scroll_down = candidates.Count() > _cameo_count;
+	buttons = new ShapeButtonClass *[button_count];
+	button_list = NULL;
 
 	int id = 1;
 	for (i = 0; i < _cameo_count; ++i) {
@@ -518,14 +571,14 @@ void Dropship_Screen(void)
 		++id;
 	}
 
-	ShapeButtonClass *up_button = new ShapeButtonClass(id, (ShapeSet *)MFCD::Retrieve("DROPUP.SHP"), x + _up_x, y + _up_y, 0, 0, false);
+	up_button = new ShapeButtonClass(id, (ShapeSet *)MFCD::Retrieve("DROPUP.SHP"), x + _up_x, y + _up_y, 0, 0, false);
 	up_button->ShapeDrawer = drawer_dropship;
 	up_button->IsSticky = true;
 	buttons[_up_index] = up_button;
 	up_button->Add(*button_list);
 	++id;
 
-	ShapeButtonClass *down_button = new ShapeButtonClass(id, (ShapeSet *)MFCD::Retrieve("DROPDOWN.SHP"), x + _down_x, y + _down_y, 0, 0, false);
+	down_button = new ShapeButtonClass(id, (ShapeSet *)MFCD::Retrieve("DROPDOWN.SHP"), x + _down_x, y + _down_y, 0, 0, false);
 	down_button->ShapeDrawer = drawer_dropship;
 	down_button->IsSticky = true;
 	buttons[_down_index] = down_button;
@@ -545,38 +598,33 @@ void Dropship_Screen(void)
 
 	button_list->Turn_On();
 
-	bool full_redraw = true;
-	bool accept = false;
-	bool recent_click = false;
+	full_redraw = true;
+	accept = false;
+	recent_click = false;
 
-	unsigned int light_frame[ARRAY_SIZE(_green_light_ys)];
-	unsigned int light_start[ARRAY_SIZE(_green_light_ys)];
 	memset(light_frame, 0xFF, sizeof(light_frame));
 	memset(light_start, 0, sizeof(light_start));
 
-	bool force_light_redraw = false;
+	force_light_redraw = false;
 
-	DynamicVectorClass<ButtonFadeEffect *> button_fades;
 
-	unsigned int money_display_time = Host_Milliseconds();
-	unsigned int screen_start_time = money_display_time;
-	int loadout_anim_frame = 0;
-	unsigned int last_input_time = 0;
-	int pilot_frame = -1;
+	money_display_time = Host_Milliseconds();
+	screen_start_time = money_display_time;
+	loadout_anim_frame = 0;
+	last_input_time = 0;
+	pilot_frame = -1;
 
-	CDTimerClass<SystemTimerClass> pilot_timer = _pilot_delay;
-	unsigned int pilot_start_time = 0;
+	pilot_timer = _pilot_delay;
+	pilot_start_time = 0;
 
-	DynamicVectorClass<CrossDissolveEffect *> cross_dissolves;
-	bool force_info_redraw = false;
+	force_info_redraw = false;
 
-	TechnoTypeClass *last_hover_type = NULL;
-	int last_hover_slot = -1;
-	int selected_count = 0;
+	last_hover_type = NULL;
+	last_hover_slot = -1;
+	selected_count = 0;
 
-	DynamicVectorClass<TechnoTypeClass *> selections;
 
-	Rect alpha_area = AlphaBuffer->Get_Bounds();
+	alpha_area = AlphaBuffer->Get_Bounds();
 	Hide_Mouse();
 	delete AlphaBuffer;
 	AlphaBuffer = NULL;
@@ -586,7 +634,11 @@ void Dropship_Screen(void)
 	LogicalSurface = HiddenSurface;
 	Keyboard->Clear();
 
-	while (!accept) {
+}
+
+bool DropshipSession::Impl::Step(void)
+{
+	if (Cleaned) return(true);
 		bool redraw = false;
 
 		if (full_redraw) {
@@ -1019,19 +1071,38 @@ void Dropship_Screen(void)
 
 			Update_Visible_Surface(HiddenSurface, NULL);
 		}
-	}
+	if (accept) Finish(true);
+	return(accept);
+}
 
-	for (i = 0; i < selections.Count(); ++i) {
-		PlayerPtr->DropshipLoadouts[i / SLOT_PER_DROPSHIP].Add(selections[i]);
+void DropshipSession::Impl::Finish(bool apply)
+{
+	if (Cleaned) return;
+	Cleaned = true;
+	if (apply) {
+		for (i = 0; i < selections.Count(); ++i) {
+			PlayerPtr->DropshipLoadouts[i / SLOT_PER_DROPSHIP].Add(selections[i]);
+		}
+	} else {
+		for (i = 0; i < selections.Count(); ++i) {
+			int const index = DropshipLoadoutClass::Get_Allowable_Index(selections[i]);
+			if (index != -1) --Scen->AllowableUnitCounts[index];
+		}
 	}
-
+	for (i = 0; i < cross_dissolves.Count(); ++i) {
+		auto * effect = cross_dissolves[i];
+		if (effect->FromSurface != background_surface) delete effect->FromSurface;
+		if (effect->ToSurface != background_surface) delete effect->ToSurface;
+		delete effect;
+	}
+	cross_dissolves.Clear();
 	delete drawer_dropship;
 	delete drawer_cameo;
 	delete drawer_dropship_alpha;
 	delete background_surface;
 	delete [] drop_shape_buf;
 	for (i = 0; i < ARRAY_SIZE(green_shapes); ++i) {
-		delete green_shapes[i];
+		delete [] reinterpret_cast<unsigned char *>(green_shapes[i]);
 	}
 	for (i = 0; i < button_count; ++i) {
 		delete buttons[i];
@@ -1051,6 +1122,18 @@ void Dropship_Screen(void)
 	DepthBuffer = new ZBuffer(alpha_area);
 
 	Show_Mouse();
+	for (i = 0; i < button_fades.Count(); ++i) delete button_fades[i];
+	button_fades.Clear();
+}
+
+DropshipSession::DropshipSession(void) : State(std::make_unique<Impl>()) {}
+DropshipSession::~DropshipSession(void) = default;
+bool DropshipSession::Step(void) { return(State->Step()); }
+
+void Dropship_Screen(void)
+{
+	DropshipSession session;
+	while (!session.Step()) {}
 }
 
 

@@ -43,14 +43,19 @@ enum class MainGameStepResult : std::uint8_t {
 // Native operations are injected so the owner can be contract-tested without starting the
 // game, opening owner data, or entering a platform-specific startup path. Null operations
 // use the accepted local SelectGame/MainLoop/IngameMenu sessions where there is a bounded
-// session API. Scenario preparation and unknown native selection children are handed back
-// to the caller and never run from Step.
+// session API. Preparation can retain a cooperative child through the three preparation
+// operations; callers without those operations still receive the native child boundary.
 struct MainGameSessionOps
 {
 	void * Context = nullptr;
 	int (*InitGame)(void *, int, char **argv) = nullptr;
+	MainGameStepResult (*StepInitGame)(void *) = nullptr;
+	void (*FinishInitGame)(void *) = nullptr;
 	bool (*BeginSelection)(void *, SelectGameSession &, bool fade) = nullptr;
 	SelectGameStepResult (*StepSelection)(void *, SelectGameSession &) = nullptr;
+	bool (*BeginPreparation)(void *, SelectGameSession &) = nullptr;
+	MainGameStepResult (*StepPreparation)(void *) = nullptr;
+	void (*FinishPreparation)(void *) = nullptr;
 	bool (*BeginGameplay)(void *, OpenTS_MainLoop::MainLoopSession &) = nullptr;
 	OpenTS_MainLoop::CooperativeResult (*StepGameplay)(void *, OpenTS_MainLoop::MainLoopSession &) = nullptr;
 	bool (*FinishGameplay)(void *, OpenTS_MainLoop::MainLoopSession &) = nullptr;

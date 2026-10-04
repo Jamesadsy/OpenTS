@@ -10,6 +10,7 @@
 #pragma once
 
 #include "_mixfile.h"
+#include "scrnsel.hh"
 
 #include <cstdint>
 #include <memory>
@@ -36,6 +37,69 @@ enum {
 	GMENU_FIRESTORM = 101,
 	GMENU_BACK = 102
 };
+
+// These are the native product-page results which already own a meaning in the game.
+// Keep resolution here so the native caller and contract tests share the same identity.
+enum class ProductMenuAction : std::uint8_t {
+	Exit,
+	Campaign,
+	Load,
+	Lan,
+	OnlineDeferred,
+	SerialRetired,
+	Skirmish,
+	WdtReserved,
+	Options,
+	Placeholder,
+	Intro,
+	Version,
+	Credits,
+	Back,
+	Unknown,
+};
+
+constexpr ProductMenuAction Resolve_Product_Menu_Action(int result) noexcept
+{
+	switch (result) {
+		case NSEL_EXIT: return(ProductMenuAction::Exit);
+		case NSEL_START_NEW_GAME: return(ProductMenuAction::Campaign);
+		case NSEL_LOAD_MISSION: return(ProductMenuAction::Load);
+		case NSEL_LAN: return(ProductMenuAction::Lan);
+		case NSEL_INTERNET: return(ProductMenuAction::OnlineDeferred);
+		case NSEL_SERIAL_MODEM: return(ProductMenuAction::SerialRetired);
+		case NSEL_SKIRMISH: return(ProductMenuAction::Skirmish);
+		case NSEL_WDT: return(ProductMenuAction::WdtReserved);
+		case NSEL_OPTIONS: return(ProductMenuAction::Options);
+		case NSEL_9: return(ProductMenuAction::Placeholder);
+		case NSEL_INTRO: return(ProductMenuAction::Intro);
+		case NSEL_VERSION: return(ProductMenuAction::Version);
+		case NSEL_VIEW_CREDITS: return(ProductMenuAction::Credits);
+		case GMENU_BACK: return(ProductMenuAction::Back);
+		default: return(ProductMenuAction::Unknown);
+	}
+}
+
+constexpr int Product_Menu_Selection(ProductMenuAction action) noexcept
+{
+	switch (action) {
+		case ProductMenuAction::Exit: return(SEL_EXIT);
+		case ProductMenuAction::Campaign: return(SEL_CAMPAIGN_GAME);
+		case ProductMenuAction::Load: return(SEL_LOAD_GAME);
+		case ProductMenuAction::Lan:
+		case ProductMenuAction::Skirmish: return(SEL_MULTIPLAYER_GAME);
+		case ProductMenuAction::Options: return(SEL_OPTIONS);
+		case ProductMenuAction::Intro: return(SEL_INTRO);
+		case ProductMenuAction::Version: return(SEL_VERSION);
+		case ProductMenuAction::Credits: return(SEL_VIEW_CREDITS);
+		case ProductMenuAction::OnlineDeferred:
+		case ProductMenuAction::SerialRetired:
+		case ProductMenuAction::WdtReserved:
+		case ProductMenuAction::Placeholder:
+		case ProductMenuAction::Back:
+		case ProductMenuAction::Unknown: return(SEL_NONE);
+	}
+	return(SEL_NONE);
+}
 
 class NewMenuClass
 {

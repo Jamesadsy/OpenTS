@@ -13,6 +13,21 @@
 
 #pragma once
 
+#include <memory>
+
 class ScenarioClass;
 
 void Restate_Mission(ScenarioClass * scen);
+
+class RestateMissionSession
+{
+	public:
+		RestateMissionSession(void);
+		~RestateMissionSession(void);
+		bool Begin(ScenarioClass * scenario);
+		int Step(void);
+		void Finish(void);
+	private:
+		struct Impl;
+		std::unique_ptr<Impl> State;
+};

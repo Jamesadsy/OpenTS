@@ -44,6 +44,7 @@ class MSEngine
 		void Wait_For_Focus(void);
 		void Cooperative_Service_Step(bool advance_animations);
 		bool Has_Animation(MSAnim * anim) const;
+		bool Animation_Pending(MSAnim * anim) const;
 		void Request_Rebuild(void);
 
 		bool Add_Sound_Effect(char const * name, char const * file_name);

@@ -13,6 +13,8 @@
 
 #pragma once
 
+void Main_Game_Prepare_Gameplay(void);
+
 #include "crate.hh"
 #include "land.hh"
 #include "rtti.hh"

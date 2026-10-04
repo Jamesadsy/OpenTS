@@ -18,6 +18,7 @@
 //==========================================================================
 
 #include "ccfile.h"
+#include "vqacooperative.h"
 
 #include <windows.h>
 #include <vqaplay.h>
@@ -120,6 +121,7 @@ class VQAClass
 		int Event3Frame;
 		bool IsPaused;
 		bool IsAdvanceReady;
+		VqaCooperativeState CooperativePlayback;
 
 	public:
 		VQAClass(char const * filename, int flags, VQA_SURF_LOCK_CALLBACK surface_lock, VQA_SURF_UNLOCK_CALLBACK surface_unlock, VQA_SURF_DRAW_CALLBACK surface_draw, VQA_IDLE_CALLBACK idle = NULL, int frame_rate = -1, int draw_rate = -1);
@@ -130,6 +132,8 @@ class VQAClass
 		bool Set_Loop(int start, int end, int iterations);
 		void Seek_To_Frame(int frame);
 		int Play_VQA(int last_frame_to_play, bool breakout);
+		void Begin_Cooperative_Playback(int last_frame_to_play);
+		bool Advance_Cooperative_Playback(bool & finished);
 		void Play_VQA_Frame(int frame_number);
 		bool Advance_Frame(bool &);
 		void Pause_VQA(void);
@@ -165,6 +169,7 @@ class VQAClass
 		/* Private functions.                                                      */
 		/*=========================================================================*/
 	private:
+		void Prepare_Playback(int last_frame_to_play);
 
 }; /* VQAClass */
 

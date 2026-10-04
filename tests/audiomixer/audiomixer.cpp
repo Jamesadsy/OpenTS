@@ -447,6 +447,34 @@ void Test_Stop_Pause_Generation(void)
 }
 
 
+void Test_Movie_Quiesce_Ramp(void)
+{
+	RigClass rig;
+	std::unique_ptr<AudioSampleClass> constant = Make_Constant(RATE, 128, 0.5f);
+	AudioSequenceClass loop = Single(constant.get(), -1);
+	Check(rig.Start(0, Play(0, 1, &loop)), "start a continuous renderer for the movie quiesce ramp");
+	rig.Run(480);
+
+	size_t const start = rig.Output.size() / 2;
+	rig.Mixer.Push(Simple(AudioCommandType::STOP, 0, 1, 0.032f));
+	float previous = 1.0f;
+	for (unsigned block = 0; block < 24; block++) {
+		rig.Run(AUDIO_RENDER_BLOCK_FRAMES);
+		float const current = rig.Rms(start + block * AUDIO_RENDER_BLOCK_FRAMES,
+			start + (block + 1) * AUDIO_RENDER_BLOCK_FRAMES, 0);
+		Check(current <= previous + 0.002f, "movie quiesce output never jumps back up between render blocks");
+		if (block == 0) Check(current > 0.05f, "movie quiesce begins with the live renderer audible");
+		previous = current;
+	}
+	Check(rig.Mixer.Voice_State(0) == AudioVoiceState::DONE,
+		"the renderer acknowledges quiescence after the ramp reaches its silent boundary");
+	size_t const silent_start = rig.Output.size() / 2;
+	rig.Run(AUDIO_RENDER_BLOCK_FRAMES);
+	Check(rig.Silent(silent_start, silent_start + AUDIO_RENDER_BLOCK_FRAMES),
+		"quiesced renderer produces silence after acknowledging done");
+}
+
+
 void Test_Ring_And_Token(void)
 {
 	RigClass rig;
@@ -552,6 +580,7 @@ int main(void)
 	Test_Loop_And_Resample();
 	Test_Sequence();
 	Test_Stop_Pause_Generation();
+	Test_Movie_Quiesce_Ramp();
 	Test_Ring_And_Token();
 	Test_Stream();
 	Test_Determinism();
