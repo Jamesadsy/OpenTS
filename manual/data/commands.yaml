@@ -2156,6 +2156,34 @@ fixed_controls:
   _provenance:
     source: code/egos.cpp
     guard: null
+- id: fixed:navigate-save-browser
+  route_id: fixed-navigate-save-browser
+  kind: fixed
+  title: Navigate save list
+  description: Moves the selected entry through the save or load list.
+  audience: player
+  availability: *id001
+  bindings:
+  - Up
+  - Down
+  context: Save or load browser
+  _provenance:
+    source: code/ui/uisavebrowser.cpp
+    guard: null
+- id: fixed:activate-focused-menu-action
+  route_id: fixed-activate-focused-menu-action
+  kind: fixed
+  title: Activate focused menu action
+  description: Activates the focused menu action while controller navigation owns menu focus.
+  audience: player
+  availability: *id001
+  bindings:
+  - Return
+  - Numpad Enter
+  context: Menu with controller focus
+  _provenance:
+    source: code/ui/uishell.cpp
+    guard: null
 - id: fixed:dismiss-mission-restatement
   route_id: fixed-dismiss-mission-restatement
   kind: fixed

@@ -6,6 +6,9 @@ targets:
 - type: key
   id: ScrollRate
   effect: changed
+- type: command
+  id: fixed:activate-focused-menu-action
+  effect: added
 credit: [OpenTS contributors]
 ---
 

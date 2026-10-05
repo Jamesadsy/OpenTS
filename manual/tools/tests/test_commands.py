@@ -82,9 +82,22 @@ class CommandAdapterTests(unittest.TestCase):
         self.assertTrue(sites)
         self.assertTrue({
             ("code/conquer.cpp", "Map_Edit_Loop"),
-            ("code/dropship.cpp", "Dropship_Screen"),
+            ("code/dropship.cpp", "DropshipSession::Impl::Step"),
             ("code/mpscore.cpp", "MultiScore::User_Input"),
         }.issubset(owners))
+
+    def test_team_command_metadata_supports_sprintf(self):
+        literal_body = 'char *Get_Unique_Name(void) const { char *_cmd_buffer; sprintf(_cmd_buffer, "TeamCreate_%d", Team); return(_cmd_buffer); }'
+        token_body = 'char *Get_Description(void) const { char *_cmd_buffer; sprintf(_cmd_buffer, Fetch_String((TXT_TEAM_DESCRIPTION)), Team); return(_cmd_buffer); }'
+        self.assertEqual(
+            commands_engine._method_text("CreateTeam", literal_body, "Get_Unique_Name", {}, 7),
+            "TeamCreate_7",
+        )
+        self.assertEqual(
+            commands_engine._method_text(
+                "CreateTeam", token_body, "Get_Description", {"TXT_TEAM_DESCRIPTION": "Creates team %d."}, 7),
+            "Creates team 7.",
+        )
 
     def test_new_file_is_discovered_and_removed_site_makes_manifest_stale(self):
         with TemporaryDirectory() as directory:

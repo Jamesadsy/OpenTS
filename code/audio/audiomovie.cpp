@@ -17,8 +17,10 @@
 #include "gametime.h"
 #include "vqaplayp.h"
 
-#include <cstring>
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstring>
 
 namespace {
 
@@ -127,6 +129,8 @@ class MovieSinkClass : public AudioStreamProducerClass
 		AudioHandle Handle;
 		uint32_t FinalPlaybackFrame = 0;
 		bool QuiesceTimedOut = false;
+		bool OutputDrainPending = false;
+		unsigned OutputDrainTarget = 0;
 		AudioPushStreamProducerClass Pusher;
 		AudioMovieClockClass Clock;
 
@@ -196,6 +200,11 @@ long Open_Audio_Handler(VQAHandleP * vqap, AhandleInitParams * params, long nbyt
 	_sink.Started = false;
 	_sink.Paused = false;
 	_sink.Used = true;
+	_sink.OutputDrainPending = false;
+	_sink.OutputDrainTarget = 0;
+	Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_TARGET_FRAME, 0);
+	Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME, AudioEngine.Rendered_Output_Frames());
+	Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT, -1);
 
 	vqap->AudioHandleIndex = 0;
 	config->LatencyAdjustment = 0;
@@ -228,10 +237,21 @@ long Start_Audio_Handler(VQAHandleP * vqap)
 		if (!_sink.Renderer_Quiesced()) {
 			return(VQAERR_AUDIO);
 		}
-	_sink.Stream->Reset();
-	_sink.Handle.Clear();
-	_sink.QuiesceTimedOut = false;
-	_sink.Clear_Pending();
+		_sink.Stream->Reset();
+		_sink.Handle.Clear();
+		_sink.QuiesceTimedOut = false;
+		_sink.OutputDrainPending = true;
+		_sink.OutputDrainTarget = AudioEngine.Output_Drain_Target();
+		_sink.Clear_Pending();
+	}
+	if (_sink.OutputDrainPending) {
+		if (!AudioEngine.Wait_Output_Drain(_sink.OutputDrainTarget, QUIESCE_WAIT_MS)) {
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT, 0);
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME, AudioEngine.Rendered_Output_Frames());
+			return(VQAERR_AUDIO);
+		}
+		_sink.OutputDrainPending = false;
+		_sink.OutputDrainTarget = 0;
 	}
 	if (_sink.Paused) {
 		return(Play_Audio_Handler(vqap));
@@ -288,6 +308,7 @@ long Stop_Audio_Handler(VQAHandleP * vqap)
 		_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed();
 		Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_FINAL_PLAYBACK_FRAME, _sink.FinalPlaybackFrame);
 		AudioEngine.Events().Fade(_sink.Handle, QUIESCE_RAMP_MS);
+		auto const stopStarted = std::chrono::steady_clock::now();
 		bool const quiesced = AudioEngine.Wait_Finished(_sink.Handle, QUIESCE_WAIT_MS);
 		_sink.Started = false;
 		_sink.Paused = false;
@@ -295,11 +316,26 @@ long Stop_Audio_Handler(VQAHandleP * vqap)
 		if (!quiesced) {
 			// Do not reset or release the ring while the renderer may still hold its
 			// pointer. Release_Stream_Slot retains it until the later render ack.
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT, -1);
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME, AudioEngine.Rendered_Output_Frames());
 			DebugString("Ahandle: movie quiesce timed out at playback frame %u; retaining stream until renderer ack\n",
 				_sink.FinalPlaybackFrame);
 		} else {
 			_sink.FinalPlaybackFrame = _sink.Stream->Frames_Consumed();
 			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_FINAL_PLAYBACK_FRAME, _sink.FinalPlaybackFrame);
+			_sink.OutputDrainTarget = AudioEngine.Output_Drain_Target();
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_TARGET_FRAME, _sink.OutputDrainTarget);
+			auto const elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - stopStarted).count();
+			int const remaining = std::max(0, QUIESCE_WAIT_MS - (int)elapsed);
+			_sink.OutputDrainPending = !AudioEngine.Wait_Output_Drain(_sink.OutputDrainTarget, remaining);
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT, _sink.OutputDrainPending ? 0 : 1);
+			Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME, AudioEngine.Rendered_Output_Frames());
+			if (_sink.OutputDrainPending) {
+				DebugString("Ahandle: movie renderer quiesced but output tail remains before frame %u; retaining stream slot\n",
+					_sink.OutputDrainTarget);
+			} else {
+				_sink.OutputDrainTarget = 0;
+			}
 			_sink.Stream->Reset();
 			_sink.Handle.Clear();
 		}
@@ -316,13 +352,17 @@ long Close_Audio_Handler(VQAHandleP * vqap)
 		unsigned const closeGeneration = MovieCloseGeneration.fetch_add(1, std::memory_order_relaxed) + 1;
 		Set_Movie_Telemetry(OPENTS_TELEMETRY_MOVIE_CLOSE_GENERATION, closeGeneration);
 		_sink.Pusher.Close();
-		AudioEngine.Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle());
+		AudioEngine.Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle(),
+			_sink.OutputDrainTarget, _sink.OutputDrainPending || _sink.QuiesceTimedOut,
+			!_sink.QuiesceTimedOut && _sink.OutputDrainPending);
 		_sink.Slot = -1;
 		_sink.Stream = nullptr;
 		_sink.Handle.Clear();
 		_sink.Owner = nullptr;
 		_sink.Used = false;
 		_sink.QuiesceTimedOut = false;
+		_sink.OutputDrainPending = false;
+		_sink.OutputDrainTarget = 0;
 	}
 	return(VQAERR_NONE);
 }

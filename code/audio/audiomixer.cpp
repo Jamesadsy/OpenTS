@@ -238,6 +238,12 @@ void AudioMixerClass::Set_Pause_All(bool paused)
 }
 
 
+unsigned AudioMixerClass::Rendered_Frames(void) const
+{
+	return(BrowserAudioRenderedFrames.load(std::memory_order_relaxed));
+}
+
+
 bool AudioMixerClass::Acquire_Render_Token(void)
 {
 	int expected = 0;

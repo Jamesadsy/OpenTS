@@ -147,3 +147,52 @@ site_exclusions:
     keys: [AIDifficulty, AIPlayers, AlliesAllowed, AttackNeutralUnits, AutoDeployMCV, AutoSaveGame, AutoSurrender, Bases, BridgeDestroy, BuildOffAlly, CampaignID, CoachMode, ConnTimeout, Crates, Credits, DifficultyBasedAINames, DifficultyModeComputer, DifficultyModeHuman, Firestorm, FogOfWar, GameID, GameSpeed, HarvesterTruce, Host, IsSinglePlayer, LoadSaveGame, MCVRedeploy, MultiEngineer, NextSPAutoSaveId, NextSkirmishAutoSaveId, PlayMoviesInMultiplayer, Port, QuickMatch, ReconnectTimeout, ScrapMetal, Seed, ShortGame, SkipScoreScreen, TechLevel, Tournament, UnitCount, WriteStatistics]
     classification: excluded
     reason: The CnCNet client writes these per launch to describe one match, so they are not part of the authored game-data key catalog.
+
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [Fullscreen]
+    classification: duplicate
+    canonical_key: Fullscreen
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [Renderer]
+    classification: duplicate
+    canonical_key: Renderer
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [ScreenHeight]
+    classification: duplicate
+    canonical_key: ScreenHeight
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [ScreenWidth]
+    classification: duplicate
+    canonical_key: ScreenWidth
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [VSync]
+    classification: duplicate
+    canonical_key: VSync
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [WindowHeight]
+    classification: duplicate
+    canonical_key: WindowHeight
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Bootstrap
+    keys: [WindowWidth]
+    classification: duplicate
+    canonical_key: WindowWidth
+    reason: Browser startup reads the same Video option already cataloged through the shared Startup configuration reader.
+  - path: code/startup.cpp
+    function: OpenTS_Browser_Startup_Begin_MainGame
+    keys: [PlayIntro]
+    classification: duplicate
+    canonical_key: PlayIntro
+    reason: Browser startup uses the existing Intro option semantics already cataloged through the shared Startup reader.

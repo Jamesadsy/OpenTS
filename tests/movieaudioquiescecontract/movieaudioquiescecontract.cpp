@@ -15,6 +15,9 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <limits>
+
+#include "audio/audiooutputboundary.h"
 
 namespace
 {
@@ -44,6 +47,7 @@ void Test_Movie_Stop_Ordering(void)
 {
 	std::string const movie = Read("code/audio/audiomovie.cpp");
 	std::string const engine = Read("code/audio/audioengine.cpp");
+	std::string const engineHeader = Read("code/audio/audioengine.h");
 	std::string const mixer = Read("code/audio/audiomixer.cpp");
 	std::string const task = Read("code/vqalib/task.cpp");
 	std::string const vqa = Read("code/vqa.cpp");
@@ -74,22 +78,40 @@ void Test_Movie_Stop_Ordering(void)
 	Check(stop_body.find("MovieStopGeneration.fetch_add") != std::string::npos
 		&& stop_body.find("OPENTS_TELEMETRY_MOVIE_STOP_GENERATION") != std::string::npos,
 		"the bounded movie stop generation is available to Advanced audio diagnostics");
+	size_t const drainTarget = stop_body.find("Output_Drain_Target()");
+	size_t const drainWait = stop_body.find("Wait_Output_Drain(_sink.OutputDrainTarget, remaining)");
+	size_t const outputReset = stop_body.find("_sink.Stream->Reset()", wait);
+	Check(wait < drainTarget && drainTarget < drainWait && drainWait < outputReset,
+		"movie ring reset follows renderer acknowledgement and measured output-queue drain");
+	Check(stop_body.find("OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_TARGET_FRAME") != std::string::npos
+		&& stop_body.find("OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME") != std::string::npos
+		&& stop_body.find("OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT") != std::string::npos,
+		"bounded output-tail target, render progress and result are available to diagnostics");
+	Check(engineHeader.find("bool outputDrainTargetKnown") != std::string::npos
+		&& engine.find("OutputDrainRequired") != std::string::npos
+		&& engine.find("OutputDrainTargetSet") != std::string::npos
+		&& engine.find("Audio_Output_Drain_Reached(Rendered_Output_Frames(), Streams[i].OutputDrainTarget)") != std::string::npos,
+		"slot reuse remains pending until renderer and output-tail ownership are both complete");
+	Check(engine.find("if (!Device->Is_Running())") != std::string::npos
+		&& engine.find("elapsed >= ms") != std::string::npos,
+		"output-tail waiting exits when the device cannot progress and remains time-bounded");
 	Check(movie.find("MovieCloseGeneration.fetch_add") != std::string::npos
 		&& movie.find("OPENTS_TELEMETRY_MOVIE_CLOSE_GENERATION") != std::string::npos,
 		"movie close generation is available to Advanced audio diagnostics");
 	Check(close != std::string::npos
-		&& movie.find("Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle())", close)
+		&& movie.find("Release_Stream_Slot(_sink.Slot, _sink.QuiesceTimedOut ? _sink.Handle : AudioHandle(),", close)
 			!= std::string::npos,
-		"movie close passes a timed-out voice to deferred slot release");
+		"movie close passes timed-out renderer and output-tail ownership to deferred slot release");
 
-	size_t const release = engine.find("void AudioEngineClass::Release_Stream_Slot(int slot, AudioHandle retiringRenderer)");
+	size_t const release = engine.find("void AudioEngineClass::Release_Stream_Slot(int slot, AudioHandle retiringRenderer, unsigned outputDrainTarget");
 	size_t const reap = engine.find("void AudioEngineClass::Reap_Streams(void)");
 	Check(release != std::string::npos && reap != std::string::npos,
 		"the shared stream owner supports delayed renderer release");
 	Check(engine.find("!Pool.Is_Finished(retiringRenderer)", release) != std::string::npos,
 		"a timed-out renderer keeps its source slot reserved until its terminal acknowledgement");
-	Check(engine.find("ReleasePending\n\t\t\t&& Pool.Is_Finished(Streams[i].RetiringHandle)", reap) != std::string::npos,
-		"the engine reclaims a retained movie slot only after the render owner is finished");
+	Check(engine.find("!Streams[i].RetiringHandle.Is_Null() && !Pool.Is_Finished(Streams[i].RetiringHandle)", reap) != std::string::npos
+		&& engine.find("Audio_Output_Drain_Reached(Rendered_Output_Frames(), Streams[i].OutputDrainTarget)", reap) != std::string::npos,
+		"the engine reclaims a retained movie slot only after renderer and output progress complete");
 	Check(movie.find("return(VQAERR_NONE);", stop) != std::string::npos,
 		"a quiesce timeout does not change native skip's nonblocking success semantics");
 
@@ -127,6 +149,22 @@ void Test_Movie_Stop_Ordering(void)
 		"voice ownership, source identity and resampler reset generations are bounded diagnostics");
 	Check(mixer.find("((AudioMixerClass *)context)->Render(output, frames))") != std::string::npos,
 		"device progress is emitted only when the mixer reports a complete renderer boundary");
+	Check(mixer.find("unsigned AudioMixerClass::Rendered_Frames(void) const") != std::string::npos,
+		"the tail proof reads completed renderer frames rather than AudioContext state");
+}
+
+
+void Test_Output_Drain_Boundary(void)
+{
+	unsigned const target = Audio_Output_Drain_Target(1000, 512, 256);
+	Check(target == 1768, "output drain target includes device backlog and one in-flight period");
+	Check(!Audio_Output_Drain_Reached(target - 1, target), "a queue one frame short is not drained");
+	Check(Audio_Output_Drain_Reached(target, target), "the exact renderer progress boundary is drained");
+	Check(Audio_Output_Drain_Reached(target + 64, target), "additional renderer progress remains drained");
+	unsigned const wrappedTarget = Audio_Output_Drain_Target(std::numeric_limits<unsigned>::max() - 15, 8, 16);
+	Check(wrappedTarget == 8, "drain target wraps with the renderer frame counter");
+	Check(!Audio_Output_Drain_Reached(7, wrappedTarget), "wrapped target is not reached early");
+	Check(Audio_Output_Drain_Reached(8, wrappedTarget), "wrapped target becomes complete at its exact boundary");
 }
 
 } // namespace
@@ -135,6 +173,7 @@ void Test_Movie_Stop_Ordering(void)
 int main(void)
 {
 	Test_Movie_Stop_Ordering();
+	Test_Output_Drain_Boundary();
 	std::printf("movie-audio-quiesce-contract: %d checks, %d failures\n", Checks, Failures);
 	return(Failures == 0 ? 0 : 1);
 }

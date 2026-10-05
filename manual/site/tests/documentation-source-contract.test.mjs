@@ -372,12 +372,12 @@ test('The campaign handicap pair lives on the session, and the mission reader ne
 	);
 
 	assertOrdered(
-		functionBody(source('code/init.cpp'), 'bool Select_Game(bool )'),
+		functionBody(source('code/init.cpp'), 'static void Select_Game_Before_Scenario(int selection)'),
 		[
 			'Session.CampaignDifficulty = (DiffType)Options.Difficulty;',
 			'Session.CampaignCDifficulty = (DiffType)(DIFF_COUNT - 1 - Options.Difficulty);',
 		],
-		'the menu derives the pair the mission reader used to compute, ahead of the start',
+		'the menu derives the pair the mission reader used to compute before scenario startup',
 	);
 });
 
@@ -393,10 +393,14 @@ test('A campaign spawn writes the game its own state and nothing more', () => {
 		'Environment.Globals[index] = SpawnConfig.GlobalFlags[index];',
 	], 'a campaign launch lands in the game’s own state');
 
-	assertOrdered(functionBody(source('code/init.cpp'), 'bool Select_Game(bool )'), [
-		'Spawner_Is_Active() ? Scen->Campaign : CAMPAIGN_NONE',
+	assertOrdered(functionBody(source('code/init.cpp'), 'int Select_Game_Browser_Prepare_Step(void)'), [
+		'CampaignType const campaign = direct && !Spawner_Is_Active() ? CAMPAIGN_NONE : Scen->Campaign;',
+		'char const * name = direct ? Scen->ScenarioName : Campaigns[campaign]->ScenarioName;',
+		'state.Scenario->Begin(name, true, campaign)',
+	], 'the cooperative campaign handoff retains the spawned mission name');
+	assertOrdered(functionBody(source('code/init.cpp'), 'static void Select_Game_After_Scenario(void)'), [
 		'Scen->Set_Global_To(index, Environment.Globals[index]);',
-	], 'a spawned mission is named by the file and starts with the flags it carried');
+	], 'a spawned mission starts with the flags it carried');
 });
 
 test('A resume is judged before it is loaded, and the save answers for the rest', () => {
@@ -452,8 +456,11 @@ test('Saved games are named in one folder rather than searched for', () => {
 
 	assertOrdered(functionBody(gamedirs, 'std::string Saved_Game_Name(char const * filename)'), [
 		'UserDirectory + SavedGamesFolder',
-		'Make_Directory(folder);',
-	], 'a saved game is named inside the user directory, and the folder is made on the way');
+		'if (extension == ".SAV")',
+		'Addon_Enabled(ADDON_FIRESTORM) ? "Firestorm" : "Tiberian Sun"',
+		'std::filesystem::create_directories(folder, error);',
+		'return((folder / filename).string());',
+	], 'a save path keeps the TS and Firestorm namespaces separate and creates its folder');
 
 	for (const [file, signature] of [
 		['code/saveload.cpp', 'bool Save_Game(const char *file_name, char const * descr)'],
@@ -478,12 +485,12 @@ test('Saved games are named in one folder rather than searched for', () => {
 	);
 });
 
-test('Automatic saves are serviced at the frame boundary ahead of the pending write', () => {
-	assertOrdered(functionBody(source('code/mainloop.cpp'), 'bool Main_Loop(void)'), [
-		'Frame++;',
+test('Automatic saves are serviced after a completed frame and before the pending write', () => {
+	assertOrdered(functionBody(source('code/mainloop.cpp'), 'static void MainLoop_Post_Frame(void *, bool done)'), [
+		'if (!done)',
 		'Process_Deferred_Deletion();',
 		'SaveManager.Service();',
-	], 'the save manager runs after the frame has retired its dead objects');
+	], 'the save manager runs after a live frame has retired its dead objects');
 	assertOrdered(functionBody(source('code/savemgr.cpp'), 'void SaveManagerClass::Service(void)'), [
 		'Autosave_Service();',
 		'Quick_Save_Service();',

@@ -13126,7 +13126,7 @@ Locomotor:
     value_type: Locomotor class identifier
     status: generated
     _provenance:
-      default_candidate: null
+      default_candidate: the Teleport locomotor
       declared_in: TechnoTypeClass
       member: Locomotor
       source: code/techtype.cpp
@@ -13531,6 +13531,24 @@ MaxEC:
       source: code/ptype.cpp
       guard: null
     level: ParticleTypeClass
+MaxFrameRate:
+  key: MaxFrameRate
+  scopes:
+  - applies_to:
+    - client settings
+    file: sun.ini
+    section:
+      kind: literal
+      name: Video
+    value_type: integer
+    status: generated
+    _provenance:
+      default_candidate: '0'
+      declared_in: OptionsClass
+      member: MaxFrameRate
+      source: code/options.cpp
+      guard: null
+    level: OptionsClass
 MaxIQLevels:
   key: MaxIQLevels
   scopes:

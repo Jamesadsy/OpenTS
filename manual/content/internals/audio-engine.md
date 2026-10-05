@@ -15,13 +15,12 @@ source_files:
   - code/audio/audiodevice_ma.cpp
   - code/audio/audioevent.cpp
   - code/audio/audioengine.cpp
+  - code/audio/audiooutputboundary.h
   - code/audio/audiomovie.cpp
   - code/browsercoord.cpp
   - code/browsertelemetry.h
   - code/grphmenu.cpp
   - code/hostclock.h
-  - tests/browserstorage/harness.js
-  - thirdparty/miniaudio/miniaudio.h
   - code/vocini.cpp
   - code/voc.cpp
   - code/vox.cpp
@@ -36,7 +35,7 @@ The device layer is an interface. The engine's implementation wraps miniaudio, w
 
 The mixer holds sixty-four voices. Each voice plays either a sequence of decoded clips (attack, body loop and decay) or a stream ring. It resamples from the source rate and pitch to 48 kHz and applies ramped voice, group, duck and master levels through one perceptual loudness curve. Voices sum into the bus, which is soft-clipped above 0.9. Every change is sent to the mixer as a command in a single-producer, single-consumer ring. A command names a voice by slot and generation, so the mixer drops one aimed at a voice that has since been reused. A push into a full ring fails and the change is lost. Voice states move from allocated through playing, paused and stopping to done, and the game thread reclaims a voice only after it is done.
 
-The resampler belongs to the voice slot, so each new source resets its input position, cached frames and filter history before rendering. Movie teardown detaches the PCM producer, requests a local fade, and waits for the mixer to finish the voice before the stream slot can be reused.
+The resampler belongs to the voice slot, so each new source resets its input position, cached frames and filter history before rendering. Movie teardown detaches the PCM producer, requests a local fade, and waits for the mixer to finish the voice. It then waits for rendered output to advance past the device backlog and one in-flight period before the stream slot can be reused. Both waits share a 250 ms bound; a timed-out slot remains reserved until the renderer and output boundary are complete.
 
 The sample cache keeps decoded PCM keyed by name or by the address and hash of an in-memory AUD. A pinned entry stays while any event uses it; an unpinned one is evicted least-recently-used until the cache is back under sixty-four megabytes. Pinned entries alone can hold it above that. A single sample is capped at eight megabytes.
 

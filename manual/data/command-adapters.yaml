@@ -213,7 +213,7 @@ fixed_controls:
     context: Dropship loadout screen
     availability: *all
     sites:
-      - { file: code/dropship.cpp, function: Dropship_Screen, expression: KN_SPACE }
+      - { file: code/dropship.cpp, function: DropshipSession::Impl::Step, expression: KN_SPACE }
   - id: fixed:dismiss-multiplayer-score
     title: Dismiss multiplayer score
     description: Closes the multiplayer score screen after its prompt appears.
@@ -251,7 +251,27 @@ fixed_controls:
     context: Credits
     availability: *all
     sites:
-      - { file: code/egos.cpp, function: Show_Who_Was_Responsible, expression: KN_ESC }
+      - { file: code/egos.cpp, function: CreditsSession::Step, expression: KN_ESC }
+  - id: fixed:navigate-save-browser
+    title: Navigate save list
+    description: Moves the selected entry through the save or load list.
+    audience: player
+    bindings: [Up, Down]
+    context: Save or load browser
+    availability: *all
+    sites:
+      - { file: code/ui/uisavebrowser.cpp, function: BindEventCallback, expression: KI_UP }
+      - { file: code/ui/uisavebrowser.cpp, function: BindEventCallback, expression: KI_DOWN }
+  - id: fixed:activate-focused-menu-action
+    title: Activate focused menu action
+    description: Activates the focused menu action while controller navigation owns menu focus.
+    audience: player
+    bindings: [Return, Numpad Enter]
+    context: Menu with controller focus
+    availability: *all
+    sites:
+      - { file: code/ui/uishell.cpp, function: UI_Handle_Window_Message, expression: KI_RETURN }
+      - { file: code/ui/uishell.cpp, function: UI_Handle_Window_Message, expression: KI_NUMPADENTER }
   - id: fixed:dismiss-mission-restatement
     title: Dismiss mission restatement
     description: Closes the current mission-restatement page without selecting its video button.
@@ -260,6 +280,8 @@ fixed_controls:
     context: Mission restatement
     availability: *all
     sites:
+      - { file: code/restate.cpp, function: RestateMission::StepCooperative, expression: KN_SPACE }
+      - { file: code/restate.cpp, function: RestateMission::StepCooperative, expression: KN_ESC }
       - { file: code/restate.cpp, function: RestateMission::User_Input, expression: KN_SPACE }
       - { file: code/restate.cpp, function: RestateMission::User_Input, expression: KN_ESC }
   - id: fixed:skip-vqa
@@ -321,17 +343,13 @@ fixed_exclusions:
       - { file: code/conquer.cpp, function: Map_Edit_Loop, expression: KN_UP, guard: _DEBUG }
       - { file: code/conquer.cpp, function: Map_Edit_Loop, expression: KN_DOWN, guard: _DEBUG }
     reason: These cases deliberately discard arrow events before the map-editor gadgets receive them.
-  - site: { file: code/dropship.cpp, function: Dropship_Screen, expression: KN_BUTTON }
+  - site: { file: code/dropship.cpp, function: DropshipSession::Impl::Step, expression: KN_BUTTON }
     reason: KN_BUTTON marks gadget IDs returned by the button list; it is not a physical binding.
   - sites:
       - { file: code/edit.cpp, function: EditClass::Action, expression: KN_ESC }
       - { file: code/edit.cpp, function: EditClass::Action, expression: KN_BACKSPACE }
       - { file: code/edit.cpp, function: EditClass::Action, expression: KN_RETURN }
     reason: Reusable text-edit widget navigation, not a top-level command.
-  - sites:
-      - { file: code/egos.cpp, function: Show_Who_Was_Responsible, expression: KN_Z, guard: "(0)" }
-      - { file: code/egos.cpp, function: Show_Who_Was_Responsible, expression: KN_X, guard: "(0)" }
-    reason: Credits speed controls are inside a disabled preprocessor branch.
   - sites:
       - { file: code/ending.cpp, function: Nod_Ending, expression: KN_LMOUSE, guard: NEVER }
       - { file: code/ending.cpp, function: Nod_Ending, expression: KN_RLSE_BIT, guard: NEVER }
@@ -343,9 +361,10 @@ fixed_exclusions:
       - { file: code/gadget.cpp, function: GadgetClass::Input, expression: KN_RMOUSE+KN_RLSE_BIT }
     reason: Core gadget input translation; callers own the resulting button actions.
   - sites:
-      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation, expression: KN_NONE }
-      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation, expression: KN_LMOUSE }
-      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation, expression: KN_RETURN }
+      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation_Step, expression: KN_NONE }
+      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation_Step, expression: KN_LMOUSE }
+      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation_Step, expression: KN_RETURN }
+      - { file: code/grphmenu.cpp, function: GraphicMenu::Presentation_Step, expression: KN_LMOUSE, guard: "!_WIN32" }
     reason: Generic graphic-menu polling and activation, not a named application control.
   - site: { file: code/grphmsct.cpp, function: GM_Build_Key, expression: VK_NONE }
     reason: Sentinel used while translating a menu accelerator into a virtual key.
@@ -392,9 +411,12 @@ fixed_exclusions:
       - { file: code/keyboard.cpp, function: Build_Hotkey_String, expression: VK_CONTROL }
       - { file: code/keyboard.cpp, function: Build_Hotkey_String, expression: VK_SHIFT }
     reason: Converts modifier virtual keys to display names; it does not consume input.
+  - site: { file: code/keyboard.cpp, function: WWKeyboardClass::Buff_Get, expression: KN_LMOUSE, guard: "!_WIN32" }
+    reason: Converts a mouse message into the engine's buffered key number; it does not dispatch an application control.
   - sites:
-      - { file: code/restate.cpp, function: RestateMission::User_Input, expression: KN_NONE }
+      - { file: code/restate.cpp, function: RestateMission::StepCooperative, expression: KN_BUTTON }
       - { file: code/restate.cpp, function: RestateMission::User_Input, expression: KN_BUTTON }
+      - { file: code/restate.cpp, function: RestateMission::User_Input, expression: KN_NONE }
     reason: Input sentinel and encoded button IDs surrounding the documented dismissal keys.
   - sites:
       - { file: code/score.cpp, function: ScoreClass::Input_Name, expression: KN_BACKSPACE }

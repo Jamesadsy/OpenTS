@@ -11,6 +11,8 @@
 
 #include "audio/audiodecode.h"
 #include "audio/audiodevice.h"
+#include "audio/audiooutputboundary.h"
+#include "browsertelemetry.h"
 #include "_rand.h"
 #include "ccfile.h"
 #include "dbgprint.h"
@@ -27,6 +29,16 @@ int const STREAM_STOP_WAIT_MS = 250;
 
 // Dropped commands are reported at most this often.
 unsigned const DROP_REPORT_MS = 1000;
+
+void Set_Audio_Telemetry(int value, unsigned data)
+{
+#if defined(__EMSCRIPTEN__)
+	OpenTS_Browser_Telemetry_Set(value, static_cast<int>(data));
+#else
+	(void)value;
+	(void)data;
+#endif
+}
 
 
 // A byte source over the game's file layer, so a stream reads loose files and
@@ -266,6 +278,9 @@ void AudioEngineClass::End(void)
 		Streams[i].InUse = false;
 		Streams[i].External = false;
 		Streams[i].ReleasePending = false;
+		Streams[i].OutputDrainRequired = false;
+		Streams[i].OutputDrainTargetSet = false;
+		Streams[i].OutputDrainTarget = 0;
 	}
 	if (Device != nullptr) {
 		Device->Close();
@@ -392,10 +407,27 @@ void AudioEngineClass::Close_Stream(int slot)
 void AudioEngineClass::Reap_Streams(void)
 {
 	for (int i = 0; i < AUDIO_MAX_STREAMS; i++) {
-		if (Streams[i].InUse && Streams[i].External && Streams[i].ReleasePending
-			&& Pool.Is_Finished(Streams[i].RetiringHandle)) {
+		if (Streams[i].InUse && Streams[i].External && Streams[i].ReleasePending) {
+			if (!Streams[i].RetiringHandle.Is_Null() && !Pool.Is_Finished(Streams[i].RetiringHandle)) {
+				continue;
+			}
 			Streams[i].RetiringHandle.Clear();
+			if (Streams[i].OutputDrainRequired) {
+				if (!Streams[i].OutputDrainTargetSet) {
+					Streams[i].OutputDrainTarget = Output_Drain_Target();
+					Streams[i].OutputDrainTargetSet = true;
+					Set_Audio_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_TARGET_FRAME, Streams[i].OutputDrainTarget);
+				}
+				if (!Audio_Output_Drain_Reached(Rendered_Output_Frames(), Streams[i].OutputDrainTarget)) {
+					continue;
+				}
+				Set_Audio_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME, Rendered_Output_Frames());
+				Set_Audio_Telemetry(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT, 1);
+			}
 			Streams[i].ReleasePending = false;
+			Streams[i].OutputDrainRequired = false;
+			Streams[i].OutputDrainTargetSet = false;
+			Streams[i].OutputDrainTarget = 0;
 			Streams[i].External = false;
 			Streams[i].InUse = false;
 			continue;
@@ -412,6 +444,7 @@ int AudioEngineClass::Acquire_Stream_Slot(AudioStreamClass ** stream)
 	if (!Available || stream == nullptr) {
 		return(-1);
 	}
+	Reap_Streams();
 	int slot = Free_Stream_Slot();
 	if (slot < 0) {
 		return(-1);
@@ -420,28 +453,39 @@ int AudioEngineClass::Acquire_Stream_Slot(AudioStreamClass ** stream)
 	Streams[slot].External = true;
 	Streams[slot].ReleasePending = false;
 	Streams[slot].RetiringHandle.Clear();
+	Streams[slot].OutputDrainRequired = false;
+	Streams[slot].OutputDrainTargetSet = false;
+	Streams[slot].OutputDrainTarget = 0;
 	*stream = &Streams[slot].Stream;
 	return(slot);
 }
 
 
-void AudioEngineClass::Release_Stream_Slot(int slot, AudioHandle retiringRenderer)
+void AudioEngineClass::Release_Stream_Slot(int slot, AudioHandle retiringRenderer, unsigned outputDrainTarget, bool requireOutputDrain, bool outputDrainTargetKnown)
 {
 	if (slot < 0 || slot >= AUDIO_MAX_STREAMS || !Streams[slot].External) {
 		return;
 	}
-	if (!retiringRenderer.Is_Null() && !Pool.Is_Finished(retiringRenderer)) {
-		// A timed-out caller may release ownership while the render thread still
-		// holds the stream pointer. Keep this slot reserved until the voice reports
-		// its render-boundary completion through Pool.Is_Finished().
+	bool const rendererPending = !retiringRenderer.Is_Null() && !Pool.Is_Finished(retiringRenderer);
+	bool const outputPending = requireOutputDrain
+		&& (!outputDrainTargetKnown || !Audio_Output_Drain_Reached(Rendered_Output_Frames(), outputDrainTarget));
+	if (rendererPending || outputPending) {
+		// A timed-out caller retains the source slot until both its renderer and
+		// any already-rendered output tail have crossed their respective bounds.
 		Streams[slot].RetiringHandle = retiringRenderer;
 		Streams[slot].ReleasePending = true;
+		Streams[slot].OutputDrainRequired = requireOutputDrain;
+		Streams[slot].OutputDrainTargetSet = outputDrainTargetKnown;
+		Streams[slot].OutputDrainTarget = outputDrainTarget;
 		return;
 	}
 	Streams[slot].External = false;
 	Streams[slot].InUse = false;
 	Streams[slot].ReleasePending = false;
 	Streams[slot].RetiringHandle.Clear();
+	Streams[slot].OutputDrainRequired = false;
+	Streams[slot].OutputDrainTargetSet = false;
+	Streams[slot].OutputDrainTarget = 0;
 	Streams[slot].Handle.Clear();
 }
 
@@ -452,6 +496,35 @@ unsigned AudioEngineClass::Device_Latency_Frames(void) const
 		return(0);
 	}
 	return(Device->Period_Frames() * (Device->Periods() - 1));
+}
+
+
+unsigned AudioEngineClass::Output_Drain_Target(void) const
+{
+	unsigned periodFrames = Device == nullptr ? 0 : Device->Period_Frames();
+	return(Audio_Output_Drain_Target(Rendered_Output_Frames(), Device_Latency_Frames(), periodFrames));
+}
+
+
+bool AudioEngineClass::Wait_Output_Drain(unsigned targetFrame, int ms)
+{
+	if (!Available || Device == nullptr) {
+		return(true);
+	}
+	auto const start = std::chrono::steady_clock::now();
+	for (;;) {
+		if (Audio_Output_Drain_Reached(Rendered_Output_Frames(), targetFrame)) {
+			return(true);
+		}
+		if (!Device->Is_Running()) {
+			return(false);
+		}
+		auto const elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+		if (elapsed >= ms) {
+			return(false);
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
 }
 
 

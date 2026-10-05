@@ -169,6 +169,28 @@ def _method_text(class_name, body, method, resources, team=None, fallback=None):
         except (TypeError, ValueError) as error:
             raise ValueError(f"{class_name}.{method}: unsupported format {template!r}") from error
 
+    sprintf = re.search(
+        r"sprintf\s*\(\s*_cmd_buffer\s*,\s*(?:"
+        r'"(?P<literal>(?:[^"\\]|\\.)*)"|'
+        r"Fetch_String\s*\(\s*\(?\s*(?P<token>TXT_[A-Z0-9_]+)\s*\)?\s*\))"
+        r"\s*,\s*Team\s*\)\s*;\s*return\s*\(\s*_cmd_buffer\s*\)",
+        source,
+    )
+    if sprintf:
+        if team is None:
+            raise ValueError(f"{class_name}.{method}: Team format without a team number")
+        if sprintf.group("literal") is not None:
+            template = _decode_rc_string(sprintf.group("literal"))
+        else:
+            token = sprintf.group("token")
+            template = resources.get(token)
+            if template is None:
+                raise ValueError(f"{class_name}.{method}: missing language token {token}")
+        try:
+            return template % team
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{class_name}.{method}: unsupported format {template!r}") from error
+
     fetched = re.search(
         r"return\s*\(\s*Fetch_String\s*\(\s*\(?\s*(TXT_[A-Z0-9_]+)\s*\)?\s*\)\s*\)",
         source,
@@ -525,4 +547,3 @@ def build_catalog(manifest=None):
     if errors:
         raise ValueError("\n".join(errors))
     return result
-

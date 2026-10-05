@@ -95,10 +95,13 @@ class AudioEngineClass
 		// movie sink. The caller attaches to the feeder, starts the stream
 		// event, and gives the slot back once the event is finished.
 		int Acquire_Stream_Slot(AudioStreamClass ** stream);
-		void Release_Stream_Slot(int slot, AudioHandle retiringRenderer = AudioHandle());
+		void Release_Stream_Slot(int slot, AudioHandle retiringRenderer = AudioHandle(), unsigned outputDrainTarget = 0, bool requireOutputDrain = false, bool outputDrainTargetKnown = false);
 
 		// Frames of output the device holds beyond what the mixer has rendered.
 		unsigned Device_Latency_Frames(void) const;
+		unsigned Output_Drain_Target(void) const;
+		unsigned Rendered_Output_Frames(void) const { return(Mixer.Rendered_Frames()); }
+		bool Wait_Output_Drain(unsigned targetFrame, int ms);
 
 		// Services the pool until the event has let go of its voice, or ms pass.
 		bool Wait_Finished(AudioHandle handle, int ms);
@@ -112,6 +115,9 @@ class AudioEngineClass
 			bool InUse = false;
 			bool External = false;
 			bool ReleasePending = false;
+			bool OutputDrainRequired = false;
+			bool OutputDrainTargetSet = false;
+			unsigned OutputDrainTarget = 0;
 		};
 
 		static int Random_Proc(int low, int high, void * context);

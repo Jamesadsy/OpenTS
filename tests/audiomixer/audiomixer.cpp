@@ -33,6 +33,9 @@ static_assert(OPENTS_TELEMETRY_AUDIO_RENDER_CALLBACK_GENERATION == 44);
 static_assert(OPENTS_TELEMETRY_AUDIO_ACTIVE_SLOTS_LOW == 85);
 static_assert(OPENTS_TELEMETRY_MOVIE_FINAL_PLAYBACK_FRAME == 94);
 static_assert(OPENTS_TELEMETRY_AUDIO_ACTIVE_SOURCE_CONSUMED_FRAMES == 95);
+static_assert(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_TARGET_FRAME == 96);
+static_assert(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RENDERED_FRAME == 97);
+static_assert(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT == 98);
 
 namespace {
 
@@ -602,6 +605,8 @@ void Test_Stream_Voice_Reuse_Resets_Resampler(void)
 	rig.Mixer.Push(Simple(AudioCommandType::STOP, 3, 1, 0.032f));
 	rig.Run(4800);
 	Check(rig.Mixer.Voice_State(3) == AudioVoiceState::DONE, "bounded movie fade finishes the renderer voice");
+	Check(rig.Silent(rig.Output.size() / 2 - 256, rig.Output.size() / 2),
+		"movie PCM reaches a zero-filled renderer boundary after the localized fade");
 	rig.Mixer.Free_Voice(3);
 
 	AudioStreamClass silent;

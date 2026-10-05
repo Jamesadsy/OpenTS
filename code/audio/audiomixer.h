@@ -38,6 +38,7 @@ class AudioMixerClass
 
 		unsigned Rate(void) const { return(MixRate); }
 		unsigned Channels(void) const { return(MixChannels); }
+		unsigned Rendered_Frames(void) const;
 
 		// Game thread. A voice must be ALLOCATED before its play command is pushed;
 		// the game marks it so, fills the sequence, then pushes. Push fails when the

@@ -6,6 +6,9 @@ targets:
 - type: format
   id: save-games
   effect: changed
+- type: command
+  id: fixed:navigate-save-browser
+  effect: added
 credit:
 - Jamesadsy
 ---
