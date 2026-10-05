@@ -6,6 +6,7 @@
  ******************************************************************************/
 
 #include "browsercoord.h"
+#include "browsertelemetry.h"
 
 #include <cstdio>
 #include <fstream>
@@ -20,6 +21,9 @@ namespace
 {
 
 int Failures = 0;
+
+static_assert(OPENTS_TELEMETRY_MOVIE_OUTPUT_DRAIN_RESULT == 98);
+static_assert(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_BREADCRUMB == 99);
 
 void Check(bool condition, char const * description)
 {
@@ -259,6 +263,40 @@ void Test_Harness_And_Build_Contracts(void)
 		"JavaScript observes process metrics without carrying game semantics");
 }
 
+void Test_First_Frame_Diagnostic_Breadcrumb_Contracts(void)
+{
+	std::string const mainloop = ReadSource("code/mainloop.cpp");
+	char const * const stages[] = {
+		"UI_TICK", "MAP_INPUT", "UPDATE_FOGGED_OBJECTS", "MAP_RENDER", "GROUND_LAYER_SORT",
+		"LOGIC_AI", "MESSAGES_MANAGE", "QUEUE_AI", "CALL_BACK"
+	};
+	char const * const calls[] = {
+		"UI_Tick();", "Map.Input(input, x, y);", "Update_Fogged_Objects();", "Map.Render();",
+		"DisplayClass::Layer[LAYER_GROUND].Sort();", "Logic.AI();", "Session.Messages.Manage();",
+		"Queue_AI();", "Call_Back();"
+	};
+	std::size_t previous_end = 0;
+	bool ordered = true;
+	for (std::size_t index = 0; index < sizeof(stages) / sizeof(stages[0]); ++index) {
+		std::string const prefix = "Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_"
+			+ std::string(stages[index]) + ", ";
+		std::size_t const entered = mainloop.find(prefix + "false);");
+		std::size_t const call = mainloop.find(calls[index], entered);
+		std::size_t const completed = mainloop.find(prefix + "true);", call);
+		ordered = ordered && entered != std::string::npos && call != std::string::npos
+			&& completed != std::string::npos && entered < call && call < completed
+			&& entered >= previous_end;
+		if (completed != std::string::npos) previous_end = completed;
+	}
+	Check(ordered, "first-frame breadcrumbs surround the nine approved MainLoop boundaries in order");
+	Check(mainloop.find("OPENTS_TELEMETRY_MAIN_LOOP_FIRST_NATIVE_FRAME_RETURN_FRAME) >= 0") != std::string::npos
+		&& mainloop.find("static_cast<int>((entered << 16) | last_completed)") != std::string::npos,
+		"first-frame breadcrumb preserves the last entered and last completed checkpoint until return");
+	std::string const session = ReadSource("code/maingamesession.cpp");
+	Check(session.find("OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_BREADCRUMB, 0") != std::string::npos,
+		"first-frame breadcrumb resets only when a new MainLoop session starts");
+}
+
 } // namespace
 
 int main(void)
@@ -267,6 +305,7 @@ int main(void)
 	Test_Fault_And_Reentry();
 	Test_Entry_And_Boundary_Contracts();
 	Test_Harness_And_Build_Contracts();
+	Test_First_Frame_Diagnostic_Breadcrumb_Contracts();
 	std::printf("\n%s\n", Failures == 0 ? "PASSED" : "FAILED");
 	return(Failures == 0 ? 0 : 1);
 }

@@ -81,6 +81,26 @@ void Sync_Delay(void);
 void Multiplayer_Debug_Print(void);
 static void Do_Record_Playback(void);
 
+static void Record_First_Frame_Breadcrumb(OpenTSBrowserFirstFrameBreadcrumb breadcrumb, bool completed)
+{
+	if (OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_ACTIVE) != 1
+		|| OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_NATIVE_FRAME_RETURN_FRAME) >= 0) {
+		return;
+	}
+
+	unsigned int const packed = static_cast<unsigned int>(
+		OpenTS_Browser_Telemetry_Value(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_BREADCRUMB));
+	unsigned int entered = (packed >> 16) & 0xffffU;
+	unsigned int last_completed = packed & 0xffffU;
+	if (completed) {
+		last_completed = static_cast<unsigned int>(breadcrumb);
+	} else {
+		entered = static_cast<unsigned int>(breadcrumb);
+	}
+	OpenTS_Browser_Telemetry_Set(OPENTS_TELEMETRY_MAIN_LOOP_FIRST_FRAME_BREADCRUMB,
+		static_cast<int>((entered << 16) | last_completed));
+}
+
 
 /// <summary>
 /// Captures the visible screen to a movie sequence.
@@ -244,16 +264,24 @@ static bool Run_Main_Loop_Frame(void)
 	*/
 	if (!Session.Play) {
 		if (SpecialDialog == SDLG_NONE && GameInFocus) {
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_UI_TICK, false);
 			UI_Tick();
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_UI_TICK, true);
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_MAP_INPUT, false);
 			Map.Input(input, x, y);
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_MAP_INPUT, true);
 			if (input) {
 				Keyboard_Process(input);
 			}
 			if ((Frame & 7) == 7 && Session.Type == GAME_INTERNET) {
 				Ipx.Store_Stats();
 			}
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_UPDATE_FOGGED_OBJECTS, false);
 			Update_Fogged_Objects();
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_UPDATE_FOGGED_OBJECTS, true);
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_MAP_RENDER, false);
 			Map.Render();
+			Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_MAP_RENDER, true);
 		}
 	}
 
@@ -273,18 +301,24 @@ static bool Run_Main_Loop_Frame(void)
 	**	layer in the same way, and any processing done that's based on
 	**	the order of this layer will remain in sync.
 	*/
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_GROUND_LAYER_SORT, false);
 	DisplayClass::Layer[LAYER_GROUND].Sort();
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_GROUND_LAYER_SORT, true);
 
 	/*
 	**	AI logic operations are performed here.
 	*/
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_LOGIC_AI, false);
 	Logic.AI();
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_LOGIC_AI, true);
 
 	/*
 	**	Manage the inter-player message list.  If Manage() returns true, it means
 	**	a message has expired & been removed, and the entire map must be updated.
 	*/
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_MESSAGES_MANAGE, false);
 	Session.Messages.Manage();
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_MESSAGES_MANAGE, true);
 
 	//
 	// Measure how long it took to process the AI
@@ -295,9 +329,13 @@ static bool Run_Main_Loop_Frame(void)
 	/*
 	**	Process all commands that are ready to be processed.
 	*/
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_QUEUE_AI, false);
 	Queue_AI();
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_QUEUE_AI, true);
 
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_CALL_BACK, false);
 	Call_Back();
+	Record_First_Frame_Breadcrumb(OPENTS_FIRST_FRAME_BREADCRUMB_CALL_BACK, true);
 
 	bool done = false;
 	int const result_flags = (PlayerWins ? 1 : 0) | (PlayerLoses ? 2 : 0)
